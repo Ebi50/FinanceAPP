@@ -1,0 +1,96 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "search": "Search",
+    "filter": "Filter",
+    "export": "Export",
+    "import": "Import",
+    "yes": "Yes",
+    "no": "No",
+    "confirm": "Confirm",
+    "close": "Close",
+    "saving": "Saving..."
+  },
+  "auth": {
+    "login": "Login",
+    "logout": "Logout",
+    "username": "Username",
+    "password": "Password",
+    "usernamePlaceholder": "Enter your username",
+    "passwordPlaceholder": "Enter your password",
+    "loggingIn": "Logging in...",
+    "invalidCredentials": "Invalid username or password",
+    "loginError": "Login failed. Please try again.",
+    "demoCredentials": "Demo Credentials"
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "transactions": "Transactions",
+    "categories": "Categories",
+    "reports": "Reports",
+    "admin": "Admin",
+    "settings": "Settings"
+  },
+  "transactions": {
+    "title": "Transactions",
+    "addTransaction": "Add Transaction",
+    "editTransaction": "Edit Transaction",
+    "amount": "Amount",
+    "category": "Category",
+    "subcategory": "Subcategory",
+    "date": "Date",
+    "description": "Description",
+    "project": "Project",
+    "currency": "Currency",
+    "examples": "Suggestions",
+    "noExamples": "No suggestions available",
+    "descriptionPlaceholder": "Enter transaction description...",
+    "amountHint": "Use negative values for expenses, positive for income",
+    "selectCategory": "Select a category",
+    "selectSubcategory": "Select a subcategory (optional)",
+    "notesPlaceholder": "Add notes (optional)...",
+    "create": "Create Transaction"
+  },
+  "categories": {
+    "title": "Categories",
+    "addCategory": "Add Category",
+    "editCategory": "Edit Category",
+    "name": "Name",
+    "parent": "Parent Category",
+    "examples": "Examples",
+    "addExample": "Add Example",
+    "exampleLabel": "Example Label",
+    "defaultNote": "Default Note",
+    "mapsToSubcategory": "Maps to Subcategory"
+  },
+  "reports": {
+    "title": "Reports",
+    "monthly": "Monthly Report",
+    "yearly": "Yearly Report",
+    "byCategory": "By Category",
+    "byProject": "By Project",
+    "totalExpenses": "Total Expenses",
+    "totalIncome": "Total Income",
+    "netAmount": "Net Amount"
+  },
+  "admin": {
+    "title": "Administration",
+    "users": "Users",
+    "backup": "Backup",
+    "restore": "Restore",
+    "settings": "Settings"
+  },
+  "errors": {
+    "required": "This field is required",
+    "invalidEmail": "Invalid email address",
+    "networkError": "Network error occurred",
+    "serverError": "Server error occurred",
+    "notFound": "Not found",
+    "unauthorized": "Unauthorized access"
+  }
+}

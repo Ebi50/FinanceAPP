@@ -1,0 +1,96 @@
+{
+  "common": {
+    "loading": "Wird geladen...",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "delete": "Löschen",
+    "edit": "Bearbeiten",
+    "add": "Hinzufügen",
+    "search": "Suchen",
+    "filter": "Filter",
+    "export": "Exportieren",
+    "import": "Importieren",
+    "yes": "Ja",
+    "no": "Nein",
+    "confirm": "Bestätigen",
+    "close": "Schließen",
+    "saving": "Speichern..."
+  },
+  "auth": {
+    "login": "Anmelden",
+    "logout": "Abmelden",
+    "username": "Benutzername",
+    "password": "Passwort",
+    "usernamePlaceholder": "Benutzername eingeben",
+    "passwordPlaceholder": "Passwort eingeben",
+    "loggingIn": "Anmeldung läuft...",
+    "invalidCredentials": "Ungültiger Benutzername oder Passwort",
+    "loginError": "Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.",
+    "demoCredentials": "Demo-Anmeldedaten"
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "transactions": "Transaktionen",
+    "categories": "Kategorien",
+    "reports": "Berichte",
+    "admin": "Administration",
+    "settings": "Einstellungen"
+  },
+  "transactions": {
+    "title": "Transaktionen",
+    "addTransaction": "Transaktion hinzufügen",
+    "editTransaction": "Transaktion bearbeiten",
+    "amount": "Betrag",
+    "category": "Kategorie",
+    "subcategory": "Unterkategorie",
+    "date": "Datum",
+    "description": "Beschreibung",
+    "project": "Projekt",
+    "currency": "Währung",
+    "examples": "Vorschläge",
+    "noExamples": "Keine Vorschläge verfügbar",
+    "descriptionPlaceholder": "Transaktionsbeschreibung eingeben...",
+    "amountHint": "Negative Werte für Ausgaben, positive für Einnahmen verwenden",
+    "selectCategory": "Kategorie auswählen",
+    "selectSubcategory": "Unterkategorie auswählen (optional)",
+    "notesPlaceholder": "Notizen hinzufügen (optional)...",
+    "create": "Transaktion erstellen"
+  },
+  "categories": {
+    "title": "Kategorien",
+    "addCategory": "Kategorie hinzufügen",
+    "editCategory": "Kategorie bearbeiten",
+    "name": "Name",
+    "parent": "Übergeordnete Kategorie",
+    "examples": "Beispiele",
+    "addExample": "Beispiel hinzufügen",
+    "exampleLabel": "Beispiel-Bezeichnung",
+    "defaultNote": "Standard-Notiz",
+    "mapsToSubcategory": "Zuordnung zu Unterkategorie"
+  },
+  "reports": {
+    "title": "Berichte",
+    "monthly": "Monatsbericht",
+    "yearly": "Jahresbericht",
+    "byCategory": "Nach Kategorie",
+    "byProject": "Nach Projekt",
+    "totalExpenses": "Gesamtausgaben",
+    "totalIncome": "Gesamteinnahmen",
+    "netAmount": "Nettobetrag"
+  },
+  "admin": {
+    "title": "Administration",
+    "users": "Benutzer",
+    "backup": "Sicherung",
+    "restore": "Wiederherstellung",
+    "settings": "Einstellungen"
+  },
+  "errors": {
+    "required": "Dieses Feld ist erforderlich",
+    "invalidEmail": "Ungültige E-Mail-Adresse",
+    "networkError": "Netzwerkfehler aufgetreten",
+    "serverError": "Serverfehler aufgetreten",
+    "notFound": "Nicht gefunden",
+    "unauthorized": "Unbefugter Zugriff"
+  }
+}
