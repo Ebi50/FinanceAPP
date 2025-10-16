@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from 'react-query';
+import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { 
   Plus, 
   Search, 
@@ -8,7 +8,9 @@ import {
   Edit, 
   Trash2,
   Calendar,
-  Tag
+  Tag,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import TransactionForm from './TransactionForm';
 import { formatEuro, formatDate } from '../utils/formatters';
@@ -28,14 +30,37 @@ const TransactionList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM format
+  
+  const queryClient = useQueryClient();
+
+  // Month navigation functions
+  const goToPreviousMonth = () => {
+    const date = new Date(selectedMonth + '-01');
+    date.setMonth(date.getMonth() - 1);
+    setSelectedMonth(date.toISOString().slice(0, 7));
+  };
+
+  const goToNextMonth = () => {
+    const date = new Date(selectedMonth + '-01');
+    date.setMonth(date.getMonth() + 1);
+    setSelectedMonth(date.toISOString().slice(0, 7));
+  };
+
+  const getMonthDisplayName = (monthString: string) => {
+    const date = new Date(monthString + '-01');
+    return date.toLocaleDateString('de-DE', { year: 'numeric', month: 'long' });
+  };
 
   // Fetch transactions from API
   const { data: transactionsData, isLoading, error, refetch } = useQuery(
-    ['transactions', { search: searchTerm, category: selectedCategory }],
+    ['transactions', { search: searchTerm, category: selectedCategory, month: selectedMonth }],
     async () => {
       const params = new URLSearchParams();
       if (searchTerm) params.append('search', searchTerm);
       if (selectedCategory && selectedCategory !== 'All') params.append('category', selectedCategory);
+      if (selectedMonth) params.append('month', selectedMonth);
       
       const response = await fetch(`/api/transactions?${params.toString()}`);
       if (!response.ok) {
@@ -60,6 +85,41 @@ const TransactionList: React.FC = () => {
   const handleTransactionAdded = () => {
     refetch(); // Refresh transactions when new transaction is added
     setShowAddForm(false);
+  };
+
+  // Delete transaction mutation
+  const deleteTransactionMutation = useMutation(
+    async (transactionId: number) => {
+      const response = await fetch(`/api/transactions/${transactionId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete transaction');
+      }
+      return response.json();
+    },
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('transactions');
+        refetch();
+      },
+    }
+  );
+
+  const handleEditTransaction = (transaction: Transaction) => {
+    setEditingTransaction(transaction);
+    setShowAddForm(true);
+  };
+
+  const handleDeleteTransaction = async (transactionId: number) => {
+    if (window.confirm('Transaktion wirklich löschen?')) {
+      try {
+        await deleteTransactionMutation.mutateAsync(transactionId);
+      } catch (error) {
+        console.error('Error deleting transaction:', error);
+        alert('Fehler beim Löschen der Transaktion');
+      }
+    }
   };
 
   const transactions = transactionsData?.transactions || [];
@@ -156,6 +216,32 @@ const TransactionList: React.FC = () => {
               ))}
             </select>
           </div>
+
+          {/* Month Navigation */}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={goToPreviousMonth}
+              className="p-2 rounded-md border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              title="Vorheriger Monat"
+            >
+              <ChevronLeft className="w-4 h-4 text-gray-600" />
+            </button>
+            
+            <div className="flex items-center space-x-2 px-3 py-2 bg-blue-50 rounded-md min-w-[180px] justify-center">
+              <Calendar className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-medium text-blue-800">
+                {getMonthDisplayName(selectedMonth)}
+              </span>
+            </div>
+            
+            <button
+              onClick={goToNextMonth}
+              className="p-2 rounded-md border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              title="Nächster Monat"
+            >
+              <ChevronRight className="w-4 h-4 text-gray-600" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -207,10 +293,19 @@ const TransactionList: React.FC = () => {
                       {transaction.amount >= 0 ? '+' : ''}{formatEuro(transaction.amount)}
                     </span>
                     <div className="flex items-center space-x-2">
-                      <button className="text-gray-400 hover:text-blue-600">
+                      <button 
+                        onClick={() => handleEditTransaction(transaction)}
+                        className="text-gray-400 hover:text-blue-600"
+                        title="Bearbeiten"
+                      >
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button className="text-gray-400 hover:text-red-600">
+                      <button 
+                        onClick={() => handleDeleteTransaction(transaction.id)}
+                        className="text-gray-400 hover:text-red-600"
+                        title="Löschen"
+                        disabled={deleteTransactionMutation.isLoading}
+                      >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -225,8 +320,12 @@ const TransactionList: React.FC = () => {
       {/* Transaction Form Modal */}
       <TransactionForm
         isOpen={showAddForm}
-        onClose={() => setShowAddForm(false)}
+        onClose={() => {
+          setShowAddForm(false);
+          setEditingTransaction(null);
+        }}
         onSubmit={handleTransactionAdded}
+        editingTransaction={editingTransaction}
       />
     </div>
   );

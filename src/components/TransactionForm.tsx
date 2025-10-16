@@ -26,22 +26,38 @@ interface CategorySuggestion {
   confidence: number;
 }
 
+interface Transaction {
+  id: number;
+  description: string;
+  amount: number;
+  category: string;
+  subcategory?: string;
+  date: string;
+  notes?: string;
+}
+
 interface TransactionFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (transaction: any) => void;
+  editingTransaction?: Transaction | null;
 }
 
-const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSubmit }) => {
+const TransactionForm: React.FC<TransactionFormProps> = ({ 
+  isOpen, 
+  onClose, 
+  onSubmit, 
+  editingTransaction 
+}) => {
   const { t } = useTranslation();
   
   const [formData, setFormData] = useState({
-    description: '',
-    amount: '',
+    description: editingTransaction?.description || '',
+    amount: editingTransaction?.amount?.toString() || '',
     categoryId: '',
     subcategoryId: '',
-    date: new Date().toISOString().split('T')[0],
-    notes: ''
+    date: editingTransaction?.date || new Date().toISOString().split('T')[0],
+    notes: editingTransaction?.notes || ''
   });
   
   const [categories, setCategories] = useState<Category[]>([]);
@@ -67,6 +83,29 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
       fetchCategories();
     }
   }, [isOpen]);
+
+  // Update form when editing transaction changes
+  useEffect(() => {
+    if (editingTransaction) {
+      setFormData({
+        description: editingTransaction.description,
+        amount: editingTransaction.amount.toString(),
+        categoryId: '',
+        subcategoryId: '',
+        date: editingTransaction.date,
+        notes: editingTransaction.notes || ''
+      });
+    } else {
+      setFormData({
+        description: '',
+        amount: '',
+        categoryId: '',
+        subcategoryId: '',
+        date: new Date().toISOString().split('T')[0],
+        notes: ''
+      });
+    }
+  }, [editingTransaction]);
 
   // Get category suggestions when description changes
   useEffect(() => {
@@ -133,8 +172,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
         notes: formData.notes || null
       };
 
-      const response = await fetch('/api/transactions', {
-        method: 'POST',
+      const url = editingTransaction 
+        ? `/api/transactions/${editingTransaction.id}`
+        : '/api/transactions';
+      
+      const method = editingTransaction ? 'PUT' : 'POST';
+      
+      const response = await fetch(url, {
+        method: method,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -176,7 +221,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-xl font-semibold text-gray-900">
-            {t('transactions.add')}
+            {editingTransaction ? 'Transaktion bearbeiten' : t('transactions.add')}
           </h2>
           <button
             onClick={onClose}
@@ -355,7 +400,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
               ) : (
                 <>
                   <Plus className="w-4 h-4 mr-2" />
-                  {t('transactions.create')}
+                  {editingTransaction ? 'Speichern' : t('transactions.create')}
                 </>
               )}
             </button>

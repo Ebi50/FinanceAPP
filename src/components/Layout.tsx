@@ -25,6 +25,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const { isAuthenticated, isAdmin, user, logout } = useAuth();
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   const navigation = [
     { name: t('nav.dashboard'), href: '/', icon: Home },
@@ -120,7 +121,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   {t('auth.login')}
                 </button>
               )}
-              <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-lg hover:bg-gray-100">
+              <button 
+                onClick={() => setShowSettingsModal(true)}
+                className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-lg hover:bg-gray-100"
+              >
                 <Settings className="w-5 h-5" />
               </button>
             </div>
@@ -137,6 +141,53 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
       />
+
+      {/* Settings Modal */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900">
+                Einstellungen
+              </h2>
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">
+                  Kategorien verwalten
+                </h3>
+                <Link
+                  to="/categories"
+                  onClick={() => setShowSettingsModal(false)}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                >
+                  <FolderOpen className="w-4 h-4 mr-2" />
+                  Kategorien öffnen
+                </Link>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">
+                  Berichte
+                </h3>
+                <Link
+                  to="/reports"
+                  onClick={() => setShowSettingsModal(false)}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Berichte anzeigen
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -6,7 +6,7 @@ const router = express.Router();
 // Get all transactions
 router.get('/', (req, res) => {
   try {
-    const { category, search, limit = 50, offset = 0 } = req.query;
+    const { category, search, month, limit = 50, offset = 0 } = req.query;
     
     let query = `
       SELECT 
@@ -35,6 +35,11 @@ router.get('/', (req, res) => {
       conditions.push('(t.description LIKE ? OR c.name LIKE ? OR s.name LIKE ?)');
       const searchParam = `%${search}%`;
       params.push(searchParam, searchParam, searchParam);
+    }
+
+    if (month) {
+      conditions.push('strftime("%Y-%m", t.date) = ?');
+      params.push(month);
     }
     
     if (conditions.length > 0) {
