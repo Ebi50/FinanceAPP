@@ -7,8 +7,18 @@ import {
   CardTitle,
 } from "./ui/card";
 import { Download, FileUp } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export function ReportsTab() {
+  const { toast } = useToast();
+
+  const handleNotImplemented = () => {
+    toast({
+      title: "Funktion noch nicht verfügbar",
+      description: "Wir arbeiten daran, diese Funktion bald bereitzustellen.",
+    });
+  };
+
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <Card>
@@ -19,11 +29,11 @@ export function ReportsTab() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex gap-2">
-          <Button variant="secondary">
+          <Button variant="secondary" onClick={handleNotImplemented}>
             <Download className="mr-2 h-4 w-4" />
             Monatlicher Bericht (PDF)
           </Button>
-          <Button variant="secondary">
+          <Button variant="secondary" onClick={handleNotImplemented}>
             <Download className="mr-2 h-4 w-4" />
             Jahresbericht (PDF)
           </Button>
@@ -37,7 +47,7 @@ export function ReportsTab() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button variant="secondary">
+          <Button variant="secondary" onClick={handleNotImplemented}>
             <FileUp className="mr-2 h-4 w-4" />
             Aus Excel importieren
           </Button>
