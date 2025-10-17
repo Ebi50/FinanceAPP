@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { UserNav } from '@/components/user-nav';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,9 +22,36 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { useTheme } from 'next-themes';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
+
+const navItems = [
+  'Allgemein',
+  'Sicherheit',
+  'Integrationen',
+  'Support',
+  'Organisation',
+  'Erweitert',
+];
 
 export default function SettingsPage() {
   const { setTheme } = useTheme();
+  const [activeTab, setActiveTab] = useState('Allgemein');
+  
+  // State for user profile
+  const [name, setName] = useState('Jane Doe');
+  const [email, setEmail] = useState('jane.doe@beispiel.com');
+  const { toast } = useToast();
+
+  const handleProfileSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Here you would typically save to a backend
+    console.log('Saving profile:', { name, email });
+    toast({
+      title: 'Profil gespeichert',
+      description: 'Ihre Daten wurden erfolgreich aktualisiert.',
+    });
+  };
 
   return (
     <div className="flex-col md:flex">
@@ -45,100 +73,119 @@ export default function SettingsPage() {
         </div>
         <div className="mx-auto grid w-full max-w-6xl items-start gap-6 md:grid-cols-[180px_1fr] lg:grid-cols-[250px_1fr]">
           <nav className="grid gap-4 text-sm text-muted-foreground">
-            <a href="#" className="font-semibold text-primary">
-              Allgemein
-            </a>
-            <a href="#">Sicherheit</a>
-            <a href="#">Integrationen</a>
-            <a href="#">Support</a>
-            <a href="#">Organisation</a>
-            <a href="#">Erweitert</a>
+            {navItems.map((item) => (
+              <button
+                key={item}
+                onClick={() => setActiveTab(item)}
+                className={cn(
+                  'text-left',
+                  activeTab === item && 'font-semibold text-primary'
+                )}
+              >
+                {item}
+              </button>
+            ))}
           </nav>
           <div className="grid gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Profil</CardTitle>
-                <CardDescription>
-                  Aktualisieren Sie Ihre persönlichen Daten.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Name</Label>
-                    <Input id="name" defaultValue="Jane Doe" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      defaultValue="jane.doe@beispiel.com"
-                    />
-                  </div>
-                  <Button type="submit">Änderungen speichern</Button>
-                </form>
-              </CardContent>
-            </Card>
+            {activeTab === 'Allgemein' && (
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Profil</CardTitle>
+                    <CardDescription>
+                      Aktualisieren Sie Ihre persönlichen Daten.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <form className="space-y-4" onSubmit={handleProfileSave}>
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Name</Label>
+                        <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                        />
+                      </div>
+                      <Button type="submit">Änderungen speichern</Button>
+                    </form>
+                  </CardContent>
+                </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Benachrichtigungen</CardTitle>
-                <CardDescription>
-                  Verwalten Sie Ihre Benachrichtigungseinstellungen.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="email-notifications">
-                    E-Mail-Benachrichtigungen
-                  </Label>
-                  <Switch id="email-notifications" defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="push-notifications">
-                    Push-Benachrichtigungen
-                  </Label>
-                  <Switch id="push-notifications" />
-                </div>
-              </CardContent>
-            </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Benachrichtigungen</CardTitle>
+                    <CardDescription>
+                      Verwalten Sie Ihre Benachrichtigungseinstellungen.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="email-notifications">
+                        E-Mail-Benachrichtigungen
+                      </Label>
+                      <Switch id="email-notifications" defaultChecked />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="push-notifications">
+                        Push-Benachrichtigungen
+                      </Label>
+                      <Switch id="push-notifications" />
+                    </div>
+                  </CardContent>
+                </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Darstellung</CardTitle>
-                <CardDescription>
-                  Passen Sie das Erscheinungsbild der App an.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="theme">Thema</Label>
-                  <Select onValueChange={(value) => setTheme(value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Thema auswählen" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="dark">Dunkel</SelectItem>
-                      <SelectItem value="light">Hell</SelectItem>
-                      <SelectItem value="system">System</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="language">Sprache</Label>
-                  <Select defaultValue="de">
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sprache auswählen" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="de">Deutsch</SelectItem>
-                      <SelectItem value="en">Englisch</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Darstellung</CardTitle>
+                    <CardDescription>
+                      Passen Sie das Erscheinungsbild der App an.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="theme">Thema</Label>
+                      <Select onValueChange={(value) => setTheme(value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Thema auswählen" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="dark">Dunkel</SelectItem>
+                          <SelectItem value="light">Hell</SelectItem>
+                          <SelectItem value="system">System</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="language">Sprache</Label>
+                      <Select defaultValue="de">
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sprache auswählen" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="de">Deutsch</SelectItem>
+                          <SelectItem value="en">Englisch</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
+             {activeTab !== 'Allgemein' && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>{activeTab}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p>Einstellungen für {activeTab} werden hier angezeigt.</p>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </main>

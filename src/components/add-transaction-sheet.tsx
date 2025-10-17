@@ -23,6 +23,7 @@ import { categories } from '@/lib/data';
 import {
   Calendar as CalendarIcon,
   Loader2,
+  PlusCircle,
   Sparkles,
   Trash2,
 } from 'lucide-react';
@@ -43,7 +44,7 @@ import type { Transaction } from '@/lib/types';
 const transactionSchema = z.object({
   id: z.string().optional(),
   description: z.string().min(2, "Beschreibung ist erforderlich."),
-  amount: z.coerce.number().positive('Betrag muss positiv sein.'),
+  amounts: z.array(z.object({ value: z.coerce.number().positive('Betrag muss positiv sein.') })).min(1, 'Mindestens ein Betrag ist erforderlich.'),
   categoryId: z.string().min(1, 'Kategorie ist erforderlich.'),
   date: z.date({ required_error: 'Datum ist erforderlich.' }),
   isRecurring: z.boolean().default(false),
@@ -94,11 +95,16 @@ export function AddTransactionSheet({
     defaultValues: {
       id: transaction?.id || undefined,
       description: transaction?.description || '',
-      amount: transaction?.amount || 0,
+      amounts: transaction ? [{ value: transaction.amount }] : [{ value: 0 }],
       categoryId: transaction?.categoryId || '',
       date: transaction?.date || new Date(),
       isRecurring: false, // This can be enhanced later
     },
+  });
+
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "amounts"
   });
 
   useEffect(() => {
@@ -106,7 +112,7 @@ export function AddTransactionSheet({
       form.reset({
         id: transaction?.id || undefined,
         description: transaction?.description || '',
-        amount: transaction?.amount || 0,
+        amounts: transaction ? [{ value: transaction.amount }] : [{ value: 0 }],
         categoryId: transaction?.categoryId || '',
         date: transaction?.date || new Date(),
         isRecurring: false,
@@ -140,10 +146,11 @@ export function AddTransactionSheet({
   };
 
   const onSubmit = (data: TransactionFormValues) => {
+    const totalAmount = data.amounts.reduce((sum, current) => sum + current.value, 0);
     const newTransaction: Transaction = {
       id: data.id || `txn-${Date.now()}`,
       description: data.description,
-      amount: data.amount,
+      amount: totalAmount,
       categoryId: data.categoryId,
       date: data.date,
     };
@@ -155,7 +162,8 @@ export function AddTransactionSheet({
   };
   
   const descriptionValue = form.watch("description");
-  const amountValue = form.watch("amount");
+  const amountsValue = form.watch("amounts");
+  const totalAmount = amountsValue.reduce((sum, current) => sum + (current.value || 0), 0);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -185,16 +193,26 @@ export function AddTransactionSheet({
                  {form.formState.errors.description && <p className="text-sm text-destructive mt-1">{form.formState.errors.description.message}</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="amount">Betrag</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  {...form.register(`amount`)}
-                  className="text-right text-base"
-                />
-                 {form.formState.errors.amount && <p className="text-sm text-destructive mt-1">{form.formState.errors.amount.message}</p>}
+                <Label>Beträge</Label>
+                {fields.map((field, index) => (
+                  <div key={field.id} className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      {...form.register(`amounts.${index}.value`)}
+                      className="text-right text-base"
+                    />
+                    <Button type="button" variant="outline" size="icon" onClick={() => remove(index)} disabled={fields.length <= 1}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                 {form.formState.errors.amounts && <p className="text-sm text-destructive mt-1">{form.formState.errors.amounts.message}</p>}
+                 <Button type="button" variant="outline" size="sm" onClick={() => append({ value: 0 })}>
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Betrag hinzufügen
+                </Button>
               </div>
 
               <div className="space-y-2">
@@ -312,7 +330,7 @@ export function AddTransactionSheet({
           <SheetFooter className="pt-4 border-t">
             <div className="flex justify-between items-center w-full">
               <div className="text-lg font-bold">
-                Gesamt: {formatCurrency(amountValue || 0)}
+                Gesamt: {formatCurrency(totalAmount)}
               </div>
               <SubmitButton />
             </div>
