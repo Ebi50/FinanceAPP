@@ -40,7 +40,9 @@ export function UserNav() {
         <DropdownMenuGroup>
           <DropdownMenuItem>Profil</DropdownMenuItem>
           <DropdownMenuItem>Abrechnung</DropdownMenuItem>
-          <DropdownMenuItem>Einstellungen</DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/settings">Einstellungen</Link>
+          </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
