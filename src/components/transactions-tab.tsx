@@ -8,26 +8,15 @@ import {
   CardTitle,
 } from "./ui/card";
 import { TransactionsTable } from "./transactions-table";
-import { transactions as initialTransactions } from "@/lib/data";
 import type { Transaction } from "@/lib/types";
-import { useState } from "react";
 
-export function TransactionsTab() {
-  const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
+interface TransactionsTabProps {
+  transactions: Transaction[];
+  onDelete: (id: string) => void;
+  onUpdate: (transaction: Transaction) => void;
+}
 
-  const handleDeleteTransaction = (id: string) => {
-    setTransactions(transactions.filter((t) => t.id !== id));
-  };
-  
-  const handleUpdateTransaction = (updatedTransaction: Transaction) => {
-    setTransactions(
-      transactions.map((t) =>
-        t.id === updatedTransaction.id ? updatedTransaction : t
-      )
-    );
-  };
-
-
+export function TransactionsTab({ transactions, onDelete, onUpdate }: TransactionsTabProps) {
   return (
     <Card>
       <CardHeader>
@@ -39,8 +28,8 @@ export function TransactionsTab() {
       <CardContent>
         <TransactionsTable 
           transactions={transactions} 
-          onDelete={handleDeleteTransaction}
-          onUpdate={handleUpdateTransaction}
+          onDelete={onDelete}
+          onUpdate={onUpdate}
         />
       </CardContent>
     </Card>

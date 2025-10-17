@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -19,8 +22,31 @@ import { TransactionsTab } from "@/components/transactions-tab";
 import { CategoriesTab } from "@/components/categories-tab";
 import { ReportsTab } from "@/components/reports-tab";
 import { AddTransactionSheet } from "@/components/add-transaction-sheet";
+import { transactions as initialTransactions } from '@/lib/data';
+import type { Transaction } from '@/lib/types';
 
 export default function Dashboard() {
+  const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
+
+  const handleAddOrUpdateTransaction = (transaction: Transaction) => {
+    setTransactions((prev) => {
+      const existingIndex = prev.findIndex((t) => t.id === transaction.id);
+      if (existingIndex > -1) {
+        // Update
+        const newTransactions = [...prev];
+        newTransactions[existingIndex] = transaction;
+        return newTransactions;
+      } else {
+        // Add
+        return [transaction, ...prev];
+      }
+    });
+  };
+
+  const handleDeleteTransaction = (id: string) => {
+    setTransactions(transactions.filter((t) => t.id !== id));
+  };
+
   return (
     <div className="flex-col md:flex">
       <div className="border-b">
@@ -35,7 +61,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between space-y-2">
           <h2 className="text-3xl font-headline font-bold tracking-tight">Übersicht</h2>
           <div className="flex items-center space-x-2">
-            <AddTransactionSheet>
+            <AddTransactionSheet onTransactionAdded={handleAddOrUpdateTransaction}>
               <Button>
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Transaktion hinzufügen
@@ -51,10 +77,14 @@ export default function Dashboard() {
             <TabsTrigger value="reports">Berichte</TabsTrigger>
           </TabsList>
           <TabsContent value="overview" className="space-y-4">
-            <DashboardTab />
+            <DashboardTab transactions={transactions} />
           </TabsContent>
           <TabsContent value="transactions" className="space-y-4">
-            <TransactionsTab />
+            <TransactionsTab 
+              transactions={transactions} 
+              onDelete={handleDeleteTransaction}
+              onUpdate={handleAddOrUpdateTransaction}
+            />
           </TabsContent>
           <TabsContent value="categories" className="space-y-4">
             <CategoriesTab />

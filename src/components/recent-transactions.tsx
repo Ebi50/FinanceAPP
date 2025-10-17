@@ -5,11 +5,16 @@ import {
   CardHeader,
   CardTitle,
 } from "./ui/card";
-import { transactions, categories } from "@/lib/data";
+import { categories } from "@/lib/data";
 import { formatCurrency } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "./ui/avatar";
+import type { Transaction } from "@/lib/types";
 
-export function RecentTransactions() {
+interface RecentTransactionsProps {
+  transactions: Transaction[];
+}
+
+export function RecentTransactions({ transactions }: RecentTransactionsProps) {
   const recent = transactions.slice(0, 5);
   const categoryMap = new Map(categories.map(c => [c.id, c]));
 

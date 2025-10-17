@@ -3,17 +3,29 @@
 
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts"
 import { formatCurrency } from "@/lib/utils"
+import type { Transaction } from "@/lib/types";
+import { categories } from "@/lib/data";
 
-const data = [
-  { name: "Lebensmittel", total: 450.50 },
-  { name: "Wohnen", total: 850.00 },
-  { name: "Transport", total: 150.10 },
-  { name: "Essen gehen", total: 120.00 },
-  { name: "Unterhaltung", total: 80.75 },
-  { name: "Sonstiges", total: 200.30 },
-]
+interface ExpensesChartProps {
+  transactions: Transaction[];
+}
 
-export function ExpensesChart() {
+export function ExpensesChart({ transactions }: ExpensesChartProps) {
+  const categoryMap = new Map(categories.map(c => [c.id, c.name]));
+  const expensesByCategory = transactions.reduce((acc, transaction) => {
+    const categoryName = categoryMap.get(transaction.categoryId) || 'Sonstiges';
+    if (!acc[categoryName]) {
+      acc[categoryName] = 0;
+    }
+    acc[categoryName] += transaction.amount;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const data = Object.entries(expensesByCategory).map(([name, total]) => ({
+    name,
+    total
+  }));
+
   return (
     <ResponsiveContainer width="100%" height={350}>
       <BarChart data={data}>

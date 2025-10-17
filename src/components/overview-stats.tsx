@@ -3,8 +3,11 @@ import { formatCurrency } from "@/lib/utils";
 import { DollarSign, CreditCard, TrendingUp, TrendingDown } from "lucide-react";
 import { Progress } from "./ui/progress";
 
-export function OverviewStats() {
-    const totalExpenses = 1234.56;
+interface OverviewStatsProps {
+    totalExpenses: number;
+}
+
+export function OverviewStats({ totalExpenses }: OverviewStatsProps) {
     const budget = 2000;
     const budgetProgress = (totalExpenses / budget) * 100;
 
