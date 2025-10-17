@@ -112,7 +112,7 @@ export function AddTransactionSheet({
       form.reset({
         id: transaction?.id || undefined,
         description: transaction?.description || '',
-        amounts: transaction ? [{ value: transaction.amount }] : [{ value: undefined }],
+        amounts: transaction ? [{ value: transaction.amount }] : [{ value: 0 }],
         categoryId: transaction?.categoryId || '',
         date: transaction?.date ? new Date(transaction.date) : new Date(),
         isRecurring: false,
@@ -158,7 +158,7 @@ export function AddTransactionSheet({
     if (!isEditing) {
       form.reset({
         description: '',
-        amounts: [{value: undefined}],
+        amounts: [{value: 0}],
         categoryId: '',
         date: new Date(),
         isRecurring: false
@@ -167,7 +167,6 @@ export function AddTransactionSheet({
     setOpen(false);
   };
   
-  const descriptionValue = form.watch("description");
   const amountsValue = form.watch("amounts");
   const totalAmount = amountsValue.reduce((sum, current) => sum + Number(current.value || 0), 0);
 
@@ -206,7 +205,7 @@ export function AddTransactionSheet({
                       type="number"
                       step="0.01"
                       placeholder="0.00"
-                      {...form.register(`amounts.${index}.valueAsNumber`)}
+                      {...form.register(`amounts.${index}.value`, { valueAsNumber: true })}
                       className="text-right text-base"
                     />
                     <Button type="button" variant="outline" size="icon" onClick={() => remove(index)} disabled={fields.length <= 1}>
@@ -215,7 +214,7 @@ export function AddTransactionSheet({
                   </div>
                 ))}
                  {form.formState.errors.amounts && <p className="text-sm text-destructive mt-1">{form.formState.errors.amounts.root?.message}</p>}
-                 <Button type="button" variant="outline" size="sm" onClick={() => append({ value: undefined })}>
+                 <Button type="button" variant="outline" size="sm" onClick={() => append({ value: 0 })}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Betrag hinzufügen
                 </Button>
@@ -346,5 +345,3 @@ export function AddTransactionSheet({
     </Sheet>
   );
 }
-
-    
