@@ -46,6 +46,10 @@ export default function Dashboard() {
   const handleDeleteTransaction = (id: string) => {
     setTransactions(transactions.filter((t) => t.id !== id));
   };
+  
+  const handleImportTransactions = (newTransactions: Transaction[]) => {
+    setTransactions(prev => [...prev, ...newTransactions]);
+  };
 
   return (
     <div className="flex-col md:flex">
@@ -90,7 +94,7 @@ export default function Dashboard() {
             <CategoriesTab />
           </TabsContent>
           <TabsContent value="reports" className="space-y-4">
-            <ReportsTab />
+            <ReportsTab transactions={transactions} onImport={handleImportTransactions} />
           </TabsContent>
         </Tabs>
       </div>
