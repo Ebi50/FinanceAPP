@@ -10,26 +10,58 @@ import {
   TableRow,
 } from "./ui/table";
 import { Button } from "./ui/button";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Trash2, Edit } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { Badge } from "./ui/badge";
 import { format } from "date-fns";
 import { de } from 'date-fns/locale';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { AddTransactionSheet } from "./add-transaction-sheet";
+import { useState } from "react";
 
 interface TransactionsTableProps {
   transactions: Transaction[];
+  onDelete: (id: string) => void;
+  onUpdate: (transaction: Transaction) => void;
 }
 
-export function TransactionsTable({ transactions }: TransactionsTableProps) {
+export function TransactionsTable({ transactions, onDelete, onUpdate }: TransactionsTableProps) {
   const categoryMap = new Map(categories.map((c) => [c.id, c]));
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+
+  const handleDelete = (id: string) => {
+    onDelete(id);
+  };
+  
+  const handleEdit = (transaction: Transaction) => {
+    setEditingTransaction(transaction);
+  }
+
+  const handleUpdate = (updatedTransaction: Transaction) => {
+    onUpdate(updatedTransaction);
+    setEditingTransaction(null);
+  }
+
 
   return (
+    <>
     <Table>
       <TableHeader>
         <TableRow>
@@ -64,7 +96,7 @@ export function TransactionsTable({ transactions }: TransactionsTableProps) {
               <TableCell className="text-right text-destructive">
                 -{formatCurrency(transaction.amount)}
               </TableCell>
-              <TableCell>
+              <TableCell className="text-right">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button aria-haspopup="true" size="icon" variant="ghost">
@@ -74,8 +106,33 @@ export function TransactionsTable({ transactions }: TransactionsTableProps) {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuLabel>Aktionen</DropdownMenuLabel>
-                    <DropdownMenuItem>Bearbeiten</DropdownMenuItem>
-                    <DropdownMenuItem className="text-destructive">Löschen</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => handleEdit(transaction)}>
+                      <Edit className="mr-2 h-4 w-4" />
+                      Bearbeiten
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                     <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                           <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive">
+                             <Trash2 className="mr-2 h-4 w-4" />
+                             Löschen
+                           </DropdownMenuItem>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird die Transaktion dauerhaft gelöscht.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(transaction.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                              Löschen
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </TableCell>
@@ -84,5 +141,18 @@ export function TransactionsTable({ transactions }: TransactionsTableProps) {
         })}
       </TableBody>
     </Table>
+    {editingTransaction && (
+        <AddTransactionSheet
+          open={!!editingTransaction}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) setEditingTransaction(null);
+          }}
+          transaction={editingTransaction}
+          onTransactionAdded={handleUpdate}
+        >
+          <></>
+        </AddTransactionSheet>
+      )}
+    </>
   );
 }

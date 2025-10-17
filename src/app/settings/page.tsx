@@ -19,21 +19,27 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { useTheme } from 'next-themes';
+import Link from 'next/link';
 
 export default function SettingsPage() {
+  const { setTheme } = useTheme();
+
   return (
     <div className="flex-col md:flex">
       <div className="border-b">
         <div className="flex h-16 items-center px-4 md:px-8">
-          <h1 className="text-2xl font-headline font-bold tracking-tight">
-            ExpenceTrack
-          </h1>
+          <Link href="/">
+            <h1 className="text-2xl font-headline font-bold tracking-tight cursor-pointer">
+              ExpenceTrack
+            </h1>
+          </Link>
           <div className="ml-auto flex items-center space-x-4">
             <UserNav />
           </div>
         </div>
       </div>
-      <main className="flex min-h-[calc(100vh_-_theme(spacing.16))] flex-1 flex-col gap-4 bg-background p-4 md:gap-8 md:p-10">
+      <main className="flex min-h-[calc(100vh_-_theme(spacing.16))] flex-1 flex-col gap-4 bg-muted/40 p-4 md:gap-8 md:p-10">
         <div className="mx-auto grid w-full max-w-6xl gap-2">
           <h1 className="text-3xl font-semibold">Einstellungen</h1>
         </div>
@@ -108,7 +114,7 @@ export default function SettingsPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="theme">Thema</Label>
-                  <Select>
+                  <Select onValueChange={(value) => setTheme(value)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Thema auswählen" />
                     </SelectTrigger>
@@ -121,7 +127,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="language">Sprache</Label>
-                  <Select>
+                  <Select defaultValue="de">
                     <SelectTrigger>
                       <SelectValue placeholder="Sprache auswählen" />
                     </SelectTrigger>
