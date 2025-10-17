@@ -44,7 +44,7 @@ import type { Transaction } from '@/lib/types';
 const transactionSchema = z.object({
   id: z.string().optional(),
   description: z.string().min(2, "Beschreibung ist erforderlich."),
-  amounts: z.array(z.object({ value: z.coerce.number().positive('Betrag muss positiv sein.') })).min(1, 'Mindestens ein Betrag ist erforderlich.'),
+  amounts: z.array(z.object({ value: z.coerce.number({invalid_type_error: 'Ungültiger Betrag'}).positive('Betrag muss positiv sein.') })).min(1, 'Mindestens ein Betrag ist erforderlich.'),
   categoryId: z.string().min(1, 'Kategorie ist erforderlich.'),
   date: z.date({ required_error: 'Datum ist erforderlich.' }),
   isRecurring: z.boolean().default(false),
@@ -95,7 +95,7 @@ export function AddTransactionSheet({
     defaultValues: {
       id: transaction?.id || undefined,
       description: transaction?.description || '',
-      amounts: transaction ? [{ value: transaction.amount }] : [{ value: 0 }],
+      amounts: transaction ? [{ value: transaction.amount }] : [{ value: undefined }],
       categoryId: transaction?.categoryId || '',
       date: transaction?.date || new Date(),
       isRecurring: false, // This can be enhanced later
@@ -112,9 +112,9 @@ export function AddTransactionSheet({
       form.reset({
         id: transaction?.id || undefined,
         description: transaction?.description || '',
-        amounts: transaction ? [{ value: transaction.amount }] : [{ value: 0 }],
+        amounts: transaction ? [{ value: transaction.amount }] : [{ value: undefined }],
         categoryId: transaction?.categoryId || '',
-        date: transaction?.date || new Date(),
+        date: transaction?.date ? new Date(transaction.date) : new Date(),
         isRecurring: false,
       });
       setSuggestion(null);
@@ -146,7 +146,7 @@ export function AddTransactionSheet({
   };
 
   const onSubmit = (data: TransactionFormValues) => {
-    const totalAmount = data.amounts.reduce((sum, current) => sum + current.value, 0);
+    const totalAmount = data.amounts.reduce((sum, current) => sum + Number(current.value), 0);
     const newTransaction: Transaction = {
       id: data.id || `txn-${Date.now()}`,
       description: data.description,
@@ -156,14 +156,20 @@ export function AddTransactionSheet({
     };
     onTransactionAdded(newTransaction);
     if (!isEditing) {
-      form.reset();
+      form.reset({
+        description: '',
+        amounts: [{value: undefined}],
+        categoryId: '',
+        date: new Date(),
+        isRecurring: false
+      });
     }
     setOpen(false);
   };
   
   const descriptionValue = form.watch("description");
   const amountsValue = form.watch("amounts");
-  const totalAmount = amountsValue.reduce((sum, current) => sum + (current.value || 0), 0);
+  const totalAmount = amountsValue.reduce((sum, current) => sum + Number(current.value || 0), 0);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -200,7 +206,7 @@ export function AddTransactionSheet({
                       type="number"
                       step="0.01"
                       placeholder="0.00"
-                      {...form.register(`amounts.${index}.value`)}
+                      {...form.register(`amounts.${index}.valueAsNumber`)}
                       className="text-right text-base"
                     />
                     <Button type="button" variant="outline" size="icon" onClick={() => remove(index)} disabled={fields.length <= 1}>
@@ -208,8 +214,8 @@ export function AddTransactionSheet({
                     </Button>
                   </div>
                 ))}
-                 {form.formState.errors.amounts && <p className="text-sm text-destructive mt-1">{form.formState.errors.amounts.message}</p>}
-                 <Button type="button" variant="outline" size="sm" onClick={() => append({ value: 0 })}>
+                 {form.formState.errors.amounts && <p className="text-sm text-destructive mt-1">{form.formState.errors.amounts.root?.message}</p>}
+                 <Button type="button" variant="outline" size="sm" onClick={() => append({ value: undefined })}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Betrag hinzufügen
                 </Button>
@@ -340,3 +346,5 @@ export function AddTransactionSheet({
     </Sheet>
   );
 }
+
+    
