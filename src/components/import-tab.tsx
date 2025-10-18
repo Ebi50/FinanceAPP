@@ -127,13 +127,17 @@ const categoryNameMap = useMemo(() => {
                 const worksheet = workbook.Sheets[sheetName];
                 if (!worksheet) return;
 
-                const sheetJson = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as RawRow[];
+                const rawJson = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as RawRow[];
+                
+                // Cut off all columns from 'O' (15th column, index 14) onwards.
+                const sheetJson = rawJson.map(row => row.slice(0, 14));
+                
                 if (sheetJson.length < 2) return;
                 
                 // Process expenses
                 for (let r = 0; r < sheetJson.length; r++) {
                     const firstCell = sheetJson[r][0];
-                    if (typeof firstCell === 'string' && firstCell.match(/^[a-zA-ZäöüÄÖÜß\.\/]+ \d+$/)) {
+                    if (typeof firstCell === 'string' && firstCell.match(/^[a-zA-ZäöüÄÖÜß\.\/\s]+ \d+$/)) {
                         const categoryName = firstCell.replace(/\s+\d+$/, '').trim();
                         allDetectedCategories.add(categoryName);
 
@@ -144,7 +148,6 @@ const categoryNameMap = useMemo(() => {
                                 break;
                             }
                             const cell1 = rowData[0];
-                            const cell2 = rowData[1];
                             if (typeof cell1 === 'string' && cell1.toLowerCase().includes('summe')) {
                                 break;
                             }
