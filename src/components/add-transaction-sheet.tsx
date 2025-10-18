@@ -99,7 +99,7 @@ export function AddTransactionSheet({
     defaultValues: {
       id: undefined,
       description: '',
-      amounts: [{ value: undefined as any }],
+      amounts: [{ value: '' as any }],
       categoryId: '',
       date: new Date(),
       isRecurring: false,
@@ -113,7 +113,6 @@ export function AddTransactionSheet({
 
   useEffect(() => {
     if (open) {
-      form.reset(); // Reset form state and errors
       let defaultValues: Partial<TransactionFormValues> = {
           id: undefined,
           description: '',
@@ -124,15 +123,16 @@ export function AddTransactionSheet({
       };
 
       if (transaction) {
-          // Robustly convert Firestore Timestamp (or any other format) to a JS Date object.
-          // This is the critical part to fix the date issue.
-          const transactionDate = (transaction.date as Timestamp)?.toDate ? (transaction.date as Timestamp).toDate() : toDate(transaction.date);
+          // This ensures that any date format (Timestamp, Date string, etc.) from Firestore
+          // is converted to a JS Date object that react-day-picker can understand.
+          const transactionDate = toDate(transaction.date);
 
           defaultValues = {
               id: transaction.id,
               description: transaction.description || '',
               amounts: transaction.amount ? [{ value: transaction.amount }] : [{ value: '' as any }],
               categoryId: transaction.categoryId || '',
+              // Only set the date if it's a valid date, otherwise fall back to a new Date().
               date: isValid(transactionDate) ? transactionDate : new Date(),
               isRecurring: (transaction as any).isRecurring || false,
           };

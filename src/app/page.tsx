@@ -84,6 +84,7 @@ export default function Dashboard() {
     if (!user || !firestore) return;
   
     // Always convert the JS Date from the form to a Firestore Timestamp.
+    // This is the single source of truth for the date conversion.
     const dataToSave = {
       ...transactionData,
       date: Timestamp.fromDate(transactionData.date),
@@ -92,14 +93,14 @@ export default function Dashboard() {
     const transactionId = dataToSave.id;
   
     if (transactionId) {
-      // This is an update to an existing document.
+      // This is an update.
       const docRef = doc(firestore, 'users', user.uid, 'transactions', transactionId);
-      const { id, ...updateData } = dataToSave;
+      const { id, ...updateData } = dataToSave; // remove the id field before saving
       setDocumentNonBlocking(docRef, { ...updateData, updatedAt: serverTimestamp() }, { merge: true });
     } else {
       // This is a new document.
       const coll = collection(firestore, 'users', user.uid, 'transactions');
-      const { id, ...createData } = dataToSave;
+      const { id, ...createData } = dataToSave; // remove the id field before saving
       addDocumentNonBlocking(coll, { ...createData, createdAt: serverTimestamp() });
     }
   };
@@ -169,6 +170,7 @@ export default function Dashboard() {
     const years = new Set<number>();
     allTransactions.forEach(t => {
       if (t.date) {
+        // Use toDate for robust conversion from Timestamp or other formats
         const date = toDate(t.date as any);
         if (isValid(date)) {
             years.add(getYear(date));
@@ -176,9 +178,8 @@ export default function Dashboard() {
       }
     });
     
-    if (years.size === 0) {
-        years.add(new Date().getFullYear());
-    }
+    // Ensure the current year is always an option, even if there are no transactions
+    years.add(new Date().getFullYear());
 
     return Array.from(years).sort((a, b) => b - a);
   }, [allTransactions]);
@@ -203,6 +204,8 @@ export default function Dashboard() {
   }, [allTransactions, currentMonth, currentYear]);
 
   useEffect(() => {
+    // If the currently selected year is not in the list of available years (e.g., after deleting all transactions for that year),
+    // reset to the most recent available year.
     if (availableYears.length > 0 && !availableYears.includes(currentYear)) {
       setCurrentYear(availableYears[0]);
     }
@@ -302,7 +305,7 @@ export default function Dashboard() {
           </TabsList>
           <TabsContent value="reports" className="space-y-4">
             <ReportsTab 
-              transactions={filteredTransactions} 
+              transactions={allTransactions || []}
               availableYears={availableYears}
               currentYear={currentYear}
               setCurrentYear={setCurrentYear}
