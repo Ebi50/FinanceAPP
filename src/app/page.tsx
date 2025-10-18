@@ -21,6 +21,7 @@ import { DashboardTab } from "@/components/dashboard-tab";
 import { TransactionsTab } from "@/components/transactions-tab";
 import { CategoriesTab } from "@/components/categories-tab";
 import { ReportsTab } from "@/components/reports-tab";
+import { ImportTab } from "@/components/import-tab";
 import { AddTransactionSheet } from "@/components/add-transaction-sheet";
 import { transactions as initialTransactions } from '@/lib/data';
 import type { Transaction } from '@/lib/types';
@@ -79,6 +80,7 @@ export default function Dashboard() {
             <TabsTrigger value="transactions">Transaktionen</TabsTrigger>
             <TabsTrigger value="categories">Kategorien</TabsTrigger>
             <TabsTrigger value="reports">Berichte</TabsTrigger>
+            <TabsTrigger value="import">Import</TabsTrigger>
           </TabsList>
           <TabsContent value="overview" className="space-y-4">
             <DashboardTab transactions={transactions} />
@@ -94,7 +96,10 @@ export default function Dashboard() {
             <CategoriesTab />
           </TabsContent>
           <TabsContent value="reports" className="space-y-4">
-            <ReportsTab transactions={transactions} onImport={handleImportTransactions} />
+            <ReportsTab transactions={transactions} />
+          </TabsContent>
+          <TabsContent value="import" className="space-y-4">
+            <ImportTab onImport={handleImportTransactions} />
           </TabsContent>
         </Tabs>
       </div>
