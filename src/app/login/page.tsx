@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { useAuth, useUser } from "@/firebase";
-import { initiateEmailSignIn, initiateEmailSignUp } from "@/firebase/non-blocking-login";
+import { initiateEmailSignIn } from "@/firebase/non-blocking-login";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
@@ -19,7 +19,6 @@ import { useRouter } from "next/navigation";
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
   const auth = useAuth();
   const { user, isUserLoading } = useUser();
   const router = useRouter();
@@ -31,12 +30,7 @@ export default function LoginPage() {
   }, [user, isUserLoading, router]);
 
   const handleAuthAction = () => {
-    if (isSignUp) {
-      initiateEmailSignUp(auth, email, password);
-    } else {
-      initiateEmailSignIn(auth, email, password);
-    }
-    // No longer need to push, useEffect will handle it.
+    initiateEmailSignIn(auth, email, password);
   };
 
   if (isUserLoading || user) {
@@ -49,7 +43,7 @@ export default function LoginPage() {
         <CardHeader className="text-center">
           <CardTitle className="text-3xl font-headline">ExpenceTrack</CardTitle>
           <CardDescription>
-            {isSignUp ? 'Erstellen Sie ein Konto, um loszulegen' : 'Geben Sie Ihre Anmeldeinformationen ein, um auf Ihr Konto zuzugreifen'}
+            Geben Sie Ihre Anmeldeinformationen ein, um auf Ihr Konto zuzugreifen.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -68,11 +62,9 @@ export default function LoginPage() {
             <div className="grid gap-2">
               <div className="flex items-center">
                 <Label htmlFor="password">Passwort</Label>
-                {!isSignUp && (
                   <Link href="#" className="ml-auto inline-block text-sm underline">
                     Passwort vergessen?
                   </Link>
-                )}
               </div>
               <Input 
                 id="password" 
@@ -83,14 +75,11 @@ export default function LoginPage() {
               />
             </div>
             <Button onClick={handleAuthAction} className="w-full">
-              {isSignUp ? 'Registrieren' : 'Anmelden'}
+              Anmelden
             </Button>
           </div>
           <div className="mt-4 text-center text-sm">
-            {isSignUp ? 'Sie haben bereits ein Konto?' : 'Noch kein Konto?'}{" "}
-            <button onClick={() => setIsSignUp(!isSignUp)} className="underline">
-              {isSignUp ? 'Anmelden' : 'Registrieren'}
-            </button>
+            Neue Benutzer können in der Firebase-Konsole angelegt werden.
           </div>
         </CardContent>
       </Card>
