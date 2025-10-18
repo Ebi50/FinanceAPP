@@ -118,24 +118,25 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
         );
         
         if (dataHeaderRowIndex === -1 || dataHeaderRowIndex === 0) {
-            throw new Error("Es konnte keine gültige Kopfzeile mit 'Datum' und 'Betrag' gefunden werden.");
+            throw new Error("Es konnte keine gültige Kopfzeile mit 'Datum' und 'Betrag' gefunden werden. Stellen Sie sicher, dass eine Zeile darüber für die Kategorien existiert.");
         }
 
-        const dataHeaders = json[dataHeaderRowIndex].map(h => String(h || '').toLowerCase());
-        const categoryHeaders = json[dataHeaderRowIndex - 1];
+        const categoryRow = json[dataHeaderRowIndex - 1];
+        const dataHeaderRow = json[dataHeaderRowIndex].map(h => String(h || '').toLowerCase());
         
         const excelHeadersToMap: string[] = [];
+        const categoryColumnMap: { [key: string]: number } = {};
 
-        for (let i = 0; i < dataHeaders.length; i++) {
-            const dataHeader = dataHeaders[i];
-            const nextDataHeader = dataHeaders[i + 1];
-            const categoryHeader = categoryHeaders[i];
+        for (let i = 0; i < dataHeaderRow.length; i++) {
+            const header = dataHeaderRow[i];
+            const categoryName = categoryRow[i];
 
-            if (categoryHeader && typeof categoryHeader === 'string' && dataHeader === 'datum' && nextDataHeader === 'betrag') {
-                 const cleanHeader = categoryHeader.replace(/\s*\d+\s*$/, '').trim();
-                 if (cleanHeader) {
+            if (header === 'datum' && categoryName && typeof categoryName === 'string') {
+                const cleanHeader = categoryName.trim();
+                if(cleanHeader) {
                     excelHeadersToMap.push(cleanHeader);
-                 }
+                    categoryColumnMap[cleanHeader] = i;
+                }
             }
         }
         
@@ -147,7 +148,7 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
         setDetectedHeaders(uniqueHeaders);
         const initialMapping: HeaderMapping = {};
         uniqueHeaders.forEach(header => {
-            const foundCatId = appCategoryMap.get(header.toLowerCase());
+            const foundCatId = appCategoryMap.get(header.toLowerCase().replace(/\s*\d+\s*$/, '').trim());
             if (foundCatId) {
                 initialMapping[header] = foundCatId;
             } else {
@@ -187,28 +188,28 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
         
         if (dataHeaderRowIndex === -1) throw new Error("Konnte die Daten-Kopfzeile nicht erneut finden.");
 
-        const dataHeaders = json[dataHeaderRowIndex].map(h => String(h || '').toLowerCase());
-        const categoryHeaders = json[dataHeaderRowIndex - 1];
+        const categoryRow = json[dataHeaderRowIndex - 1];
+        const dataHeaderRow = json[dataHeaderRowIndex].map(h => String(h || '').toLowerCase());
         const dataRows = json.slice(dataHeaderRowIndex + 1);
 
-        for (let col = 0; col < dataHeaders.length; col++) {
-            const dataHeader = dataHeaders[col];
-            const nextDataHeader = dataHeaders[col + 1];
-            const rawCategoryHeader = categoryHeaders[col];
+        for (let col = 0; col < dataHeaderRow.length; col++) {
+            const dataHeader = dataHeaderRow[col];
+            const nextDataHeader = dataHeaderRow[col + 2]; // Betrag is 2 columns after Datum
+            const rawCategoryHeader = categoryRow[col];
 
             if (rawCategoryHeader && dataHeader === 'datum' && nextDataHeader === 'betrag') {
-                const cleanCategoryHeader = String(rawCategoryHeader).replace(/\s*\d+\s*$/, '').trim();
+                const cleanCategoryHeader = String(rawCategoryHeader).trim();
                 const categoryId = headerMapping[cleanCategoryHeader];
                 
                 if (categoryId) {
                     let lastValidDate: Date | null = null;
                     for (const row of dataRows) {
-                        if (!row[col] && !row[col + 1]) continue;
-                        if (String(row[col] || '').toLowerCase().includes('summe') || String(row[col + 1] || '').toLowerCase().includes('summe')) break;
+                        if (!row[col] && !row[col + 1] && !row[col + 2]) continue;
+                        if (String(row[col] || '').toLowerCase().includes('summe') || String(row[col + 2] || '').toLowerCase().includes('summe')) break;
 
                         const dateValue = row[col];
-                        const amountValue = row[col + 2]; // Description seems to be col+1, amount is col+2
                         const descriptionValue = row[col+1];
+                        const amountValue = row[col + 2]; 
                         
                         if (amountValue && (typeof amountValue === 'number' || String(amountValue).trim() !== '')) {
                             let date: Date | null = null;
