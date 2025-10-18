@@ -240,7 +240,7 @@ const categoryNameMap = useMemo(() => {
                         
                         const description = rowData[0];
                         if (description && typeof description === 'string' && description.trim() !== '') {
-                             const amountCell = rowData[1] ?? rowData[2];
+                             const amountCell = rowData[1] ?? rowData[2] ?? rowData[3] ?? rowData[4];
                              if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '' && Number(amountCell) > 0) {
                                 const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
                                 if (!isNaN(amount) && amount > 0) {
@@ -261,10 +261,10 @@ const categoryNameMap = useMemo(() => {
             });
 
             if (allTransactions.length === 0) {
-                toast({
-                  variant: "destructive",
-                  title: "Keine Transaktionen gefunden",
-                  description: "Die Datei konnte nicht verarbeitet werden oder enthält keine gültigen Transaktionen. Bitte überprüfen Sie das Format.",
+              toast({
+                variant: "destructive",
+                title: "Keine Transaktionen gefunden",
+                description: "Die Datei konnte nicht verarbeitet werden oder enthält keine gültigen Transaktionen. Bitte überprüfen Sie das Format.",
               });
               return;
             }
