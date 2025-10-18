@@ -89,7 +89,7 @@ export function AddTransactionSheet({
   const { user } = useUser();
   const firestore = useFirestore();
   const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null, [firestore, user]);
-  const { data: categories } = useCollection<Category>(categoriesQuery);
+  const { data: categories, isLoading: categoriesLoading } = useCollection<Category>(categoriesQuery);
 
   const open = controlledOpen ?? internalOpen;
   const setOpen = setControlledOpen ?? setInternalOpen;
@@ -114,37 +114,52 @@ export function AddTransactionSheet({
   });
 
   useEffect(() => {
-    if (open) {
-      let dateToSet: Date;
-      const isEditing = !!transaction;
-  
-      if (isEditing && transaction.date) {
-        // When editing, convert Firestore Timestamp or whatever is there to a JS Date
-        const dateValue = transaction.date;
-        if (typeof (dateValue as any).toDate === 'function') {
-          // It's a Firestore Timestamp
-          dateToSet = (dateValue as any).toDate();
-        } else {
-          // Try to parse it, assuming it might be a string or number
-          const parsedDate = toDate(dateValue);
-          dateToSet = isValid(parsedDate) ? parsedDate : new Date();
+    // Only reset form if the sheet is open and categories have loaded.
+    if (open && !categoriesLoading) {
+        const isEditing = !!transaction;
+
+        // Default values for a new transaction
+        let defaultValues: TransactionFormValues = {
+            id: undefined,
+            description: '',
+            amounts: [{ value: 0 }],
+            categoryId: '',
+            date: new Date(),
+            isRecurring: false,
+        };
+
+        // If editing, override with transaction data
+        if (isEditing) {
+            let dateToSet: Date;
+            const dateValue = transaction.date;
+
+            if (dateValue instanceof Date) {
+                dateToSet = dateValue;
+            } else if (dateValue && typeof (dateValue as any).toDate === 'function') {
+                // It's a Firestore Timestamp
+                dateToSet = (dateValue as any).toDate();
+            } else {
+                // Try to parse it, assuming it might be a string or number, otherwise fallback.
+                const parsedDate = toDate(dateValue);
+                dateToSet = isValid(parsedDate) ? parsedDate : new Date();
+            }
+
+            defaultValues = {
+                id: transaction.id,
+                description: transaction.description || '',
+                amounts: transaction.amount ? [{ value: transaction.amount }] : [{ value: 0 }],
+                categoryId: transaction.categoryId || '',
+                date: dateToSet,
+                isRecurring: (transaction as any).isRecurring || false,
+            };
         }
-      } else {
-        // When creating a new one, just use the current date
-        dateToSet = new Date();
-      }
-  
-      form.reset({
-        id: transaction?.id || undefined,
-        description: transaction?.description || '',
-        amounts: transaction ? [{ value: transaction.amount }] : [{ value: 0 }],
-        categoryId: transaction?.categoryId || '',
-        date: dateToSet,
-        isRecurring: transaction ? (transaction as any).isRecurring || false : false,
-      });
-      setSuggestion(null);
+
+        form.reset(defaultValues);
+        setSuggestion(null);
     }
-  }, [open, transaction, form]);
+  // This effect should re-run when the 'open' state changes, when a new 'transaction' is passed in,
+  // or when the categories finish loading.
+  }, [open, transaction, categoriesLoading, form]);
 
 
   const handleSuggestion = async () => {
@@ -179,6 +194,7 @@ export function AddTransactionSheet({
       amount: totalAmount,
       categoryId: data.categoryId,
       date: data.date,
+      isRecurring: data.isRecurring,
     };
     onTransactionAdded(newTransaction);
     if (!isEditing) {
