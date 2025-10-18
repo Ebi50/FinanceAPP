@@ -130,87 +130,97 @@ const categoryNameMap = useMemo(() => {
                 
                 if (rawJson.length < 1) return;
 
-                const processCategoryBlock = (startRow: number, startCol: number): number => {
-                  const categoryNameCell = rawJson[startRow]?.[startCol];
-                  if (typeof categoryNameCell !== 'string' || !categoryNameCell.trim() || categoryNameCell.toLowerCase().includes('summe') || categoryNameCell.toLowerCase().includes('einnahmen')) {
-                    return startRow;
-                  }
-                  const categoryName = categoryNameCell.trim();
-                  allDetectedCategories.add(categoryName);
-                
-                  let currentRow = startRow + 2;
-                  while (currentRow < rawJson.length) {
-                    const rowData = rawJson[currentRow];
-                    if (!rowData || !rowData.some(c => c !== null && String(c).trim() !== '') || (typeof rowData[startCol] === 'string' && String(rowData[startCol]).toLowerCase().includes('summe'))) {
-                      break;
-                    }
-                
-                    const dateCell = rowData[startCol];
+                const processTransactionRow = (rowData: RawRow, categoryName: string, dateCol: number, amountCols: number[]) => {
+                    const dateCell = rowData[dateCol];
                     let description = '';
                     let date: Date | null = null;
                 
                     if (typeof dateCell === 'string' && dateCell.match(/^\d{1,2}\.\s[A-Za-z]{3}/)) {
-                      const dayMatch = dateCell.match(/^(\d{1,2})/);
-                      if (dayMatch) {
-                        const day = parseInt(dayMatch[1], 10);
-                        date = new Date(Date.UTC(fileYear, monthIndex, day, 12, 0, 0));
-                      }
-                      description = categoryName;
+                        const dayMatch = dateCell.match(/^(\d{1,2})/);
+                        if (dayMatch) {
+                            const day = parseInt(dayMatch[1], 10);
+                            date = new Date(Date.UTC(fileYear, monthIndex, day, 12, 0, 0));
+                        }
+                        description = categoryName;
                     } else if (dateCell instanceof Date && isValid(dateCell)) {
-                      date = new Date(Date.UTC(fileYear, monthIndex, dateCell.getUTCDate(), 12, 0, 0));
-                      description = categoryName;
+                        date = new Date(Date.UTC(fileYear, monthIndex, dateCell.getUTCDate(), 12, 0, 0));
+                        description = categoryName;
                     } else if (typeof dateCell === 'string' && dateCell.trim() !== '') {
-                      description = dateCell.trim();
-                      date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                        description = dateCell.trim();
+                        date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
                     }
                 
                     if (date && isValid(date)) {
-                      const columnsToProcess = categoryName.toLowerCase() === 'auto' ? [startCol + 1] : (categoryName.toLowerCase() === 'kv' ? [startCol + 1, startCol + 2] : [startCol + 1]);
-                
-                      for (const colIndex of columnsToProcess) {
-                        const amountCell = rowData[colIndex];
-                        if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '') {
-                          const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
-                          if (!isNaN(amount) && amount !== 0) {
-                            if (amount < 0) {
-                              allTransactions.push({
-                                description: `${description} Erstattung`,
-                                amount: Math.abs(amount),
-                                date,
-                                categoryId: 'Einnahmen'
-                              });
-                              allDetectedCategories.add('Einnahmen');
-                            } else {
-                              allTransactions.push({
-                                description,
-                                amount,
-                                date,
-                                categoryId: categoryName
-                              });
+                        for (const colIndex of amountCols) {
+                            const amountCell = rowData[colIndex];
+                            if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '') {
+                                const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
+                                if (!isNaN(amount) && amount !== 0) {
+                                    if (amount < 0) {
+                                        allTransactions.push({
+                                            description: `${description} Erstattung`,
+                                            amount: Math.abs(amount),
+                                            date,
+                                            categoryId: 'Einnahmen' 
+                                        });
+                                        allDetectedCategories.add('Einnahmen');
+                                    } else {
+                                        allTransactions.push({
+                                            description,
+                                            amount,
+                                            date,
+                                            categoryId: categoryName
+                                        });
+                                    }
+                                }
                             }
-                          }
                         }
-                      }
                     }
-                    currentRow++;
-                  }
-                  return currentRow; 
                 };
 
-                // Process horizontal blocks
-                for (let col = 0; col < 10; col += 2) { 
-                    processCategoryBlock(0, col);
+                // Phase 1: Process horizontal blocks (upper part of the sheet)
+                for (let startCol = 0; startCol < 10; startCol += 2) {
+                    const categoryNameCell = rawJson[0]?.[startCol];
+                    if (typeof categoryNameCell === 'string' && categoryNameCell.trim()) {
+                        const categoryName = categoryNameCell.trim();
+                        allDetectedCategories.add(categoryName);
+                        
+                        let currentRow = 2;
+                        while (currentRow < 29) { // Limit to upper section
+                            const rowData = rawJson[currentRow];
+                            if (!rowData || !rowData.some(c => c !== null && String(c).trim() !== '') || (typeof rowData[startCol] === 'string' && String(rowData[startCol]).toLowerCase().includes('summe'))) {
+                                break;
+                            }
+
+                            const amountCols = categoryName.toLowerCase() === 'auto' ? [startCol + 1] : (categoryName.toLowerCase() === 'kv' ? [startCol + 1, startCol + 2] : [startCol + 1]);
+                            processTransactionRow(rowData, categoryName, startCol, amountCols);
+                            currentRow++;
+                        }
+                    }
                 }
 
-                // Process vertical blocks starting around row 30
-                for (let row = 29; row < rawJson.length; row++) {
-                    const cell = rawJson[row]?.[0];
-                    if (typeof cell === 'string' && cell.trim() && !cell.toLowerCase().includes('summe') && !cell.toLowerCase().includes('einnahmen')) {
-                       row = processCategoryBlock(row, 0);
+                // Phase 2: Process vertical blocks (middle part of the sheet)
+                for (let startRow = 29; startRow < rawJson.length; startRow++) {
+                    const categoryNameCell = rawJson[startRow]?.[0];
+                    if (typeof categoryNameCell === 'string' && categoryNameCell.trim() && !categoryNameCell.toLowerCase().includes('summe') && !categoryNameCell.toLowerCase().includes('einnahmen')) {
+                       const categoryName = categoryNameCell.trim();
+                       allDetectedCategories.add(categoryName);
+
+                       let currentRow = startRow + 2;
+                       while(currentRow < rawJson.length) {
+                         const rowData = rawJson[currentRow];
+                         if (!rowData || !rowData.some(c => c !== null && String(c).trim() !== '') || (typeof rowData[0] === 'string' && String(rowData[0]).toLowerCase().includes('summe'))) {
+                            startRow = currentRow; // Skip processed rows in outer loop
+                            break;
+                         }
+                         const amountCols = [1]; // Amount is always in the second column for vertical blocks
+                         processTransactionRow(rowData, categoryName, 0, amountCols);
+                         currentRow++;
+                       }
                     }
                 }
                 
-                // Process Einnahmen block at the end
+                // Phase 3: Process Einnahmen block at the end
                 const einnahmenRowIndex = rawJson.findIndex(row => typeof row?.[0] === 'string' && row[0].toLowerCase().startsWith('einnahmen'));
                 if (einnahmenRowIndex !== -1) {
                     allDetectedCategories.add("Einnahmen");
