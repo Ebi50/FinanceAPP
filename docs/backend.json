@@ -1,0 +1,225 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user.",
+          "format": "email"
+        },
+        "firstName": {
+          "type": "string",
+          "description": "First name of the user."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "Last name of the user."
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "firstName",
+        "lastName"
+      ]
+    },
+    "ExpenseCategory": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ExpenseCategory",
+      "type": "object",
+      "description": "Represents a category of expenses.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the expense category."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the expense category."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the expense category."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N ExpenseCategory)"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "userId"
+      ]
+    },
+    "ExpenseSubcategory": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ExpenseSubcategory",
+      "type": "object",
+      "description": "Represents a subcategory of expenses, linked to a main category.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the expense subcategory."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the expense subcategory."
+        },
+        "expenseCategoryId": {
+          "type": "string",
+          "description": "Reference to ExpenseCategory. (Relationship: ExpenseCategory 1:N ExpenseSubcategory)"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "expenseCategoryId"
+      ]
+    },
+    "Transaction": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Transaction",
+      "type": "object",
+      "description": "Represents a financial transaction.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the transaction."
+        },
+        "date": {
+          "type": "string",
+          "description": "Date of the transaction.",
+          "format": "date-time"
+        },
+        "amount": {
+          "type": "number",
+          "description": "Amount of the transaction."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the transaction."
+        },
+        "expenseSubcategoryId": {
+          "type": "string",
+          "description": "Reference to ExpenseSubcategory. (Relationship: ExpenseSubcategory 1:N Transaction)"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N Transaction)"
+        },
+        "isRecurring": {
+          "type": "boolean",
+          "description": "Indicates if the transaction is recurring."
+        }
+      },
+      "required": [
+        "id",
+        "date",
+        "amount",
+        "description",
+        "expenseSubcategoryId",
+        "userId"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profiles. Path-based ownership ensures only the authenticated user can access their profile data.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user, matching the Firebase Auth UID."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/expenseCategories/{expenseCategoryId}",
+        "definition": {
+          "entityName": "ExpenseCategory",
+          "schema": {
+            "$ref": "#/backend/entities/ExpenseCategory"
+          },
+          "description": "Stores expense categories owned by a specific user. Includes denormalized 'userId' in the path for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "expenseCategoryId",
+              "description": "The unique identifier for the expense category."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/expenseCategories/{expenseCategoryId}/expenseSubcategories/{expenseSubcategoryId}",
+        "definition": {
+          "entityName": "ExpenseSubcategory",
+          "schema": {
+            "$ref": "#/backend/entities/ExpenseSubcategory"
+          },
+          "description": "Stores expense subcategories within a category, owned by a specific user. The 'userId' is present in the path for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "expenseCategoryId",
+              "description": "The unique identifier for the parent expense category."
+            },
+            {
+              "name": "expenseSubcategoryId",
+              "description": "The unique identifier for the expense subcategory."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/transactions/{transactionId}",
+        "definition": {
+          "entityName": "Transaction",
+          "schema": {
+            "$ref": "#/backend/entities/Transaction"
+          },
+          "description": "Stores transaction data for a specific user. Includes denormalized 'userId' in the path for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "transactionId",
+              "description": "The unique identifier for the transaction."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to ensure authorization independence, clarity, and scalability, aligning with the specified principles. Each collection is designed to have a homogeneous security posture, simplifying security rule implementation and improving overall security. User-owned data is stored in hierarchical paths under the `/users/{userId}` collection, which simplifies ownership-based access control. Denormalization is employed to avoid using `get()` calls in security rules, ensuring atomic operations and better performance.\n\n**Authorization Independence and QAPs:**\n\n*   **User Data:** User profiles are stored directly under `/users/{userId}`, providing a straightforward path-based ownership model. This eliminates the need to check parent document attributes. List operations are secure, as rules can directly enforce that only the authenticated user can access their own data.\n*   **Expense Categories:** Stored under `/users/{userId}/expenseCategories/{expenseCategoryId}`. The `userId` is present in the document path, enabling simple, secure list operations.\n*   **Expense Subcategories:** Stored under `/users/{userId}/expenseCategories/{expenseCategoryId}/expenseSubcategories/{expenseSubcategoryId}`. This extends the path-based ownership model. Again, list operations are secured by the path.\n*   **Transactions:** Stored under `/users/{userId}/transactions/{transactionId}`. The inclusion of `userId` in the document path provides authorization independence, enabling secure `list` operations, as the rules can directly enforce that only the authenticated user can access their transactions.\n\nThis structure facilitates simple, robust, and easily debuggable security rules, while adhering to the principles of Authorization Independence and QAPs."
+  }
+}
