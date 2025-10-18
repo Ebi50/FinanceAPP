@@ -28,7 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
 import type { Transaction, Category } from "@/lib/types";
 import React, { useState, useMemo } from "react";
-import { format, toDate } from "date-fns";
+import { format, toDate, isValid } from "date-fns";
 
 type MappedTransaction = Omit<Transaction, 'id' | 'createdAt'>;
 type RawRow = (string | number | Date | null)[];
@@ -82,12 +82,15 @@ const categoryNameMap = useMemo(() => {
       });
       return;
     }
-    const worksheetData = transactions.map((t) => ({
-      Datum: format(toDate(t.date), "yyyy-MM-dd"),
-      Beschreibung: t.description,
-      Kategorie: categoryIdMap.get(t.categoryId) || "Unbekannt",
-      Betrag: t.amount,
-    }));
+    const worksheetData = transactions.map((t) => {
+      const date = toDate(t.date);
+      return {
+        Datum: isValid(date) ? format(date, "yyyy-MM-dd") : "Ungültiges Datum",
+        Beschreibung: t.description,
+        Kategorie: categoryIdMap.get(t.categoryId) || "Unbekannt",
+        Betrag: t.amount,
+      }
+    });
     const worksheet = XLSX.utils.json_to_sheet(worksheetData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Transaktionen");
@@ -170,23 +173,21 @@ const categoryNameMap = useMemo(() => {
 
                                 if (!categoryName || !dateCell || amountCell === null || String(amountCell).trim() === '') continue;
                                 
-                                let date: Date | null = null;
                                 let day: number | null = null;
                                 
-                                if (dateCell instanceof Date) {
+                                if (dateCell instanceof Date && isValid(dateCell)) {
                                     day = dateCell.getUTCDate();
                                 } else {
-                                    const dayMatch = String(dateCell).match(/(\d{1,2})/);
-                                    if(dayMatch) {
+                                    const dayMatch = String(dateCell).match(/^(\d{1,2})/);
+                                    if(dayMatch && dayMatch[1]) {
                                        day = parseInt(dayMatch[1], 10);
                                     }
                                 }
 
-                                if (day) {
-                                    date = new Date(Date.UTC(fileYear, monthIndex, day));
-                                }
+                                if (day === null || isNaN(day) || day < 1 || day > 31) continue;
 
-                                if (!date) continue;
+                                const date = new Date(Date.UTC(fileYear, monthIndex, day));
+                                if (!isValid(date)) continue;
 
                                 const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
                                 if (!isNaN(amount) && amount > 0) {
@@ -210,13 +211,16 @@ const categoryNameMap = useMemo(() => {
                         if (amountCell) {
                              const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
                              if (!isNaN(amount) && amount > 0) {
-                                allTransactions.push({
-                                    description: "Rate Haus",
-                                    amount: Math.abs(amount),
-                                    date: new Date(Date.UTC(fileYear, monthIndex, 15)),
-                                    categoryId: "Haushalt"
-                                });
-                                allDetectedCategories.add("Haushalt");
+                                const date = new Date(Date.UTC(fileYear, monthIndex, 15));
+                                if (isValid(date)) {
+                                    allTransactions.push({
+                                        description: "Rate Haus",
+                                        amount: Math.abs(amount),
+                                        date: date,
+                                        categoryId: "Haushalt"
+                                    });
+                                    allDetectedCategories.add("Haushalt");
+                                }
                              }
                         }
                     }
@@ -247,13 +251,16 @@ const categoryNameMap = useMemo(() => {
                              const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
                              if (!isNaN(amount) && amount > 0) {
                                  const finalDescription = description.trim().toLowerCase() === 'sonstige' ? "Sonstige Einnahmen" : description;
-                                 allTransactions.push({
-                                     description: finalDescription,
-                                     amount: amount,
-                                     date: new Date(Date.UTC(fileYear, monthIndex, 15)),
-                                     categoryId: "Einnahmen"
-                                 });
-                                 allDetectedCategories.add("Einnahmen");
+                                 const date = new Date(Date.UTC(fileYear, monthIndex, 15));
+                                 if (isValid(date)) {
+                                     allTransactions.push({
+                                         description: finalDescription,
+                                         amount: amount,
+                                         date: date,
+                                         categoryId: "Einnahmen"
+                                     });
+                                     allDetectedCategories.add("Einnahmen");
+                                 }
                              }
                         }
                     }
