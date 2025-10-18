@@ -112,46 +112,31 @@ export function AddTransactionSheet({
   });
 
   useEffect(() => {
-    // This effect now correctly handles resetting the form for both new and editing transactions.
     if (open) {
-        const isEditing = !!transaction;
+        let defaultValues: TransactionFormValues = {
+            id: undefined,
+            description: '',
+            amounts: [{ value: undefined as any }],
+            categoryId: '',
+            date: new Date(),
+            isRecurring: false,
+        };
 
-        if (isEditing && transaction) {
-            // When editing, convert the Firestore Timestamp to a JS Date.
-            let jsDate = new Date(); // Default fallback
-            if (transaction.date) {
-                if (transaction.date instanceof Timestamp) {
-                    jsDate = transaction.date.toDate();
-                } else if (transaction.date instanceof Date) {
-                    jsDate = transaction.date;
-                } else if (typeof transaction.date === 'string' || typeof transaction.date === 'number') {
-                    const parsed = toDate(transaction.date);
-                    if (isValid(parsed)) {
-                        jsDate = parsed;
-                    }
-                }
-            }
+        if (transaction) {
+            // Safely convert timestamp/date string/number to JS Date object
+            const transactionDate = toDate(transaction.date as any);
 
-            form.reset({
+            defaultValues = {
                 id: transaction.id,
                 description: transaction.description || '',
                 amounts: transaction.amount ? [{ value: transaction.amount }] : [{ value: undefined as any }],
                 categoryId: transaction.categoryId || '',
-                date: jsDate, // Use the safely converted JS Date.
+                date: isValid(transactionDate) ? transactionDate : new Date(),
                 isRecurring: (transaction as any).isRecurring || false,
-            });
-        } else {
-            // For a new transaction, reset to clean defaults.
-            form.reset({
-                id: undefined,
-                description: '',
-                amounts: [{ value: undefined as any }],
-                categoryId: '',
-                date: new Date(),
-                isRecurring: false,
-            });
+            };
         }
-        // Clear any previous AI suggestions.
+        
+        form.reset(defaultValues);
         setSuggestion(null);
     }
   }, [open, transaction, form]);
@@ -239,7 +224,7 @@ export function AddTransactionSheet({
                                 step="0.01"
                                 placeholder="0,00"
                                 className="text-right text-base"
-                                value={field.value === 0 ? '' : field.value}
+                                value={field.value === 0 ? '' : field.value || ''}
                                 onChange={e => field.onChange(e.target.valueAsNumber || '')}
                             />
                         )}

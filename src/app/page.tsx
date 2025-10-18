@@ -8,6 +8,13 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { PlusCircle, Trash2 } from "lucide-react";
 import { UserNav } from "@/components/user-nav";
 import { DashboardTab } from "@/components/dashboard-tab";
@@ -34,6 +41,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useMemoFirebase } from '@/firebase/provider';
+import { toDate, getMonth, getYear } from 'date-fns';
+import { de } from 'date-fns/locale';
 
 
 export default function Dashboard() {
@@ -42,6 +51,9 @@ export default function Dashboard() {
   const router = useRouter();
   const { toast } = useToast();
   
+  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
+  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+
   useEffect(() => {
     if (!isUserLoading && !user) {
       router.push('/login');
@@ -52,7 +64,7 @@ export default function Dashboard() {
     user ? collection(firestore, 'users', user.uid, 'transactions') : null,
     [firestore, user]
   );
-  const { data: transactions, isLoading: transactionsLoading } = useCollection<Transaction>(transactionsQuery);
+  const { data: allTransactions, isLoading: transactionsLoading } = useCollection<Transaction>(transactionsQuery);
 
   const categoriesQuery = useMemoFirebase(() => 
     user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null,
@@ -71,18 +83,19 @@ export default function Dashboard() {
   const handleAddOrUpdateTransaction = (transactionData: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date }) => {
     if (!user || !firestore) return;
   
-    // Always convert the JS Date from the form to a Firestore Timestamp.
+    // Convert the JS Date from the form to a Firestore Timestamp.
     const dataToSave = {
       ...transactionData,
       date: Timestamp.fromDate(transactionData.date),
     };
     
+    const transactionId = dataToSave.id;
     // Remove the client-side 'id' before saving.
     delete (dataToSave as any).id;
   
-    if (transactionData.id) {
+    if (transactionId) {
       // This is an update to an existing document.
-      const docRef = doc(firestore, 'users', user.uid, 'transactions', transactionData.id);
+      const docRef = doc(firestore, 'users', user.uid, 'transactions', transactionId);
       // Add an 'updatedAt' field for updates.
       setDocumentNonBlocking(docRef, { ...dataToSave, updatedAt: serverTimestamp() }, { merge: true });
     } else {
@@ -151,13 +164,36 @@ export default function Dashboard() {
       });
     }
   };
+  
+  const { filteredTransactions, availableYears } = useMemo(() => {
+    if (!allTransactions) return { filteredTransactions: [], availableYears: [new Date().getFullYear()] };
 
-  const sortedTransactions = transactions ? [...transactions].sort((a, b) => {
-    // Ensure we are comparing valid Date objects
-    const dateA = a.date ? (a.date as any).toDate ? (a.date as any).toDate() : new Date(a.date) : new Date(0);
-    const dateB = b.date ? (b.date as any).toDate ? (b.date as any).toDate() : new Date(b.date) : new Date(0);
-    return dateB.getTime() - dateA.getTime();
-  }) : [];
+    const years = new Set<number>();
+    allTransactions.forEach(t => {
+        const date = toDate(t.date as any);
+        years.add(getYear(date));
+    });
+    const sortedYears = Array.from(years).sort((a, b) => b - a);
+
+    const filtered = allTransactions.filter(t => {
+      const date = toDate(t.date as any);
+      return getMonth(date) === currentMonth && getYear(date) === currentYear;
+    });
+
+    const sorted = filtered.sort((a, b) => {
+        const dateA = toDate(a.date as any);
+        const dateB = toDate(b.date as any);
+        return dateB.getTime() - dateA.getTime();
+    });
+
+    return { filteredTransactions: sorted, availableYears: sortedYears.length > 0 ? sortedYears : [new Date().getFullYear()] };
+  }, [allTransactions, currentMonth, currentYear]);
+
+  useEffect(() => {
+    if (availableYears.length > 0 && !availableYears.includes(currentYear)) {
+      setCurrentYear(availableYears[0]);
+    }
+  }, [availableYears, currentYear]);
 
 
   if (isUserLoading || !user) {
@@ -180,7 +216,33 @@ export default function Dashboard() {
       </div>
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
         <div className="flex items-center justify-between space-y-2">
-          <h2 className="text-3xl font-headline font-bold tracking-tight">Übersicht</h2>
+          <div className='flex items-center gap-4'>
+            <h2 className="text-3xl font-headline font-bold tracking-tight">Übersicht</h2>
+            <div className="flex items-center gap-2">
+              <Select value={String(currentMonth)} onValueChange={(value) => setCurrentMonth(Number(value))}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Monat auswählen" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <SelectItem key={i} value={String(i)}>
+                      {de.localize?.month(i)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={String(currentYear)} onValueChange={(value) => setCurrentYear(Number(value))}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue placeholder="Jahr auswählen" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableYears.map(year => (
+                    <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
           <div className="flex items-center space-x-2">
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -226,11 +288,11 @@ export default function Dashboard() {
             <TabsTrigger value="import">Importieren</TabsTrigger>
           </TabsList>
           <TabsContent value="reports" className="space-y-4">
-            <ReportsTab transactions={sortedTransactions} />
+            <ReportsTab transactions={filteredTransactions} />
           </TabsContent>
           <TabsContent value="import" className="space-y-4">
             <ImportTab 
-              transactions={sortedTransactions} 
+              transactions={allTransactions || []} 
               onImport={handleImportTransactions}
               categories={categories || []}
             />
@@ -240,13 +302,13 @@ export default function Dashboard() {
           </TabsContent>
           <TabsContent value="transactions" className="space-y-4">
             <TransactionsTab 
-              transactions={sortedTransactions} 
+              transactions={filteredTransactions} 
               onDelete={handleDeleteTransaction}
               onUpdate={handleAddOrUpdateTransaction}
             />
           </TabsContent>
           <TabsContent value="overview" className="space-y-4">
-            <DashboardTab transactions={sortedTransactions} budget={budget} />
+            <DashboardTab transactions={filteredTransactions} budget={budget} />
           </TabsContent>
         </Tabs>
       </div>

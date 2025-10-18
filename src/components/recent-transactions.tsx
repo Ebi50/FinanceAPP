@@ -41,7 +41,7 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
       <CardHeader>
         <CardTitle className="font-headline">Letzte Transaktionen</CardTitle>
         <CardDescription>
-          Sie haben diesen Monat {transactions.length} Transaktionen getätigt.
+          Sie haben {transactions.length} Transaktionen im ausgewählten Zeitraum.
         </CardDescription>
       </CardHeader>
       <CardContent>
