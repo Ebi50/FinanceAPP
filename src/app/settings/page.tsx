@@ -25,7 +25,7 @@ import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/page-header';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, setDoc } from 'firebase/firestore';
-import { updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { updateProfile, updatePassword } from 'firebase/auth';
 
 const navItems = [
   'Allgemein',
@@ -68,21 +68,36 @@ export default function SettingsPage() {
       setName(userProfile.name || user?.displayName || '');
       setEmail(userProfile.email || user?.email || '');
       setBudget(userProfile.budget || 2000);
+    } else if (user) {
+        // Fallback if profile doesn't exist in Firestore yet
+        setName(user.displayName || '');
+        setEmail(user.email || '');
     }
   }, [userProfile, user]);
 
-  const handleProfileSave = (e: React.FormEvent) => {
+  const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !userProfileQuery) return;
-    updateProfile(user, { displayName: name });
-    setDoc(userProfileQuery, { name, email }, { merge: true });
-    toast({
-      title: 'Profil gespeichert',
-      description: 'Ihre Daten wurden erfolgreich aktualisiert.',
-    });
+    try {
+        if(user.displayName !== name) {
+            await updateProfile(user, { displayName: name });
+        }
+        await setDoc(userProfileQuery, { name }, { merge: true });
+        toast({
+            title: 'Profil gespeichert',
+            description: 'Ihre Daten wurden erfolgreich aktualisiert.',
+        });
+    } catch (error) {
+        console.error("Error updating profile: ", error);
+        toast({
+            variant: "destructive",
+            title: "Fehler",
+            description: "Profil konnte nicht aktualisiert werden.",
+        });
+    }
   };
 
-  const handlePasswordSave = (e: React.FormEvent) => {
+  const handlePasswordSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     if (password !== confirmPassword) {
@@ -93,40 +108,50 @@ export default function SettingsPage() {
       });
       return;
     }
-    if (password.length < 8) {
+    if (password.length < 6) {
         toast({
             variant: 'destructive',
             title: 'Fehler',
-            description: 'Das Passwort muss mindestens 8 Zeichen lang sein.',
+            description: 'Das Passwort muss mindestens 6 Zeichen lang sein.',
         });
         return;
     }
     
-    updatePassword(user, password).then(() => {
+    try {
+        await updatePassword(user, password)
         toast({
           title: 'Passwort geändert',
           description: 'Ihr Passwort wurde erfolgreich geändert.',
         });
         setPassword('');
         setConfirmPassword('');
-    }).catch((error) => {
-        console.error(error);
+    } catch (error) {
+        console.error("Error updating password: ", error);
         toast({
             variant: 'destructive',
             title: 'Fehler beim Ändern des Passworts',
             description: 'Bitte melden Sie sich erneut an und versuchen Sie es erneut.',
         })
-    });
+    }
   };
 
-  const handleBudgetSave = (e: React.FormEvent) => {
+  const handleBudgetSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !userProfileQuery) return;
-    setDoc(userProfileQuery, { budget }, { merge: true });
-    toast({
-      title: 'Budget gespeichert',
-      description: `Ihr monatliches Budget wurde auf ${budget} € festgelegt.`,
-    });
+    try {
+        await setDoc(userProfileQuery, { budget }, { merge: true });
+        toast({
+          title: 'Budget gespeichert',
+          description: `Ihr monatliches Budget wurde auf ${budget} € festgelegt.`,
+        });
+    } catch (error) {
+        console.error("Error updating budget: ", error);
+        toast({
+            variant: "destructive",
+            title: "Fehler",
+            description: "Budget konnte nicht gespeichert werden.",
+        });
+    }
   };
 
 
@@ -252,7 +277,7 @@ export default function SettingsPage() {
                     <CardDescription>
                         Ändern Sie hier Ihr Passwort.
                     </CardDescription>
-                </CardHeader>
+                </Header>
                 <CardContent>
                     <form className="space-y-4" onSubmit={handlePasswordSave}>
                         <div className="space-y-2">

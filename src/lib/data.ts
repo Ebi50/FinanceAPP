@@ -1,25 +1,7 @@
+// This file is no longer used for dynamic categories, but we can keep it for initial data seeding or as a reference.
 import type { Category } from './types';
-import {
-  Car,
-  Home,
-  Utensils,
-  ShoppingBasket,
-  Heart,
-  Film,
-  Plane,
-  Gift,
-  GraduationCap,
-  Briefcase,
-  PiggyBank,
-  Pizza,
-  Bus,
-  Train,
-  Shirt,
-  BookOpen,
-  DollarSign,
-} from 'lucide-react';
 
-export const categories: Omit<Category, 'id'>[] = [
+export const initialCategories: Omit<Category, 'id'>[] = [
   { name: 'Lebensmittel' },
   { name: 'Wohnen' },
   { name: 'Transport' },
