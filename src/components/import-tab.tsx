@@ -128,19 +128,20 @@ const categoryNameMap = useMemo(() => {
 
                 const rawJson = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as RawRow[];
                 
-                const sheetJson = rawJson.map(row => row.slice(0, 14));
+                if (rawJson.length < 2) return;
                 
-                if (sheetJson.length < 2) return;
-                
-                for (let r = 0; r < sheetJson.length; r++) {
-                    const firstCell = sheetJson[r][0];
+                // Process upper part (rows 1-28 approx), columns A-J
+                const upperPart = rawJson.slice(0, 28).map(row => row.slice(0, 10)); // Use columns A-J
+
+                for (let r = 0; r < upperPart.length; r++) {
+                    const firstCell = upperPart[r][0];
                     if (typeof firstCell === 'string' && firstCell.match(/^[a-zA-ZäöüÄÖÜß\.\/\s]+ \d+$/)) {
                         const categoryName = firstCell.replace(/\s+\d+$/, '').trim();
                         allDetectedCategories.add(categoryName);
 
                         let currentRow = r + 2; 
-                        while(currentRow < sheetJson.length) {
-                            const rowData = sheetJson[currentRow];
+                        while(currentRow < upperPart.length) {
+                            const rowData = upperPart[currentRow];
                             if (!rowData || !rowData.some(c => c !== null && c !== '')) {
                                 break;
                             }
@@ -153,19 +154,20 @@ const categoryNameMap = useMemo(() => {
                             let date: Date | null = null;
                             
                             const dayString = String(cell1);
+                            // Matches "1. Dez" or similar date formats
                             if (dayString.match(/^\d{1,2}\.\s[A-Za-z]{3}/)) {
                                 const dayMatch = dayString.match(/^(\d{1,2})/);
                                 if (dayMatch) {
                                     const day = parseInt(dayMatch[1], 10);
                                     date = new Date(Date.UTC(fileYear, monthIndex, day, 12, 0, 0));
                                 }
-                                description = categoryName;
+                                description = categoryName; // Use category name as description if date is present
                             } else if (cell1 instanceof Date && isValid(cell1)) {
                                 date = new Date(Date.UTC(fileYear, monthIndex, cell1.getUTCDate(), 12, 0, 0));
                                 description = categoryName;
                             } else if (typeof cell1 === 'string' && cell1.trim() !== '') {
                                 description = cell1.trim();
-                                date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                                date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0)); // Default to 15th if description is text
                             }
                             
                             if (date && isValid(date)) {
@@ -202,12 +204,15 @@ const categoryNameMap = useMemo(() => {
                     }
                 }
                 
-                const einnahmenRowIndex = sheetJson.findIndex(row => typeof row[0] === 'string' && row[0].toLowerCase().startsWith('einnahmen'));
+                const einnahmenRowIndex = rawJson.findIndex(row => typeof row[0] === 'string' && row[0].toLowerCase().startsWith('einnahmen'));
 
                 if (einnahmenRowIndex !== -1) {
                     allDetectedCategories.add("Einnahmen");
-                    for (let r = einnahmenRowIndex + 1; r < sheetJson.length; r++) {
-                        const rowData = sheetJson[r];
+                    // Process lower part, columns A-N
+                    const lowerPart = rawJson.slice(einnahmenRowIndex).map(row => row.slice(0, 14)); // Use columns A-N
+                    
+                    for (let r = 1; r < lowerPart.length; r++) { // Start from 1 to skip header
+                        const rowData = lowerPart[r];
                         if (!rowData || !rowData.some(cell => cell !== null && cell !== '')) break;
                         
                         const description = rowData[0];
