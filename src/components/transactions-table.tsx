@@ -1,5 +1,5 @@
-import type { Transaction } from "@/lib/types";
-import { categories } from "@/lib/data";
+'use client';
+import type { Transaction, Category } from "@/lib/types";
 import { formatCurrency, cn } from "@/lib/utils";
 import {
   Table,
@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { Badge } from "./ui/badge";
-import { format } from "date-fns";
+import { format, toDate } from "date-fns";
 import { de } from 'date-fns/locale';
 import {
   AlertDialog,
@@ -35,15 +35,26 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AddTransactionSheet } from "./add-transaction-sheet";
 import { useState } from "react";
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection } from 'firebase/firestore';
 
 interface TransactionsTableProps {
   transactions: Transaction[];
   onDelete: (id: string) => void;
-  onUpdate: (transaction: Transaction) => void;
+  onUpdate: (transaction: Omit<Transaction, 'id'> & { id?: string }) => void;
 }
 
 export function TransactionsTable({ transactions, onDelete, onUpdate }: TransactionsTableProps) {
-  const categoryMap = new Map(categories.map((c) => [c.id, c]));
+  const { user } = useUser();
+  const firestore = useFirestore();
+  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null, [firestore, user]);
+  const { data: categories } = useCollection<Category>(categoriesQuery);
+
+  const categoryMap = useMemoFirebase(() => {
+    if (!categories) return new Map();
+    return new Map(categories.map((c) => [c.id, c]));
+  }, [categories]);
+
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
   const handleDelete = (id: string) => {
@@ -54,7 +65,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
     setEditingTransaction(transaction);
   }
 
-  const handleUpdate = (updatedTransaction: Transaction) => {
+  const handleUpdate = (updatedTransaction: Omit<Transaction, 'id'> & { id?: string }) => {
     onUpdate(updatedTransaction);
     setEditingTransaction(null);
   }
@@ -77,7 +88,12 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
       <TableBody>
         {transactions.map((transaction) => {
           const category = categoryMap.get(transaction.categoryId);
-          const isIncome = category?.id === 'cat-14';
+          const incomeCategory = categories?.find(c => c.name.toLowerCase() === 'einnahmen');
+          const isIncome = category?.id === incomeCategory?.id;
+          
+          // Firebase may return Timestamp objects
+          const date = transaction.date instanceof Date ? transaction.date : toDate((transaction.date as any).seconds * 1000);
+
           return (
             <TableRow key={transaction.id}>
               <TableCell className="font-medium">
@@ -86,13 +102,13 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
               <TableCell>
                 {category && (
                   <Badge variant="outline" className="flex items-center gap-2 w-fit">
-                    <category.icon className="h-3 w-3" />
+                    {/* Icon logic removed */}
                     {category.name}
                   </Badge>
                 )}
               </TableCell>
               <TableCell>
-                {format(new Date(transaction.date), "dd. MMMM yyyy", { locale: de })}
+                {format(date, "dd. MMMM yyyy", { locale: de })}
               </TableCell>
               <TableCell className={cn("text-right", isIncome ? "text-emerald-500" : "text-destructive")}>
                 {isIncome ? '+' : '-'}{formatCurrency(transaction.amount)}

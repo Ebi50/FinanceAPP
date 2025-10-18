@@ -19,7 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
-import { categories } from '@/lib/data';
 import {
   Calendar as CalendarIcon,
   Loader2,
@@ -32,14 +31,16 @@ import { Checkbox } from './ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
 import { cn, formatCurrency } from '@/lib/utils';
-import { format } from 'date-fns';
+import { format, toDate } from 'date-fns';
 import { de } from 'date-fns/locale';
 import React, { useState, useEffect } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { suggestExpenseCategory } from '@/ai/flows/suggest-expense-category';
-import type { Transaction } from '@/lib/types';
+import type { Transaction, Category } from '@/lib/types';
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, serverTimestamp } from 'firebase/firestore';
 
 const transactionSchema = z.object({
   id: z.string().optional(),
@@ -68,7 +69,7 @@ function SubmitButton() {
 
 interface AddTransactionSheetProps {
   children: React.ReactNode;
-  onTransactionAdded: (transaction: Transaction) => void;
+  onTransactionAdded: (transaction: Omit<Transaction, 'id'> & { id?: string }) => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   transaction?: Transaction | null;
@@ -84,6 +85,11 @@ export function AddTransactionSheet({
   const [internalOpen, setInternalOpen] = useState(false);
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const [isSuggesting, setIsSuggesting] = useState(false);
+  
+  const { user } = useUser();
+  const firestore = useFirestore();
+  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null, [firestore, user]);
+  const { data: categories } = useCollection<Category>(categoriesQuery);
 
   const open = controlledOpen ?? internalOpen;
   const setOpen = setControlledOpen ?? setInternalOpen;
@@ -93,12 +99,12 @@ export function AddTransactionSheet({
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionSchema),
     defaultValues: {
-      id: transaction?.id || undefined,
-      description: transaction?.description || '',
-      amounts: transaction ? [{ value: transaction.amount }] : [{ value: undefined }],
-      categoryId: transaction?.categoryId || '',
-      date: transaction?.date || new Date(),
-      isRecurring: false, // This can be enhanced later
+      id: undefined,
+      description: '',
+      amounts: [{ value: 0 }],
+      categoryId: '',
+      date: new Date(),
+      isRecurring: false,
     },
   });
 
@@ -114,7 +120,7 @@ export function AddTransactionSheet({
         description: transaction?.description || '',
         amounts: transaction ? [{ value: transaction.amount }] : [{ value: 0 }],
         categoryId: transaction?.categoryId || '',
-        date: transaction?.date ? new Date(transaction.date) : new Date(),
+        date: transaction?.date ? toDate(transaction.date) : new Date(),
         isRecurring: false,
       });
       setSuggestion(null);
@@ -124,7 +130,7 @@ export function AddTransactionSheet({
 
   const handleSuggestion = async () => {
     const description = form.getValues('description');
-    if (!description || description.length < 5) return;
+    if (!description || description.length < 5 || !categories) return;
     setIsSuggesting(true);
     setSuggestion(null);
     try {
@@ -147,12 +153,16 @@ export function AddTransactionSheet({
 
   const onSubmit = (data: TransactionFormValues) => {
     const totalAmount = data.amounts.reduce((sum, current) => sum + Number(current.value), 0);
-    const newTransaction: Transaction = {
-      id: data.id || `txn-${Date.now()}`,
+    
+    // The type from the DB might have a Timestamp, so we create a new object.
+    const newTransaction: Omit<Transaction, 'id'> & { id?: string } = {
+      id: data.id,
       description: data.description,
       amount: totalAmount,
       categoryId: data.categoryId,
       date: data.date,
+      // @ts-ignore
+      createdAt: serverTimestamp(),
     };
     onTransactionAdded(newTransaction);
     if (!isEditing) {
@@ -235,12 +245,9 @@ export function AddTransactionSheet({
                           <SelectValue placeholder="Kategorie auswählen" />
                         </SelectTrigger>
                         <SelectContent>
-                          {categories.map((cat) => (
+                          {categories?.map((cat) => (
                             <SelectItem key={cat.id} value={cat.id}>
-                              <div className="flex items-center gap-2">
-                                <cat.icon className="h-4 w-4" />
-                                {cat.name}
-                              </div>
+                              {cat.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -252,7 +259,7 @@ export function AddTransactionSheet({
                     variant="outline"
                     size="icon"
                     onClick={handleSuggestion}
-                    disabled={isSuggesting}
+                    disabled={isSuggesting || !categories}
                     aria-label="Kategorie vorschlagen"
                   >
                     {isSuggesting ? (

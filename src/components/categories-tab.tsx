@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "./ui/button";
 import {
   Card,
@@ -17,7 +17,6 @@ import {
   TableHeader,
   TableRow,
 } from "./ui/table";
-import { categories as initialCategories } from "@/lib/data";
 import { Edit, PlusCircle, Trash } from "lucide-react";
 import type { Category } from "@/lib/types";
 import {
@@ -27,7 +26,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,42 +41,24 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, addDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
+
 
 export function CategoriesTab() {
-  const [categories, setCategories] = useState<Category[]>([]);
+  const { user } = useUser();
+  const firestore = useFirestore();
+
+  const categoriesQuery = useMemoFirebase(() => 
+    user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null,
+    [firestore, user]
+  );
+  const { data: categories, isLoading: categoriesLoading } = useCollection<Category>(categoriesQuery);
+
   const [open, setOpen] = useState(false);
   const [currentCategory, setCurrentCategory] = useState<Category | null>(null);
   const [categoryName, setCategoryName] = useState("");
   const { toast } = useToast();
-
-  useEffect(() => {
-    try {
-      const storedCategories = localStorage.getItem('userCategories');
-      if (storedCategories) {
-        // We need to re-assign the icon components as they are not stored in JSON
-        const parsedCategories = JSON.parse(storedCategories);
-        const categoriesWithIcons = parsedCategories.map((cat: Category) => {
-            const initialCat = initialCategories.find(ic => ic.name.toLowerCase() === cat.name.toLowerCase() || ic.id === cat.id);
-            return { ...cat, icon: initialCat?.icon || initialCategories[0].icon };
-        });
-        setCategories(categoriesWithIcons);
-      } else {
-        setCategories(initialCategories);
-        localStorage.setItem('userCategories', JSON.stringify(initialCategories));
-      }
-    } catch (error) {
-      console.error("Failed to parse categories from localStorage", error);
-      setCategories(initialCategories);
-    }
-  }, []);
-
-  const updateCategories = (newCategories: Category[]) => {
-    setCategories(newCategories);
-    // When saving to localStorage, we strip out the icon component
-    const categoriesToStore = newCategories.map(({ icon, ...rest }) => rest);
-    localStorage.setItem('userCategories', JSON.stringify(categoriesToStore));
-  };
-
 
   const handleAddClick = () => {
     setCurrentCategory(null);
@@ -93,8 +73,9 @@ export function CategoriesTab() {
   };
 
   const handleDelete = (categoryId: string) => {
-    const newCategories = categories.filter((c) => c.id !== categoryId);
-    updateCategories(newCategories);
+    if (!user) return;
+    const docRef = doc(firestore, 'users', user.uid, 'expenseCategories', categoryId);
+    deleteDoc(docRef);
     toast({
       title: 'Kategorie gelöscht',
       description: 'Die Kategorie wurde erfolgreich entfernt.',
@@ -102,6 +83,7 @@ export function CategoriesTab() {
   };
 
   const handleSave = () => {
+    if (!user) return;
     if (!categoryName.trim()) {
         toast({
             variant: "destructive",
@@ -110,25 +92,24 @@ export function CategoriesTab() {
         });
         return;
     }
+    
+    const coll = collection(firestore, 'users', user.uid, 'expenseCategories');
 
     if (currentCategory) {
       // Edit
-      const newCategories = categories.map((c) =>
-          c.id === currentCategory.id ? { ...c, name: categoryName } : c
-        );
-      updateCategories(newCategories);
+      const docRef = doc(coll, currentCategory.id);
+      setDoc(docRef, { ...currentCategory, name: categoryName }, { merge: true });
        toast({
         title: 'Kategorie aktualisiert',
         description: 'Die Änderungen wurden erfolgreich gespeichert.',
       });
     } else {
       // Add
-      const newCategory: Category = {
-        id: `cat-${Date.now()}`,
+      const newCategory = {
         name: categoryName,
-        icon: initialCategories[0].icon, // Default icon, can be made selectable later
+        // icon property is removed as we are not handling icons for now with firestore
       };
-      updateCategories([...categories, newCategory]);
+      addDoc(coll, newCategory);
       toast({
         title: 'Kategorie hinzugefügt',
         description: `${categoryName} wurde erfolgreich erstellt.`,
@@ -165,10 +146,10 @@ export function CategoriesTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {categories.map((category) => (
+              {categoriesLoading && <TableRow><TableCell colSpan={2}>Lade Kategorien...</TableCell></TableRow>}
+              {!categoriesLoading && categories?.map((category) => (
                 <TableRow key={category.id}>
-                  <TableCell className="font-medium flex items-center gap-3">
-                    {category.icon && <category.icon className="h-5 w-5 text-muted-foreground" />}
+                  <TableCell className="font-medium">
                     {category.name}
                   </TableCell>
                   <TableCell className="text-right">

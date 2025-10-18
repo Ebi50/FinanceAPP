@@ -26,13 +26,14 @@ import { Label } from "./ui/label";
 import { FileUp, FileDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
-import type { Transaction } from "@/lib/types";
-import { categories } from "@/lib/data";
+import type { Transaction, Category } from "@/lib/types";
 import React, { useState } from "react";
 import { format } from "date-fns";
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection } from 'firebase/firestore';
 
 interface ImportTabProps {
-  onImport: (transactions: Transaction[]) => void;
+  onImport: (transactions: Omit<Transaction, 'id'>[]) => void;
   transactions: Transaction[];
 }
 
@@ -42,11 +43,22 @@ type HeaderMapping = { [key: string]: string };
 export function ImportTab({ onImport, transactions }: ImportTabProps) {
   const { toast } = useToast();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const { user } = useUser();
+  const firestore = useFirestore();
+  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null, [firestore, user]);
+  const { data: categories } = useCollection<Category>(categoriesQuery);
+
   
-  const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
-  const appCategoryMap = new Map(
-    categories.map((c) => [c.name.toLowerCase(), c.id])
-  );
+  const categoryMap = useMemoFirebase(() => {
+    if (!categories) return new Map();
+    return new Map(categories.map((c) => [c.id, c.name]));
+  }, [categories]);
+
+  const appCategoryMap = useMemoFirebase(() => {
+    if (!categories) return new Map();
+    return new Map(categories.map((c) => [c.name.toLowerCase(), c.id]));
+  }, [categories]);
 
   const [isMappingDialogOpen, setIsMappingDialogOpen] = useState(false);
   const [detectedHeaders, setDetectedHeaders] = useState<string[]>([]);
@@ -61,7 +73,7 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
 
   const handleExportExcel = () => {
     const worksheetData = transactions.map((t) => ({
-      Datum: format(new Date(t.date), "yyyy-MM-dd"),
+      Datum: format(new Date(t.date.toString()), "yyyy-MM-dd"),
       Beschreibung: t.description,
       Kategorie: categoryMap.get(t.categoryId) || "Unbekannt",
       Betrag: t.amount,
@@ -141,7 +153,7 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
     if (!rawTransactionData) return;
 
     try {
-        const newTransactions: Transaction[] = [];
+        const newTransactions: Omit<Transaction, 'id'>[] = [];
         const json = rawTransactionData;
 
         const headerRowIndex = json.findIndex(row => 
@@ -183,7 +195,7 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
                    
                    if (amountValue && (typeof amountValue === 'number' || (typeof amountValue === 'string' && String(amountValue).trim() !== ''))) {
                       let date: Date | null = null;
-                      let description = categories.find(c => c.id === categoryId)?.name || 'Importiert';
+                      let description = categories?.find(c => c.id === categoryId)?.name || 'Importiert';
 
                       if(dateValue) {
                         if (typeof dateValue === 'string' && isNaN(Date.parse(dateValue)) && !/^\d{1,2}\.\d{1,2}\.?$/.test(dateValue)) {
@@ -209,7 +221,6 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
                          const amount = typeof amountValue === 'number' ? amountValue : parseFloat(String(amountValue).replace('.', '').replace(',', '.'));
                          if (!isNaN(amount)) {
                              newTransactions.push({
-                                id: `imported-${Date.now()}-${newTransactions.length}`,
                                 description: description,
                                 amount: amount,
                                 date,
@@ -315,10 +326,10 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
                                 <SelectValue placeholder="Kategorie auswählen" />
                             </SelectTrigger>
                             <SelectContent>
-                                {categories.map(cat => (
+                                {categories?.map(cat => (
                                     <SelectItem key={cat.id} value={cat.id}>
                                         <div className="flex items-center gap-2">
-                                            <cat.icon className="h-4 w-4" />
+                                            {/* Icon logic removed */}
                                             {cat.name}
                                         </div>
                                     </SelectItem>

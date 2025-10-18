@@ -3,15 +3,25 @@
 
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts"
 import { formatCurrency } from "@/lib/utils"
-import type { Transaction } from "@/lib/types";
-import { categories } from "@/lib/data";
+import type { Transaction, Category } from "@/lib/types";
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection } from 'firebase/firestore';
 
 interface ExpensesChartProps {
   transactions: Transaction[];
 }
 
 export function ExpensesChart({ transactions }: ExpensesChartProps) {
-  const categoryMap = new Map(categories.map(c => [c.id, c.name]));
+  const { user } = useUser();
+  const firestore = useFirestore();
+  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null, [firestore, user]);
+  const { data: categories } = useCollection<Category>(categoriesQuery);
+
+  const categoryMap = useMemoFirebase(() => {
+    if (!categories) return new Map();
+    return new Map(categories.map(c => [c.id, c.name]));
+  }, [categories]);
+
   const expensesByCategory = transactions.reduce((acc, transaction) => {
     const categoryName = categoryMap.get(transaction.categoryId) || 'Sonstiges';
     if (!acc[categoryName]) {

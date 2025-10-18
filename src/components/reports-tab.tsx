@@ -14,9 +14,11 @@ import "jspdf-autotable";
 import { format } from "date-fns";
 import { de } from "date-fns/locale";
 import * as XLSX from "xlsx";
-import type { Transaction } from "@/lib/types";
-import { categories } from "@/lib/data";
+import type { Transaction, Category } from "@/lib/types";
 import React from "react";
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection } from 'firebase/firestore';
+
 
 interface ReportsTabProps {
   transactions: Transaction[];
@@ -24,8 +26,15 @@ interface ReportsTabProps {
 
 export function ReportsTab({ transactions }: ReportsTabProps) {
   const { toast } = useToast();
+  const { user } = useUser();
+  const firestore = useFirestore();
+  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null, [firestore, user]);
+  const { data: categories } = useCollection<Category>(categoriesQuery);
   
-  const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
+  const categoryMap = useMemoFirebase(() => {
+    if(!categories) return new Map();
+    return new Map(categories.map((c) => [c.id, c.name]));
+  }, [categories]);
 
   const generatePdf = (period: "monthly" | "yearly") => {
     const doc = new jsPDF();
@@ -34,7 +43,7 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
 
     const now = new Date();
     const filteredTransactions = transactions.filter((t) => {
-      const transactionDate = new Date(t.date);
+      const transactionDate = new Date(t.date.toString());
       if (period === "monthly") {
         return (
           transactionDate.getMonth() === now.getMonth() &&
@@ -57,7 +66,7 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
 
     filteredTransactions.forEach((t) => {
       const transactionData = [
-        format(new Date(t.date), "dd.MM.yyyy", { locale: de }),
+        format(new Date(t.date.toString()), "dd.MM.yyyy", { locale: de }),
         t.description,
         categoryMap.get(t.categoryId) || "Unbekannt",
         `-${t.amount.toFixed(2)} €`,

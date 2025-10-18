@@ -1,14 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   Tabs,
   TabsContent,
@@ -23,51 +16,60 @@ import { CategoriesTab } from "@/components/categories-tab";
 import { ReportsTab } from "@/components/reports-tab";
 import { ImportTab } from "@/components/import-tab";
 import { AddTransactionSheet } from "@/components/add-transaction-sheet";
-import { transactions as initialTransactions } from '@/lib/data';
 import type { Transaction } from '@/lib/types';
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, addDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 export default function Dashboard() {
-  const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
-  const [budget, setBudget] = useState(2000);
+  const { user } = useUser();
+  const firestore = useFirestore();
+  
+  const transactionsQuery = useMemoFirebase(() => 
+    user ? collection(firestore, 'users', user.uid, 'transactions') : null,
+    [firestore, user]
+  );
+  const { data: transactions, isLoading: transactionsLoading } = useCollection<Transaction>(transactionsQuery);
 
-  useEffect(() => {
-    const storedBudget = localStorage.getItem('monthlyBudget');
-    if (storedBudget) {
-      setBudget(JSON.parse(storedBudget));
+  const budgetQuery = useMemoFirebase(() =>
+    user ? doc(firestore, 'users', user.uid) : null,
+    [firestore, user]
+  );
+  // This is simplified. We are not using useDoc as it's not ideal for a single field.
+  // A more complete solution would use useDoc and handle the user profile document.
+  const [budget, setBudget] = useState(2000); 
+
+
+  const handleAddOrUpdateTransaction = (transaction: Omit<Transaction, 'id'> & { id?: string }) => {
+    if (!user) return;
+    const coll = collection(firestore, 'users', user.uid, 'transactions');
+    if (transaction.id) {
+      const docRef = doc(coll, transaction.id);
+      setDoc(docRef, transaction, { merge: true });
+    } else {
+      addDoc(coll, transaction);
     }
-  }, []);
-
-  const handleAddOrUpdateTransaction = (transaction: Transaction) => {
-    setTransactions((prev) => {
-      const existingIndex = prev.findIndex((t) => t.id === transaction.id);
-      if (existingIndex > -1) {
-        // Update
-        const newTransactions = [...prev];
-        newTransactions[existingIndex] = transaction;
-        return newTransactions;
-      } else {
-        // Add
-        return [transaction, ...prev];
-      }
-    });
   };
 
   const handleDeleteTransaction = (id: string) => {
-    setTransactions(transactions.filter((t) => t.id !== id));
+    if (!user) return;
+    const docRef = doc(firestore, 'users', user.uid, 'transactions', id);
+    deleteDoc(docRef);
   };
   
-  const handleImportTransactions = (newTransactions: Transaction[]) => {
-    const updatedTransactions = [...transactions];
-    newTransactions.forEach(newT => {
-      const existingIndex = updatedTransactions.findIndex(t => t.id === newT.id);
-      if (existingIndex > -1) {
-        updatedTransactions[existingIndex] = newT;
-      } else {
-        updatedTransactions.push(newT);
-      }
-    });
-    setTransactions(updatedTransactions);
+  const handleImportTransactions = (newTransactions: Omit<Transaction, 'id'>[]) => {
+    if (!user) return;
+    const coll = collection(firestore, 'users', user.uid, 'transactions');
+    const batch = [];
+    for (const newT of newTransactions) {
+        // Here we just add, assuming imported are new.
+        // A more complex logic could check for duplicates before adding.
+        batch.push(addDoc(coll, newT));
+    }
+    Promise.all(batch);
   };
+
+  const sortedTransactions = transactions ? [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : [];
+
 
   return (
     <div className="flex-col md:flex">
@@ -100,23 +102,23 @@ export default function Dashboard() {
             <TabsTrigger value="transactions">Transaktionen</TabsTrigger>
           </TabsList>
           <TabsContent value="reports" className="space-y-4">
-            <ReportsTab transactions={transactions} />
+            <ReportsTab transactions={sortedTransactions} />
           </TabsContent>
           <TabsContent value="import" className="space-y-4">
-            <ImportTab onImport={handleImportTransactions} transactions={transactions} />
+            <ImportTab onImport={handleImportTransactions} transactions={sortedTransactions} />
           </TabsContent>
           <TabsContent value="categories" className="space-y-4">
             <CategoriesTab />
           </TabsContent>
           <TabsContent value="transactions" className="space-y-4">
             <TransactionsTab 
-              transactions={transactions} 
+              transactions={sortedTransactions} 
               onDelete={handleDeleteTransaction}
               onUpdate={handleAddOrUpdateTransaction}
             />
           </TabsContent>
           <TabsContent value="overview" className="space-y-4">
-            <DashboardTab transactions={transactions} budget={budget} />
+            <DashboardTab transactions={sortedTransactions} budget={budget} />
           </TabsContent>
         </Tabs>
       </div>

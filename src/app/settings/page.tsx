@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { UserNav } from '@/components/user-nav';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -21,10 +20,12 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useTheme } from 'next-themes';
-import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/page-header';
+import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
+import { doc, setDoc } from 'firebase/firestore';
+import { updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 
 const navItems = [
   'Allgemein',
@@ -35,12 +36,27 @@ const navItems = [
   'Erweitert',
 ];
 
+type UserProfile = {
+  name?: string;
+  email?: string;
+  budget?: number;
+}
+
 export default function SettingsPage() {
   const { setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState('Allgemein');
   
-  const [name, setName] = useState('Jane Doe');
-  const [email, setEmail] = useState('jane.doe@beispiel.com');
+  const { user } = useUser();
+  const firestore = useFirestore();
+
+  const userProfileQuery = useMemoFirebase(() =>
+    user ? doc(firestore, 'users', user.uid) : null,
+    [firestore, user]
+  );
+  const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileQuery);
+
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [budget, setBudget] = useState(2000);
@@ -48,24 +64,18 @@ export default function SettingsPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    const storedBudget = localStorage.getItem('monthlyBudget');
-    if (storedBudget) {
-      setBudget(JSON.parse(storedBudget));
+    if (userProfile) {
+      setName(userProfile.name || user?.displayName || '');
+      setEmail(userProfile.email || user?.email || '');
+      setBudget(userProfile.budget || 2000);
     }
-    const storedName = localStorage.getItem('userName');
-    if(storedName) {
-      setName(storedName);
-    }
-    const storedEmail = localStorage.getItem('userEmail');
-    if(storedEmail) {
-      setEmail(storedEmail);
-    }
-  }, []);
+  }, [userProfile, user]);
 
   const handleProfileSave = (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem('userName', name);
-    localStorage.setItem('userEmail', email);
+    if (!user || !userProfileQuery) return;
+    updateProfile(user, { displayName: name });
+    setDoc(userProfileQuery, { name, email }, { merge: true });
     toast({
       title: 'Profil gespeichert',
       description: 'Ihre Daten wurden erfolgreich aktualisiert.',
@@ -74,6 +84,7 @@ export default function SettingsPage() {
 
   const handlePasswordSave = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
     if (password !== confirmPassword) {
       toast({
         variant: 'destructive',
@@ -90,18 +101,28 @@ export default function SettingsPage() {
         });
         return;
     }
-    console.log('Saving new password'); // For security, we don't store passwords in local storage
-    toast({
-      title: 'Passwort geändert',
-      description: 'Ihr Passwort wurde erfolgreich geändert.',
+    
+    updatePassword(user, password).then(() => {
+        toast({
+          title: 'Passwort geändert',
+          description: 'Ihr Passwort wurde erfolgreich geändert.',
+        });
+        setPassword('');
+        setConfirmPassword('');
+    }).catch((error) => {
+        console.error(error);
+        toast({
+            variant: 'destructive',
+            title: 'Fehler beim Ändern des Passworts',
+            description: 'Bitte melden Sie sich erneut an und versuchen Sie es erneut.',
+        })
     });
-    setPassword('');
-    setConfirmPassword('');
   };
 
   const handleBudgetSave = (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem('monthlyBudget', JSON.stringify(budget));
+    if (!user || !userProfileQuery) return;
+    setDoc(userProfileQuery, { budget }, { merge: true });
     toast({
       title: 'Budget gespeichert',
       description: `Ihr monatliches Budget wurde auf ${budget} € festgelegt.`,
@@ -110,6 +131,9 @@ export default function SettingsPage() {
 
 
   const renderContent = () => {
+    if (isProfileLoading) {
+      return <p>Lade...</p>
+    }
     switch(activeTab) {
       case 'Allgemein':
         return (
@@ -134,6 +158,7 @@ export default function SettingsPage() {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      disabled
                     />
                   </div>
                   <Button type="submit">Änderungen speichern</Button>
