@@ -82,6 +82,7 @@ export default function Dashboard() {
       const { id, ...dataToUpdate } = transactionData;
       setDocumentNonBlocking(docRef, { ...dataToUpdate, updatedAt: serverTimestamp() }, { merge: true });
     } else {
+      // For new transactions, ensure all data is correctly prepared.
       const { id, ...dataToAdd } = transactionData;
       addDocumentNonBlocking(coll, { ...dataToAdd, createdAt: serverTimestamp() });
     }
