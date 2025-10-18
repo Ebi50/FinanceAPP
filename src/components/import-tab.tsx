@@ -38,15 +38,14 @@ type HeaderMapping = { [key: string]: string };
 
 interface ImportTabProps {
   transactions: Transaction[];
+  onImport: (transactions: MappedTransaction[]) => void;
   categories: Category[];
 }
 
-export function ImportTab({ transactions, categories }: ImportTabProps) {
+export function ImportTab({ transactions, onImport, categories }: ImportTabProps) {
   const { toast } = useToast();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const { user } = useUser();
-  const firestore = useFirestore();
-
+  
   const categoryIdMap = useMemo(() => {
     return new Map(categories.map((c) => [c.id, c.name]));
   }, [categories]);
@@ -178,7 +177,7 @@ export function ImportTab({ transactions, categories }: ImportTabProps) {
 
 
   const processImport = () => {
-    if (!rawTransactionData || !user || !firestore) return;
+    if (!rawTransactionData) return;
 
     try {
         const newTransactions: MappedTransaction[] = [];
@@ -279,10 +278,7 @@ export function ImportTab({ transactions, categories }: ImportTabProps) {
           throw new Error("Es konnten keine gültigen Transaktionen zum Importieren gefunden werden.");
         }
 
-        const coll = collection(firestore, `users/${user.uid}/transactions`);
-        newTransactions.forEach(trans => {
-            addDocumentNonBlocking(coll, { ...trans, createdAt: serverTimestamp() });
-        })
+        onImport(newTransactions);
 
         toast({
             title: "Import erfolgreich gestartet",
