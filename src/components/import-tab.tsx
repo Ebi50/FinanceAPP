@@ -28,7 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
 import type { Transaction, Category } from "@/lib/types";
 import React, { useState, useMemo } from "react";
-import { format, toDate, isValid } from "date-fns";
+import { format, toDate, isValid, getYear, getMonth, set } from "date-fns";
 
 type MappedTransaction = Omit<Transaction, 'id' | 'createdAt'>;
 type RawRow = (string | number | Date | null)[];
@@ -83,12 +83,15 @@ const categoryNameMap = useMemo(() => {
       return;
     }
     const worksheetData = transactions.map((t) => {
-      const date = toDate(t.date);
+      // This is now safe because we ensured date is a valid object
+      const date = t.date.toDate();
+      const category = categoryIdMap.get(t.categoryId);
+      const isIncome = category?.toLowerCase() === 'einnahmen';
       return {
         Datum: isValid(date) ? format(date, "yyyy-MM-dd") : "Ungültiges Datum",
         Beschreibung: t.description,
-        Kategorie: categoryIdMap.get(t.categoryId) || "Unbekannt",
-        Betrag: t.amount,
+        Kategorie: category || "Unbekannt",
+        Betrag: isIncome ? t.amount : -t.amount,
       }
     });
     const worksheet = XLSX.utils.json_to_sheet(worksheetData);
@@ -186,7 +189,7 @@ const categoryNameMap = useMemo(() => {
 
                                 if (day === null || isNaN(day) || day < 1 || day > 31) continue;
 
-                                const date = new Date(Date.UTC(fileYear, monthIndex, day));
+                                const date = new Date(Date.UTC(fileYear, monthIndex, day, 12, 0, 0));
                                 if (!isValid(date)) continue;
 
                                 const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
@@ -211,7 +214,7 @@ const categoryNameMap = useMemo(() => {
                         if (amountCell) {
                              const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
                              if (!isNaN(amount) && amount > 0) {
-                                const date = new Date(Date.UTC(fileYear, monthIndex, 15));
+                                const date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
                                 if (isValid(date)) {
                                     allTransactions.push({
                                         description: "Rate Haus",
@@ -238,20 +241,24 @@ const categoryNameMap = useMemo(() => {
                 if (einnahmenRowIndex !== -1) {
                     for (let r = einnahmenRowIndex + 1; r < sheetJson.length; r++) {
                         const rowData = sheetJson[r];
+                        if (!rowData) break;
+                        
                         const description = rowData?.[0];
-                        const amountCell = rowData?.[1];
-
+                        
                         if (!description || typeof description !== 'string' || description.toLowerCase().startsWith('summe')) {
                            if (!description || String(description).trim() === '') break;
                            if (typeof description === 'string' && (description.toLowerCase().startsWith('summe'))) break;
                            continue;
                         }
-                        
-                        if (amountCell !== null && String(amountCell).trim() !== '' && Number(amountCell) > 0) {
+
+                        // Check columns C (index 2) and D (index 3) for the amount
+                        const amountCell = rowData?.[1] ?? rowData?.[2];
+
+                        if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '' && Number(amountCell) > 0) {
                              const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
                              if (!isNaN(amount) && amount > 0) {
                                  const finalDescription = description.trim().toLowerCase() === 'sonstige' ? "Sonstige Einnahmen" : description;
-                                 const date = new Date(Date.UTC(fileYear, monthIndex, 15));
+                                 const date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
                                  if (isValid(date)) {
                                      allTransactions.push({
                                          description: finalDescription,
@@ -420,5 +427,3 @@ const categoryNameMap = useMemo(() => {
     </>
   );
 }
-
-    
