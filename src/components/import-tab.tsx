@@ -113,7 +113,7 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
         const dataHeaderRowIndex = json.findIndex(row => 
             Array.isArray(row) && row.some(cell => {
                 const cellStr = String(cell || '').trim().toLowerCase();
-                return cellStr === 'datum' || cellStr === 'betrag';
+                return ['datum', 'beschreibung', 'betrag'].includes(cellStr);
             })
         );
         
@@ -122,26 +122,28 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
         }
         
         const categoryRow = json[dataHeaderRowIndex - 1];
-        const dataHeaderRow = json[dataHeaderRowIndex].map(h => String(h || '').trim().toLowerCase());
-
         const excelHeadersToMap: string[] = [];
+        let lastCategory: string | null = null;
         
-        for (let i = 0; i < dataHeaderRow.length; i++) {
-            const header = dataHeaderRow[i];
+        for (let i = 0; i < categoryRow.length; i++) {
             const categoryName = categoryRow[i];
             
-            if (header === 'datum' && categoryName && typeof categoryName === 'string' && categoryName.trim() !== '') {
-                const cleanHeader = categoryName.trim();
-                if (!excelHeadersToMap.includes(cleanHeader)) {
-                    excelHeadersToMap.push(cleanHeader);
-                }
+            if (categoryName && typeof categoryName === 'string' && categoryName.trim() !== '') {
+                lastCategory = categoryName.trim();
+            }
+
+            if (lastCategory && !excelHeadersToMap.includes(lastCategory)) {
+                 const dataHeaderCell = String(json[dataHeaderRowIndex][i] || '').trim().toLowerCase();
+                 if (dataHeaderCell === 'datum') {
+                    excelHeadersToMap.push(lastCategory);
+                 }
             }
         }
         
         const uniqueHeaders = [...new Set(excelHeadersToMap)];
 
         if (uniqueHeaders.length === 0) {
-          throw new Error("Keine zuzuordnenden Kategorien in der Datei gefunden. Stellen Sie sicher, dass über den Spalten 'Datum' ein Kategoriename steht.");
+          throw new Error("Keine zuzuordnenden Kategorien in der Datei gefunden. Bitte prüfen Sie die Struktur Ihrer Excel-Datei.");
         }
 
         setDetectedHeaders(uniqueHeaders);
@@ -182,7 +184,7 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
         const dataHeaderRowIndex = json.findIndex(row => 
             Array.isArray(row) && row.some(cell => {
                 const cellStr = String(cell || '').trim().toLowerCase();
-                return cellStr === 'datum' || cellStr === 'betrag';
+                return ['datum', 'beschreibung', 'betrag'].includes(cellStr);
             })
         );
         
@@ -192,16 +194,25 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
         const dataHeaderRow = json[dataHeaderRowIndex].map(h => String(h || '').toLowerCase());
         const dataRows = json.slice(dataHeaderRowIndex + 1);
 
+        const filledCategoryRow = categoryRow.reduce((acc, cell, i) => {
+            if (cell && String(cell).trim() !== '') {
+                acc[i] = String(cell).trim();
+            } else if (i > 0 && acc[i-1]) {
+                acc[i] = acc[i-1];
+            } else {
+                acc[i] = null;
+            }
+            return acc;
+        }, [] as (string | null)[]);
+
         for (let col = 0; col < dataHeaderRow.length; col++) {
             const dataHeader = dataHeaderRow[col];
-            const nextDataHeader = dataHeaderRow[col + 2];
-            const rawCategoryHeader = categoryRow[col];
+            const excelCategoryName = filledCategoryRow[col];
 
-            if (rawCategoryHeader && dataHeader === 'datum' && nextDataHeader === 'betrag') {
-                const cleanCategoryHeader = String(rawCategoryHeader).trim();
-                const categoryId = headerMapping[cleanCategoryHeader];
+            if (excelCategoryName && dataHeader === 'datum') {
+                const appCategoryId = headerMapping[excelCategoryName];
                 
-                if (categoryId) {
+                if (appCategoryId) {
                     let lastValidDate: Date | null = null;
                     for (const row of dataRows) {
                         if ((!row[col] && !row[col + 1] && !row[col + 2])) continue;
@@ -233,10 +244,10 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
                                 const amount = typeof amountValue === 'number' ? amountValue : parseFloat(String(amountValue).replace('.', '').replace(',', '.'));
                                 if (!isNaN(amount) && amount > 0) {
                                     newTransactions.push({
-                                        description: String(descriptionValue || cleanCategoryHeader),
+                                        description: String(descriptionValue || excelCategoryName),
                                         amount: amount,
                                         date,
-                                        categoryId,
+                                        categoryId: appCategoryId,
                                     });
                                 }
                             }
