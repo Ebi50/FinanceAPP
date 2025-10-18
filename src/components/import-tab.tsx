@@ -28,7 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
 import type { Transaction, Category } from "@/lib/types";
 import React, { useState, useMemo } from "react";
-import { format, isValid, getYear } from "date-fns";
+import { format, isValid } from "date-fns";
 
 type MappedTransaction = Omit<Transaction, 'id' | 'createdAt'>;
 type RawRow = (string | number | Date | null)[];
@@ -129,80 +129,93 @@ const categoryNameMap = useMemo(() => {
                 const rawJson = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as RawRow[];
                 
                 if (rawJson.length < 1) return;
+                
+                const incomeCategoryId = categoryNameMap.get('einnahmen');
 
-                const processTransactionRow = (rowData: RawRow, categoryName: string, dateCol: number, amountCols: number[]) => {
-                    const dateCell = rowData[dateCol];
-                    let description = '';
-                    let date: Date | null = null;
-                
-                    if (typeof dateCell === 'string' && dateCell.match(/^\d{1,2}\.\s[A-Za-z]{3}/)) {
-                        const dayMatch = dateCell.match(/^(\d{1,2})/);
-                        if (dayMatch) {
-                            const day = parseInt(dayMatch[1], 10);
-                            date = new Date(Date.UTC(fileYear, monthIndex, day, 12, 0, 0));
-                        }
-                        description = categoryName;
-                    } else if (dateCell instanceof Date && isValid(dateCell)) {
-                        date = new Date(Date.UTC(fileYear, monthIndex, dateCell.getUTCDate(), 12, 0, 0));
-                        description = categoryName;
-                    } else if (typeof dateCell === 'string' && dateCell.trim() !== '') {
-                        description = dateCell.trim();
-                        date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
-                    }
-                
-                    if (date && isValid(date)) {
-                        for (const colIndex of amountCols) {
-                            const amountCell = rowData[colIndex];
+                // Phase 1: Process horizontal blocks (upper part of the sheet)
+                const headerRow = rawJson[0] || [];
+                for (let col = 0; col < 11; col += 2) { // Spalte A bis K
+                    const categoryNameCell = headerRow[col];
+                    if (typeof categoryNameCell === 'string' && categoryNameCell.trim()) {
+                        const categoryName = categoryNameCell.trim();
+                        allDetectedCategories.add(categoryName);
+                        
+                        let currentRow = 2; // Start from the third row
+                        while (currentRow < 29 && currentRow < rawJson.length) {
+                            const rowData = rawJson[currentRow];
+                            if (!rowData || !rowData.some(c => c !== null && String(c).trim() !== '') || (typeof rowData[col] === 'string' && String(rowData[col]).toLowerCase().includes('summe'))) {
+                                break;
+                            }
+
+                            const dateOrDescCell = rowData[col];
+                            const amountCell = rowData[col + 1];
+
                             if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '') {
+                                let date: Date | null = null;
+                                let description: string = '';
+
+                                if (dateOrDescCell instanceof Date && isValid(dateOrDescCell)) {
+                                    date = new Date(Date.UTC(fileYear, monthIndex, dateOrDescCell.getUTCDate(), 12, 0, 0));
+                                    description = categoryName;
+                                } else if (typeof dateOrDescCell === 'string') {
+                                    const dayMatch = dateOrDescCell.match(/^(\d{1,2})/);
+                                    if (dayMatch) {
+                                       const day = parseInt(dayMatch[1], 10);
+                                       date = new Date(Date.UTC(fileYear, monthIndex, day, 12, 0, 0));
+                                       description = categoryName;
+                                    } else {
+                                        description = dateOrDescCell.trim();
+                                        date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                                    }
+                                } else {
+                                     description = categoryName;
+                                     date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                                }
+                                
                                 const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
-                                if (!isNaN(amount) && amount !== 0) {
-                                    if (amount < 0) {
+                                if (date && isValid(date) && !isNaN(amount) && amount !== 0) {
+                                    if (amount < 0 && incomeCategoryId) {
                                         allTransactions.push({
                                             description: `${description} Erstattung`,
                                             amount: Math.abs(amount),
                                             date,
-                                            categoryId: 'Einnahmen' 
+                                            categoryId: "Einnahmen"
                                         });
                                         allDetectedCategories.add('Einnahmen');
                                     } else {
                                         allTransactions.push({
                                             description,
-                                            amount,
+                                            amount: Math.abs(amount),
                                             date,
                                             categoryId: categoryName
                                         });
                                     }
                                 }
                             }
-                        }
-                    }
-                };
-
-                // Phase 1: Process horizontal blocks (upper part of the sheet)
-                for (let startCol = 0; startCol < 10; startCol += 2) {
-                    const categoryNameCell = rawJson[0]?.[startCol];
-                    if (typeof categoryNameCell === 'string' && categoryNameCell.trim()) {
-                        const categoryName = categoryNameCell.trim();
-                        allDetectedCategories.add(categoryName);
-                        
-                        let currentRow = 2;
-                        while (currentRow < 29) { // Limit to upper section
-                            const rowData = rawJson[currentRow];
-                            if (!rowData || !rowData.some(c => c !== null && String(c).trim() !== '') || (typeof rowData[startCol] === 'string' && String(rowData[startCol]).toLowerCase().includes('summe'))) {
-                                break;
+                             // Special KV Case
+                            if (categoryName.toLowerCase() === 'kv' && rowData[col + 2] !== null) {
+                                const timoAmountCell = rowData[col+2];
+                                const timoAmount = typeof timoAmountCell === 'number' ? timoAmountCell : parseFloat(String(timoAmountCell).replace('.', '').replace(',', '.'));
+                                if (date && isValid(date) && !isNaN(timoAmount) && timoAmount !== 0) {
+                                     allTransactions.push({
+                                        description: `${description} (Timo)`,
+                                        amount: Math.abs(timoAmount),
+                                        date,
+                                        categoryId: categoryName
+                                    });
+                                }
                             }
 
-                            const amountCols = categoryName.toLowerCase() === 'auto' ? [startCol + 1] : (categoryName.toLowerCase() === 'kv' ? [startCol + 1, startCol + 2] : [startCol + 1]);
-                            processTransactionRow(rowData, categoryName, startCol, amountCols);
+
                             currentRow++;
                         }
                     }
                 }
 
-                // Phase 2: Process vertical blocks (middle part of the sheet)
+                // Phase 2: Process vertical blocks (lower part)
                 for (let startRow = 29; startRow < rawJson.length; startRow++) {
-                    const categoryNameCell = rawJson[startRow]?.[0];
-                    if (typeof categoryNameCell === 'string' && categoryNameCell.trim() && !categoryNameCell.toLowerCase().includes('summe') && !categoryNameCell.toLowerCase().includes('einnahmen')) {
+                    const categoryNameCell = rawJson[startRow]?.[0]; // Usually in Column A for vertical
+                     if (typeof categoryNameCell === 'string' && categoryNameCell.trim() && !categoryNameCell.toLowerCase().includes('summe') && !categoryNameCell.toLowerCase().includes('einnahmen')) {
                        const categoryName = categoryNameCell.trim();
                        allDetectedCategories.add(categoryName);
 
@@ -210,11 +223,26 @@ const categoryNameMap = useMemo(() => {
                        while(currentRow < rawJson.length) {
                          const rowData = rawJson[currentRow];
                          if (!rowData || !rowData.some(c => c !== null && String(c).trim() !== '') || (typeof rowData[0] === 'string' && String(rowData[0]).toLowerCase().includes('summe'))) {
-                            startRow = currentRow; // Skip processed rows in outer loop
+                            startRow = currentRow; 
                             break;
                          }
-                         const amountCols = [1]; // Amount is always in the second column for vertical blocks
-                         processTransactionRow(rowData, categoryName, 0, amountCols);
+                         const dateOrDescCell = rowData[0];
+                         const amountCell = rowData[1];
+                         
+                         let date: Date | null = null;
+                         let description: string = '';
+
+                         if (typeof dateOrDescCell === 'string' && dateOrDescCell.trim()) {
+                             description = dateOrDescCell.trim();
+                         }
+                         date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+
+                         if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '') {
+                            const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
+                            if(date && isValid(date) && !isNaN(amount) && amount !== 0) {
+                                allTransactions.push({ description, amount, date, categoryId: categoryName });
+                            }
+                         }
                          currentRow++;
                        }
                     }
@@ -290,9 +318,14 @@ const categoryNameMap = useMemo(() => {
     try {
       const transactionsWithMappedCategory = allParsedTransactions
         .map(t => {
+          // t.categoryId holds the original category name from Excel (the "Quell-Kategorie")
           const excelCategoryName = t.categoryId; 
           const mappedAppCategoryId = headerMapping[excelCategoryName];
+          
+          // Only include transaction if a mapping was made
           if (!mappedAppCategoryId) return null;
+
+          // Create a new transaction object with the mapped category ID
           return { ...t, categoryId: mappedAppCategoryId };
         })
         .filter((t): t is MappedTransaction => t !== null);
