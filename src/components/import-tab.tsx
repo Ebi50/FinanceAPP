@@ -314,22 +314,23 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
                     Bitte ordnen Sie die gefundenen Kategorien aus Ihrer Excel-Datei den App-Kategorien zu.
                 </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4 max-h-96 overflow-y-auto pr-2">
+            <div className="space-y-4 py-4 max-h-96 overflow-y-auto pr-2">
                 {detectedHeaders.map(header => (
-                    <div key={header} className="grid grid-cols-2 items-center gap-4">
-                        <Label htmlFor={`mapping-${header}`} className="text-left font-semibold">{header}</Label>
+                    <div key={header} className="grid grid-cols-[1fr_auto] items-center gap-4">
+                        <Label htmlFor={`mapping-${header}`} className="text-left font-semibold truncate">
+                          {header}
+                        </Label>
                         <Select
                             value={headerMapping[header] || ''}
                             onValueChange={(value) => handleMappingChange(header, value)}
                         >
-                            <SelectTrigger id={`mapping-${header}`}>
+                            <SelectTrigger id={`mapping-${header}`} className="w-[180px]">
                                 <SelectValue placeholder="Kategorie auswählen" />
                             </SelectTrigger>
                             <SelectContent>
                                 {categories?.map(cat => (
                                     <SelectItem key={cat.id} value={cat.id}>
                                         <div className="flex items-center gap-2">
-                                            {/* Icon logic removed */}
                                             {cat.name}
                                         </div>
                                     </SelectItem>
