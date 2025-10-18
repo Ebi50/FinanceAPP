@@ -17,8 +17,8 @@ import { ReportsTab } from "@/components/reports-tab";
 import { ImportTab } from "@/components/import-tab";
 import { AddTransactionSheet } from "@/components/add-transaction-sheet";
 import type { Transaction } from '@/lib/types';
-import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
-import { collection, addDoc, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc, addDocumentNonBlocking, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { collection, doc, serverTimestamp } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
@@ -54,7 +54,6 @@ export default function Dashboard() {
     
     const transactionData = {
         ...transaction,
-        // @ts-ignore
         createdAt: serverTimestamp(),
     };
     delete (transactionData as any).id;
@@ -62,31 +61,29 @@ export default function Dashboard() {
 
     if (transaction.id) {
       const docRef = doc(coll, transaction.id);
-      setDoc(docRef, transactionData, { merge: true });
+      setDocumentNonBlocking(docRef, transactionData, { merge: true });
     } else {
-      addDoc(coll, transactionData);
+      addDocumentNonBlocking(coll, transactionData);
     }
   };
 
   const handleDeleteTransaction = (id: string) => {
     if (!user) return;
     const docRef = doc(firestore, 'users', user.uid, 'transactions', id);
-    deleteDoc(docRef);
+    deleteDocumentNonBlocking(docRef);
   };
   
   const handleImportTransactions = (newTransactions: (Omit<Transaction, 'id' | 'date'> & { date: Date })[]) => {
     if (!user) return;
     const coll = collection(firestore, 'users', user.uid, 'transactions');
-    const batch = [];
     for (const newT of newTransactions) {
-        batch.push(addDoc(coll, newT));
+      addDocumentNonBlocking(coll, newT);
     }
-    Promise.all(batch);
   };
 
   const sortedTransactions = transactions ? [...transactions].sort((a, b) => {
-    const dateA = a.date instanceof Date ? a.date.getTime() : a.date.toMillis();
-    const dateB = b.date instanceof Date ? b.date.getTime() : b.date.toMillis();
+    const dateA = a.date instanceof Date ? a.date.getTime() : (a.date as any).toMillis();
+    const dateB = b.date instanceof Date ? b.date.getTime() : (b.date as any).toMillis();
     return dateB - dateA;
   }) : [];
 

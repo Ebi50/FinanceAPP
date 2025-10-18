@@ -6,6 +6,7 @@ import type { Transaction } from "@/lib/types";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection } from 'firebase/firestore';
 import type { Category } from "@/lib/types";
+import { useMemo } from "react";
 
 
 interface DashboardTabProps {
@@ -19,7 +20,7 @@ export function DashboardTab({ transactions, budget }: DashboardTabProps) {
   const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null, [firestore, user]);
   const { data: categories } = useCollection<Category>(categoriesQuery);
   
-  const incomeCategory = categories?.find(c => c.name.toLowerCase() === 'einnahmen');
+  const incomeCategory = useMemo(() => categories?.find(c => c.name.toLowerCase() === 'einnahmen'), [categories]);
   
   const totalExpenses = transactions
     .filter(t => t.categoryId !== incomeCategory?.id)
