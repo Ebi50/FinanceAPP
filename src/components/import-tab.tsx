@@ -106,49 +106,55 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                 const monthIndex = monthMap[monthStr];
 
                 if (monthIndex === undefined) {
-                    return; // Skip sheets that are not months
+                    console.log(`Skipping sheet: ${sheetName}`);
+                    return; 
                 }
 
                 const worksheet = workbook.Sheets[sheetName];
                 const sheetJson = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as RawRow[];
 
-                if (sheetJson.length < 2) return;
+                if (sheetJson.length < 2) {
+                   console.log(`Sheet ${sheetName} is too small, skipping.`);
+                   return;
+                };
 
-                let categoryRow: RawRow | null = null;
-                let dataHeaderRow: RawRow | null = null;
                 let categoryRowIndex = -1;
                 let dataHeaderRowIndex = -1;
+                let categoryRow: RawRow | null = null;
+                let dataHeaderRow: RawRow | null = null;
 
-                // Find category and data header rows
-                for(let i = 0; i < sheetJson.length; i++) {
+                for (let i = 0; i < sheetJson.length; i++) {
                     const row = sheetJson[i];
-                    if(Array.isArray(row) && row.some(cell => typeof cell === 'string' && cell.toLowerCase().includes('garten 6'))) {
-                        categoryRow = row;
+                    if (Array.isArray(row) && row.some(cell => typeof cell === 'string' && (cell.toLowerCase().includes('garten 6') || cell.toLowerCase().includes('lebensmittel 1')))) {
                         categoryRowIndex = i;
-                        if (sheetJson[i+1] && sheetJson[i+1].some(cell => typeof cell === 'string' && cell.toLowerCase() === 'datum')) {
-                            dataHeaderRow = sheetJson[i+1];
+                        categoryRow = row;
+                        if (sheetJson[i + 1] && sheetJson[i+1].some(cell => typeof cell === 'string' && cell.toLowerCase() === 'datum')) {
                             dataHeaderRowIndex = i + 1;
+                            dataHeaderRow = sheetJson[i+1];
+                            break;
                         }
-                        break;
                     }
                 }
                 
-                if (!categoryRow || !dataHeaderRow || dataHeaderRowIndex === -1) return;
+                if (!categoryRow || !dataHeaderRow || dataHeaderRowIndex === -1) {
+                  console.log(`Could not find header rows in sheet: ${sheetName}`);
+                  return;
+                }
 
-                // Process categories with fill-forward
                 const filledCategories: (string | null)[] = [];
                 let lastCategory: string | null = null;
                 for(const cell of categoryRow) {
                     const cellStr = cell ? String(cell).trim() : null;
-                    if(cellStr) {
-                      lastCategory = cellStr.replace(/\s\d+$/, '').trim();
-                      allDetectedCategories.add(lastCategory);
+                    if(cellStr && isNaN(parseInt(cellStr.slice(-1)))) {
+                        lastCategory = cellStr.trim();
+                    } else if (cellStr) {
+                         lastCategory = cellStr.replace(/\s\d+$/, '').trim();
                     }
+                    if(lastCategory) allDetectedCategories.add(lastCategory);
                     filledCategories.push(lastCategory);
                 }
                 
-                // Find column indices for Datum and Betrag
-                const dataColIndices: { [key: string]: { category: string | null, date: number, amount: number, desc: number } } = {};
+                const dataColIndices: { [key: number]: { category: string | null, date: number, amount: number, desc: number } } = {};
                 for(let c = 0; c < dataHeaderRow.length; c++) {
                     const header = String(dataHeaderRow[c]).toLowerCase();
                     if(header === 'datum' && filledCategories[c]) {
@@ -157,15 +163,14 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                             category: categoryName,
                             date: c,
                             amount: c + 1,
-                            desc: c // Assuming description is same as date cell if no dedicated description column
+                            desc: c 
                         };
                     }
                 }
 
-                // Read data rows
                 for(let r = dataHeaderRowIndex + 1; r < sheetJson.length; r++) {
                     const rowData = sheetJson[r];
-                    if(!rowData || String(rowData[0]).toLowerCase().startsWith('summe')) break;
+                    if(!rowData || !rowData.some(c => c !== null) || String(rowData[0]).toLowerCase().startsWith('summe')) break;
 
                     Object.values(dataColIndices).forEach(indices => {
                         const dateCell = rowData[indices.date];
@@ -174,7 +179,10 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                         if (amountCell === null || String(amountCell).trim() === '') return;
                         
                         let date: Date | null = null;
-                        if(dateCell) {
+                        if(dateCell instanceof Date) {
+                           date = dateCell;
+                           date.setFullYear(fileYear);
+                        } else if (dateCell) {
                            const dayMatch = String(dateCell).match(/(\d{1,2})\./);
                            if(dayMatch) {
                                const day = parseInt(dayMatch[1], 10);
@@ -187,7 +195,7 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                         const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
                         const description = rowData[indices.desc] && String(rowData[indices.date]).toLowerCase() !== 'datum' ? String(rowData[indices.desc]) : indices.category;
                         
-                        if(!isNaN(amount) && amount !== 0) {
+                        if(!isNaN(amount) && amount > 0) {
                             allTransactions.push({
                                 description: description || "Unbekannte Transaktion",
                                 amount: Math.abs(amount),
@@ -218,7 +226,6 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
             setHeaderMapping(initialMapping);
             setAllParsedTransactions(allTransactions);
             setIsMappingDialogOpen(true);
-
 
         } catch (error: any) {
             console.error("Fehler beim Verarbeiten der Datei:", error);
