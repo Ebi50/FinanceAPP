@@ -122,18 +122,19 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
         }
         
         const categoryRow = json[dataHeaderRowIndex - 1];
-        const dataHeaderRow = json[dataHeaderRowIndex].map(h => String(h || '').toLowerCase());
-        
+        const dataHeaderRow = json[dataHeaderRowIndex].map(h => String(h || '').trim().toLowerCase());
+
         const excelHeadersToMap: string[] = [];
         
         for (let i = 0; i < dataHeaderRow.length; i++) {
             const header = dataHeaderRow[i];
             const categoryName = categoryRow[i];
             
-            // A column is a category column if it is "Datum" and the cell above it is not empty
             if (header === 'datum' && categoryName && typeof categoryName === 'string' && categoryName.trim() !== '') {
                 const cleanHeader = categoryName.trim();
-                excelHeadersToMap.push(cleanHeader);
+                if (!excelHeadersToMap.includes(cleanHeader)) {
+                    excelHeadersToMap.push(cleanHeader);
+                }
             }
         }
         
@@ -146,7 +147,6 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
         setDetectedHeaders(uniqueHeaders);
         const initialMapping: HeaderMapping = {};
         uniqueHeaders.forEach(header => {
-            // Try to find a direct match or a partial match (e.g. 'Lebensmittel 1' -> 'Lebensmittel')
             const simplifiedHeader = header.toLowerCase().replace(/\s*\d+\s*$/, '').trim();
             const foundCatId = appCategoryMap.get(header.toLowerCase()) || appCategoryMap.get(simplifiedHeader);
             if (foundCatId) {
@@ -204,7 +204,6 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
                 if (categoryId) {
                     let lastValidDate: Date | null = null;
                     for (const row of dataRows) {
-                        // Stop if the row is empty or a sum row for this category block
                         if ((!row[col] && !row[col + 1] && !row[col + 2])) continue;
                         if (String(row[col] || '').toLowerCase().includes('summe') || String(row[col + 2] || '').toLowerCase().includes('summe')) break;
 
@@ -214,7 +213,6 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
                         
                         if (amountValue && (typeof amountValue === 'number' || String(amountValue).trim() !== '')) {
                             let date: Date | null = null;
-                            // Handle Excel date serial numbers or string dates
                             if (dateValue instanceof Date) {
                                 date = dateValue;
                                 lastValidDate = date;
@@ -224,10 +222,10 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
                                     date = new Date(currentYear, parts[1] - 1, parts[0]);
                                     lastValidDate = date;
                                 }
-                            } else if (typeof dateValue === 'number') { // Excel serial date
+                            } else if (typeof dateValue === 'number') { 
                                 date = XLSX.SSF.parse_date_code(dateValue);
                                 lastValidDate = date;
-                            } else if (lastValidDate) { // If date is missing, use the last valid one
+                            } else if (lastValidDate) { 
                                 date = lastValidDate;
                             }
 
