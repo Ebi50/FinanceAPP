@@ -41,7 +41,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useMemoFirebase } from '@/firebase/provider';
-import { toDate, getMonth, getYear } from 'date-fns';
+import { toDate, getMonth, getYear, isValid } from 'date-fns';
 import { de } from 'date-fns/locale';
 
 
@@ -166,27 +166,38 @@ export default function Dashboard() {
   };
   
   const { filteredTransactions, availableYears } = useMemo(() => {
-    if (!allTransactions) return { filteredTransactions: [], availableYears: [new Date().getFullYear()] };
+    const currentDefaultYear = new Date().getFullYear();
+    if (!allTransactions) return { filteredTransactions: [], availableYears: [currentDefaultYear] };
 
     const years = new Set<number>();
     allTransactions.forEach(t => {
+      if (t.date) { // Check if date exists
         const date = toDate(t.date as any);
-        years.add(getYear(date));
+        if (isValid(date)) { // Check if date is valid
+            years.add(getYear(date));
+        }
+      }
     });
+
     const sortedYears = Array.from(years).sort((a, b) => b - a);
 
     const filtered = allTransactions.filter(t => {
+      if (!t.date) return false;
       const date = toDate(t.date as any);
+      if (!isValid(date)) return false;
       return getMonth(date) === currentMonth && getYear(date) === currentYear;
     });
 
     const sorted = filtered.sort((a, b) => {
         const dateA = toDate(a.date as any);
         const dateB = toDate(b.date as any);
+        if (!isValid(dateA) || !isValid(dateB)) return 0;
         return dateB.getTime() - dateA.getTime();
     });
+    
+    const finalYears = sortedYears.length > 0 ? sortedYears : [currentDefaultYear];
 
-    return { filteredTransactions: sorted, availableYears: sortedYears.length > 0 ? sortedYears : [new Date().getFullYear()] };
+    return { filteredTransactions: sorted, availableYears: finalYears };
   }, [allTransactions, currentMonth, currentYear]);
 
   useEffect(() => {
