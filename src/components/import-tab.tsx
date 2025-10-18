@@ -30,7 +30,7 @@ import type { Transaction, Category } from "@/lib/types";
 import React, { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { useUser, useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from '@/firebase';
-import { collection } from 'firebase/firestore';
+import { collection, serverTimestamp } from 'firebase/firestore';
 
 interface ImportTabProps {
   transactions: Transaction[];
@@ -95,7 +95,7 @@ export function ImportTab({ transactions }: ImportTabProps) {
         setCurrentYear(year);
 
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array', cellDates: true, bookVBA: true });
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         const json = XLSX.utils.sheet_to_json(worksheet, {
@@ -103,40 +103,48 @@ export function ImportTab({ transactions }: ImportTabProps) {
           defval: null
         }) as RawTransactionData;
         
-        if (!json || json.length === 0) {
-            throw new Error("Die Excel-Datei ist leer oder konnte nicht gelesen werden.");
+        if (!json || json.length < 2) {
+            throw new Error("Die Excel-Datei ist zu klein oder konnte nicht gelesen werden.");
         }
 
-        setRawTransactionData(json);
-        
-        const dataHeaderRowIndex = json.findIndex(row => 
-            Array.isArray(row) && row.some(cell => {
-                const cellStr = String(cell || '').trim().toLowerCase();
-                return ['datum', 'beschreibung', 'betrag'].includes(cellStr);
-            })
-        );
+        let dataHeaderRowIndex = -1;
+        for (let i = 0; i < json.length; i++) {
+          const row = json[i];
+          if (Array.isArray(row)) {
+            const lowerCaseRow = row.map(cell => String(cell || '').toLowerCase());
+            if (lowerCaseRow.includes('datum') && lowerCaseRow.includes('betrag')) {
+              dataHeaderRowIndex = i;
+              break;
+            }
+          }
+        }
         
         if (dataHeaderRowIndex === -1 || dataHeaderRowIndex === 0) {
             throw new Error("Es konnte keine gültige Kopfzeile mit 'Datum' und 'Betrag' gefunden werden. Stellen Sie sicher, dass eine Zeile darüber für die Kategorien existiert.");
         }
-        
+
         const categoryRow = json[dataHeaderRowIndex - 1];
-        const excelHeadersToMap: string[] = [];
-        
-        for (let i = 0; i < categoryRow.length; i++) {
-            const categoryName = categoryRow[i];
-            if (categoryName && typeof categoryName === 'string' && categoryName.trim() !== '') {
-                 excelHeadersToMap.push(categoryName.trim());
+        const headersToMap: string[] = [];
+        let lastCategory: string | null = null;
+        for(const cell of categoryRow) {
+            const categoryName = cell ? String(cell).trim() : null;
+            if(categoryName) {
+                lastCategory = categoryName;
+                if (!headersToMap.includes(lastCategory)) {
+                    headersToMap.push(lastCategory);
+                }
             }
         }
         
-        const uniqueHeaders = [...new Set(excelHeadersToMap)];
+        const uniqueHeaders = [...new Set(headersToMap)];
 
         if (uniqueHeaders.length === 0) {
           throw new Error("Keine zuzuordnenden Kategorien in der Datei gefunden. Bitte prüfen Sie die Struktur Ihrer Excel-Datei.");
         }
 
+        setRawTransactionData(json);
         setDetectedHeaders(uniqueHeaders);
+
         const initialMapping: HeaderMapping = {};
         uniqueHeaders.forEach(header => {
             const simplifiedHeader = header.toLowerCase().replace(/\s*\d+\s*$/, '').trim();
@@ -168,80 +176,87 @@ export function ImportTab({ transactions }: ImportTabProps) {
     if (!rawTransactionData || !user) return;
     
     try {
-        const newTransactions: Omit<Transaction, 'id'>[] = [];
+        const newTransactions: Omit<Transaction, 'id' | 'createdAt'>[] = [];
         const json = rawTransactionData;
 
-        const dataHeaderRowIndex = json.findIndex(row => 
-            Array.isArray(row) && row.some(cell => {
-                const cellStr = String(cell || '').trim().toLowerCase();
-                return ['datum', 'beschreibung', 'betrag'].includes(cellStr);
-            })
-        );
+        let dataHeaderRowIndex = -1;
+        for (let i = 0; i < json.length; i++) {
+          const row = json[i];
+          if (Array.isArray(row)) {
+            const lowerCaseRow = row.map(cell => String(cell || '').toLowerCase());
+            if (lowerCaseRow.includes('datum') && lowerCaseRow.includes('betrag')) {
+              dataHeaderRowIndex = i;
+              break;
+            }
+          }
+        }
         
         if (dataHeaderRowIndex === -1) throw new Error("Konnte die Daten-Kopfzeile nicht erneut finden.");
 
         const categoryRow = json[dataHeaderRowIndex - 1];
         const dataHeaderRow = json[dataHeaderRowIndex].map(h => String(h || '').toLowerCase());
         const dataRows = json.slice(dataHeaderRowIndex + 1);
-        
-        const filledCategoryRow = categoryRow.reduce((acc, cell, i) => {
-            if (cell && String(cell).trim() !== '') {
-                acc[i] = String(cell).trim();
-            } else if (i > 0 && acc[i-1]) {
-                acc[i] = acc[i-1];
-            } else {
-                acc[i] = null;
+
+        const filledCategoryRow: (string | null)[] = [];
+        let currentCategory: string | null = null;
+        for (const cell of categoryRow) {
+            const value = cell ? String(cell).trim() : null;
+            if (value) {
+                currentCategory = value;
             }
-            return acc;
-        }, [] as (string | null)[]);
+            filledCategoryRow.push(currentCategory);
+        }
 
-
-        for (let col = 0; col < dataHeaderRow.length; col++) {
-            const dataHeader = dataHeaderRow[col];
+        const dateColIndices: number[] = [];
+        dataHeaderRow.forEach((header, index) => {
+            if (header === 'datum') {
+                dateColIndices.push(index);
+            }
+        });
+        
+        for (const col of dateColIndices) {
             const excelCategoryName = filledCategoryRow[col];
-            
-            if (excelCategoryName && dataHeader === 'datum') {
-                const appCategoryId = headerMapping[excelCategoryName];
+            if (!excelCategoryName) continue;
+
+            const appCategoryId = headerMapping[excelCategoryName];
+            if (!appCategoryId) continue;
+
+            let lastValidDate: Date | null = null;
+            for (const row of dataRows) {
+                if ((!row[col] && !row[col + 1] && !row[col + 2])) continue;
+                if (String(row[col] || '').toLowerCase().includes('summe') || String(row[col + 2] || '').toLowerCase().includes('summe')) break;
+
+                const dateValue = row[col];
+                const descriptionValue = row[col+1];
+                const amountValue = row[col + 2]; 
                 
-                if (appCategoryId) {
-                    let lastValidDate: Date | null = null;
-                    for (const row of dataRows) {
-                        if ((!row[col] && !row[col + 1] && !row[col + 2])) continue;
-                        if (String(row[col] || '').toLowerCase().includes('summe') || String(row[col + 2] || '').toLowerCase().includes('summe')) break;
+                if (amountValue && (typeof amountValue === 'number' || String(amountValue).trim() !== '')) {
+                    let date: Date | null = null;
+                    if (dateValue instanceof Date) {
+                        date = dateValue;
+                        lastValidDate = date;
+                    } else if (typeof dateValue === 'string' && dateValue.includes('.')) {
+                        const parts = dateValue.split('.').map(p => parseInt(p.trim(), 10));
+                        if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                            date = new Date(currentYear, parts[1] - 1, parts[0]);
+                            lastValidDate = date;
+                        }
+                    } else if (typeof dateValue === 'number') { 
+                        date = XLSX.SSF.parse_date_code(dateValue);
+                        lastValidDate = date;
+                    } else if (lastValidDate) { 
+                        date = lastValidDate;
+                    }
 
-                        const dateValue = row[col];
-                        const descriptionValue = row[col+1];
-                        const amountValue = row[col + 2]; 
-                        
-                        if (amountValue && (typeof amountValue === 'number' || String(amountValue).trim() !== '')) {
-                            let date: Date | null = null;
-                            if (dateValue instanceof Date) {
-                                date = dateValue;
-                                lastValidDate = date;
-                            } else if (typeof dateValue === 'string' && dateValue.includes('.')) {
-                                const parts = dateValue.split('.').map(p => parseInt(p.trim(), 10));
-                                if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-                                    date = new Date(currentYear, parts[1] - 1, parts[0]);
-                                    lastValidDate = date;
-                                }
-                            } else if (typeof dateValue === 'number') { 
-                                date = XLSX.SSF.parse_date_code(dateValue);
-                                lastValidDate = date;
-                            } else if (lastValidDate) { 
-                                date = lastValidDate;
-                            }
-
-                            if (date) {
-                                const amount = typeof amountValue === 'number' ? amountValue : parseFloat(String(amountValue).replace('.', '').replace(',', '.'));
-                                if (!isNaN(amount) && amount > 0) {
-                                    newTransactions.push({
-                                        description: String(descriptionValue || excelCategoryName),
-                                        amount: amount,
-                                        date,
-                                        categoryId: appCategoryId,
-                                    });
-                                }
-                            }
+                    if (date) {
+                        const amount = typeof amountValue === 'number' ? amountValue : parseFloat(String(amountValue).replace('.', '').replace(',', '.'));
+                        if (!isNaN(amount) && amount > 0) {
+                            newTransactions.push({
+                                description: String(descriptionValue || excelCategoryName),
+                                amount: amount,
+                                date,
+                                categoryId: appCategoryId,
+                            });
                         }
                     }
                 }
@@ -259,7 +274,7 @@ export function ImportTab({ transactions }: ImportTabProps) {
 
         const coll = collection(firestore, 'users', user.uid, 'transactions');
         for (const newT of newTransactions) {
-            addDocumentNonBlocking(coll, newT);
+            addDocumentNonBlocking(coll, {...newT, createdAt: serverTimestamp()});
         }
 
         toast({
@@ -334,7 +349,7 @@ export function ImportTab({ transactions }: ImportTabProps) {
             </DialogHeader>
             <div className="space-y-4 py-4 max-h-96 overflow-y-auto pr-2">
                 {detectedHeaders.map(header => (
-                    <div key={header} className="grid grid-cols-[1fr_1fr] items-center gap-4">
+                    <div key={header} className="grid grid-cols-[1fr_auto] items-center gap-4">
                         <Label htmlFor={`mapping-${header}`} className="text-left font-semibold truncate">
                           {header}
                         </Label>
@@ -342,7 +357,7 @@ export function ImportTab({ transactions }: ImportTabProps) {
                             value={headerMapping[header] || ''}
                             onValueChange={(value) => handleMappingChange(header, value)}
                         >
-                            <SelectTrigger id={`mapping-${header}`} className="w-full">
+                            <SelectTrigger id={`mapping-${header}`} className="w-full min-w-[200px]">
                                 <SelectValue placeholder="Kategorie auswählen" />
                             </SelectTrigger>
                             <SelectContent>
