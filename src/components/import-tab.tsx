@@ -128,97 +128,97 @@ const categoryNameMap = useMemo(() => {
 
                 const rawJson = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as RawRow[];
                 
-                if (rawJson.length < 2) return;
-                
-                const upperPart = rawJson.slice(0, 28).map(row => row.slice(0, 10)); // Use only columns A-J
+                if (rawJson.length < 1) return;
 
-                for (let r = 0; r < upperPart.length; r++) {
-                  const firstCell = upperPart[r] ? upperPart[r][0] : null;
-              
-                  // Detect category header: text in first cell, not "Summe" or "Einnahmen"
-                  if (typeof firstCell === 'string' && firstCell.trim().length > 0 && !firstCell.toLowerCase().includes('summe') && !firstCell.toLowerCase().includes('einnahmen')) {
-                      const categoryName = firstCell.trim();
-                      allDetectedCategories.add(categoryName);
-              
-                      // Process transactions for this category
-                      let transactionRowIndex = r + 2;
-                      while(transactionRowIndex < upperPart.length) {
-                          const transactionRowData = upperPart[transactionRowIndex];
-                          // Stop if row is empty or starts with "Summe"
-                          if (!transactionRowData || !transactionRowData.some(c => c !== null && String(c).trim() !== '') || (typeof transactionRowData[0] === 'string' && transactionRowData[0].toLowerCase().includes('summe'))) {
-                              break; 
-                          }
-              
-                          const dateCell = transactionRowData[0];
-                          let description = '';
-                          let date: Date | null = null;
-                          
-                          // Check for date format like "01. Dez" or a JS Date object
-                          if (typeof dateCell === 'string' && dateCell.match(/^\d{1,2}\.\s[A-Za-z]{3}/)) {
-                              const dayMatch = dateCell.match(/^(\d{1,2})/);
-                              if (dayMatch) {
-                                  const day = parseInt(dayMatch[1], 10);
-                                  date = new Date(Date.UTC(fileYear, monthIndex, day, 12, 0, 0));
-                              }
-                              description = categoryName; 
-                          } else if (dateCell instanceof Date && isValid(dateCell)) {
-                              date = new Date(Date.UTC(fileYear, monthIndex, dateCell.getUTCDate(), 12, 0, 0));
-                              description = categoryName;
-                          } else if (typeof dateCell === 'string' && dateCell.trim() !== '') {
-                              description = dateCell.trim();
-                              date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0)); // Fallback date
-                          }
-                          
-                          if (date && isValid(date)) {
-                              // Special handling for KV and Auto
-                              const columnsToProcess = categoryName.toLowerCase() === 'auto' ? [1] : (categoryName.toLowerCase() === 'kv' ? [1, 2] : [1]);
-                              
-                              for (const colIndex of columnsToProcess) {
-                                if (colIndex > 9) continue; // Only process up to column J
-                                
-                                  const amountCell = transactionRowData[colIndex];
-                                  if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '') {
-                                      const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
-                                      if (!isNaN(amount) && amount !== 0) {
-                                          if (amount < 0) { // Refunds are income
-                                              allTransactions.push({
-                                                  description: `${description} Erstattung`,
-                                                  amount: Math.abs(amount),
-                                                  date,
-                                                  categoryId: 'Einnahmen' // Assign to Einnahmen
-                                              });
-                                              allDetectedCategories.add('Einnahmen');
-                                          } else {
-                                              allTransactions.push({
-                                                  description,
-                                                  amount,
-                                                  date,
-                                                  categoryId: categoryName
-                                              });
-                                          }
-                                      }
-                                  }
-                              }
-                          }
-                          transactionRowIndex++;
-                      }
-                      r = transactionRowIndex -1; // Move main loop counter past the processed block
+                const processCategoryBlock = (startRow: number, startCol: number): number => {
+                  const categoryNameCell = rawJson[startRow]?.[startCol];
+                  if (typeof categoryNameCell !== 'string' || !categoryNameCell.trim() || categoryNameCell.toLowerCase().includes('summe') || categoryNameCell.toLowerCase().includes('einnahmen')) {
+                    return startRow;
                   }
-              }
+                  const categoryName = categoryNameCell.trim();
+                  allDetectedCategories.add(categoryName);
                 
-                // Process lower part (Einnahmen)
-                const einnahmenRowIndex = rawJson.findIndex(row => typeof row[0] === 'string' && row[0].toLowerCase().startsWith('einnahmen'));
+                  let currentRow = startRow + 2;
+                  while (currentRow < rawJson.length) {
+                    const rowData = rawJson[currentRow];
+                    if (!rowData || !rowData.some(c => c !== null && String(c).trim() !== '') || (typeof rowData[startCol] === 'string' && String(rowData[startCol]).toLowerCase().includes('summe'))) {
+                      break;
+                    }
+                
+                    const dateCell = rowData[startCol];
+                    let description = '';
+                    let date: Date | null = null;
+                
+                    if (typeof dateCell === 'string' && dateCell.match(/^\d{1,2}\.\s[A-Za-z]{3}/)) {
+                      const dayMatch = dateCell.match(/^(\d{1,2})/);
+                      if (dayMatch) {
+                        const day = parseInt(dayMatch[1], 10);
+                        date = new Date(Date.UTC(fileYear, monthIndex, day, 12, 0, 0));
+                      }
+                      description = categoryName;
+                    } else if (dateCell instanceof Date && isValid(dateCell)) {
+                      date = new Date(Date.UTC(fileYear, monthIndex, dateCell.getUTCDate(), 12, 0, 0));
+                      description = categoryName;
+                    } else if (typeof dateCell === 'string' && dateCell.trim() !== '') {
+                      description = dateCell.trim();
+                      date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                    }
+                
+                    if (date && isValid(date)) {
+                      const columnsToProcess = categoryName.toLowerCase() === 'auto' ? [startCol + 1] : (categoryName.toLowerCase() === 'kv' ? [startCol + 1, startCol + 2] : [startCol + 1]);
+                
+                      for (const colIndex of columnsToProcess) {
+                        const amountCell = rowData[colIndex];
+                        if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '') {
+                          const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
+                          if (!isNaN(amount) && amount !== 0) {
+                            if (amount < 0) {
+                              allTransactions.push({
+                                description: `${description} Erstattung`,
+                                amount: Math.abs(amount),
+                                date,
+                                categoryId: 'Einnahmen'
+                              });
+                              allDetectedCategories.add('Einnahmen');
+                            } else {
+                              allTransactions.push({
+                                description,
+                                amount,
+                                date,
+                                categoryId: categoryName
+                              });
+                            }
+                          }
+                        }
+                      }
+                    }
+                    currentRow++;
+                  }
+                  return currentRow; 
+                };
 
+                // Process horizontal blocks
+                for (let col = 0; col < 10; col += 2) { 
+                    processCategoryBlock(0, col);
+                }
+
+                // Process vertical blocks starting around row 30
+                for (let row = 29; row < rawJson.length; row++) {
+                    const cell = rawJson[row]?.[0];
+                    if (typeof cell === 'string' && cell.trim() && !cell.toLowerCase().includes('summe') && !cell.toLowerCase().includes('einnahmen')) {
+                       row = processCategoryBlock(row, 0);
+                    }
+                }
+                
+                // Process Einnahmen block at the end
+                const einnahmenRowIndex = rawJson.findIndex(row => typeof row?.[0] === 'string' && row[0].toLowerCase().startsWith('einnahmen'));
                 if (einnahmenRowIndex !== -1) {
                     allDetectedCategories.add("Einnahmen");
-                    
                     for (let r = einnahmenRowIndex + 1; r < rawJson.length; r++) {
-                        const rowData = rawJson[r].slice(0, 14); // use columns A-N
-                        if (!rowData || !rowData.some(cell => cell !== null && String(cell).trim() !== '')) break;
+                        const rowData = rawJson[r];
+                        if (!rowData || !rowData.some(cell => cell !== null && String(cell).trim() !== '') || (typeof rowData[0] === 'string' && String(rowData[0]).toLowerCase().startsWith('summe'))) break;
                         
                         const description = rowData[0];
-                        if (typeof description === 'string' && description.toLowerCase().startsWith('summe')) break;
-                        
                         if (description && typeof description === 'string' && description.trim() !== '') {
                              const amountCell = rowData[1] ?? rowData[2];
                              if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '' && Number(amountCell) > 0) {
@@ -280,10 +280,10 @@ const categoryNameMap = useMemo(() => {
     try {
       const transactionsWithMappedCategory = allParsedTransactions
         .map(t => {
-          // The categoryId from parsing is the Excel category name (e.g., "Lebensmittel")
-          const mappedCatId = headerMapping[t.categoryId];
-          if (!mappedCatId) return null; // Skip if no category is mapped in the dialog
-          return { ...t, categoryId: mappedCatId }; // Replace name with actual ID
+          const excelCategoryName = t.categoryId; 
+          const mappedAppCategoryId = headerMapping[excelCategoryName];
+          if (!mappedAppCategoryId) return null;
+          return { ...t, categoryId: mappedAppCategoryId };
         })
         .filter((t): t is MappedTransaction => t !== null);
   
