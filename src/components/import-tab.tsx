@@ -130,23 +130,28 @@ const categoryNameMap = useMemo(() => {
                 
                 if (rawJson.length < 2) return;
                 
-                const upperPart = rawJson.slice(0, 28).map(row => row.slice(0, 10)); // Use columns A-J
-
+                // Process upper part (Ausgaben)
+                const upperPart = rawJson.slice(0, 28);
                 for (let r = 0; r < upperPart.length; r++) {
-                    const firstCell = upperPart[r][0];
-                    if (typeof firstCell === 'string' && firstCell.match(/^[a-zA-ZäöüÄÖÜß\.\/\s]+$/) && !firstCell.toLowerCase().includes('summe') && !firstCell.toLowerCase().includes('einnahmen')) {
+                    const row = upperPart[r];
+                    const firstCell = row ? row[0] : null;
+
+                    // Detect category header
+                    if (typeof firstCell === 'string' && firstCell.trim().length > 0 && !firstCell.toLowerCase().includes('summe') && !firstCell.toLowerCase().includes('einnahmen')) {
                         const categoryName = firstCell.trim();
                         allDetectedCategories.add(categoryName);
-
-                        let currentRow = r + 2; 
-                        while(currentRow < upperPart.length) {
-                            const rowData = upperPart[currentRow];
-                            if (!rowData || !rowData.some(c => c !== null && c !== '')) {
-                                break;
+                        
+                        // Process transactions for this category
+                        let transactionRowIndex = r + 2;
+                        while(transactionRowIndex < upperPart.length) {
+                            const transactionRowData = upperPart[transactionRowIndex];
+                            if (!transactionRowData || !transactionRowData.some(c => c !== null && String(c).trim() !== '')) {
+                                break; // End of block
                             }
-                            const cell1 = rowData[0];
+
+                            const cell1 = transactionRowData[0];
                             if (typeof cell1 === 'string' && cell1.toLowerCase().includes('summe')) {
-                                break;
+                                break; // End of block
                             }
 
                             let description = '';
@@ -172,7 +177,9 @@ const categoryNameMap = useMemo(() => {
                                 const columnsToProcess = categoryName.toLowerCase() === 'auto' ? [1] : (categoryName.toLowerCase() === 'kv' ? [1, 2] : [1]);
                                 
                                 for (const colIndex of columnsToProcess) {
-                                    const amountCell = rowData[colIndex];
+                                  if (colIndex > 9) continue; // Only process up to column J
+                                  
+                                    const amountCell = transactionRowData[colIndex];
                                     if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '') {
                                         const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
                                         if (!isNaN(amount) && amount !== 0) {
@@ -196,27 +203,27 @@ const categoryNameMap = useMemo(() => {
                                     }
                                 }
                             }
-                            currentRow++;
+                            transactionRowIndex++;
                         }
-                        r = currentRow -1; 
+                        r = transactionRowIndex -1; 
                     }
                 }
                 
+                // Process lower part (Einnahmen)
                 const einnahmenRowIndex = rawJson.findIndex(row => typeof row[0] === 'string' && row[0].toLowerCase().startsWith('einnahmen'));
 
                 if (einnahmenRowIndex !== -1) {
                     allDetectedCategories.add("Einnahmen");
-                    const lowerPart = rawJson.slice(einnahmenRowIndex).map(row => row.slice(0, 14)); // Use columns A-N
                     
-                    for (let r = 1; r < lowerPart.length; r++) { // Start from 1 to skip header
-                        const rowData = lowerPart[r];
-                        if (!rowData || !rowData.some(cell => cell !== null && cell !== '')) break;
+                    for (let r = einnahmenRowIndex + 1; r < rawJson.length; r++) {
+                        const rowData = rawJson[r];
+                        if (!rowData || !rowData.some(cell => cell !== null && String(cell).trim() !== '')) break;
                         
                         const description = rowData[0];
                         if (typeof description === 'string' && description.toLowerCase().startsWith('summe')) break;
                         
                         if (description && typeof description === 'string' && description.trim() !== '') {
-                             const amountCell = rowData[1] ?? rowData[2];
+                             const amountCell = rowData[1] ?? rowData[2]; // Consider B or C column
                              if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '' && Number(amountCell) > 0) {
                                 const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
                                 if (!isNaN(amount) && amount > 0) {
@@ -276,7 +283,7 @@ const categoryNameMap = useMemo(() => {
     try {
       const transactionsWithMappedCategory = allParsedTransactions
         .map(t => {
-          const mappedCatId = headerMapping[t.categoryId]; 
+          const mappedCatId = headerMapping[t.categoryId];
           if (!mappedCatId) return null;
           return { ...t, categoryId: mappedCatId };
         })
