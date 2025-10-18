@@ -29,6 +29,8 @@ import * as XLSX from "xlsx";
 import type { Transaction, Category } from "@/lib/types";
 import React, { useState, useMemo } from "react";
 import { format, isValid } from "date-fns";
+import { de } from "date-fns/locale";
+
 
 type MappedTransaction = Omit<Transaction, 'id' | 'createdAt'>;
 type RawRow = (string | number | Date | null)[];
@@ -83,7 +85,7 @@ const categoryNameMap = useMemo(() => {
       return;
     }
     const worksheetData = transactions.map((t) => {
-      const date = t.date.toDate();
+      const date = t.date.toDate ? t.date.toDate() : t.date;
       const category = categoryIdMap.get(t.categoryId);
       const isIncome = category?.toLowerCase() === 'einnahmen';
       return {
@@ -130,54 +132,54 @@ const categoryNameMap = useMemo(() => {
                 
                 if (rawJson.length < 1) return;
                 
-                // Phase 1: Horizontale Blöcke (A-K)
-                const headerRow = rawJson[0] || [];
-                for (let col = 0; col < 11; col += 2) { 
-                    const categoryNameCell = headerRow[col];
-                    if (typeof categoryNameCell === 'string' && categoryNameCell.trim()) {
-                        const categoryName = categoryNameCell.trim();
+                // Phase 1: Horizontale Blöcke oben
+                for (let col = 0; col <= 10; col += 2) { // A, C, E, G, I, K
+                    const headerCell = rawJson[0]?.[col];
+                    if (typeof headerCell === 'string' && headerCell.trim()) {
+                        const categoryName = headerCell.trim();
                         allDetectedCategories.add(categoryName);
                         
-                        for (let row = 2; row < 29 && row < rawJson.length; row++) {
-                            const rowData = rawJson[row];
+                        for (let rowIdx = 2; rowIdx < 29; rowIdx++) {
+                            const rowData = rawJson[rowIdx];
                             if (!rowData) continue;
 
-                            const dateOrDescCell = rowData[col];
-                            const amountCell = rowData[col + 1];
+                            const firstCell = rowData[col];
+                            const secondCell = rowData[col + 1];
 
-                            if ((typeof dateOrDescCell === 'string' && dateOrDescCell.toLowerCase().includes('summe')) || amountCell === null) break;
-                            if (dateOrDescCell === null) continue;
-
+                            if (firstCell === null && secondCell === null) continue;
+                            if (typeof firstCell === 'string' && firstCell.toLowerCase().includes('summe')) break;
+                            
                             let date: Date | null = null;
                             let description: string = '';
-
-                            if (dateOrDescCell instanceof Date && isValid(dateOrDescCell)) {
-                                date = new Date(Date.UTC(fileYear, monthIndex, dateOrDescCell.getUTCDate(), 12, 0, 0));
+                            
+                            if (firstCell instanceof Date && isValid(firstCell)) {
+                                date = new Date(Date.UTC(fileYear, monthIndex, firstCell.getUTCDate(), 12, 0, 0));
                                 description = categoryName;
-                            } else if (typeof dateOrDescCell === 'string') {
-                                const dayMatch = dateOrDescCell.match(/^(\d{1,2})/);
+                            } else if (typeof firstCell === 'string') {
+                                const dayMatch = firstCell.match(/^(\d{1,2})/);
                                 if (dayMatch) {
                                    const day = parseInt(dayMatch[1], 10);
                                    date = new Date(Date.UTC(fileYear, monthIndex, day, 12, 0, 0));
-                                   description = dateOrDescCell.substring(dayMatch[0].length).trim() || categoryName;
+                                   description = firstCell.substring(dayMatch[0].length).trim() || categoryName;
                                 } else {
-                                    description = dateOrDescCell.trim();
+                                    description = firstCell.trim();
                                     date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
                                 }
                             } else {
-                                 description = categoryName;
-                                 date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                                continue;
                             }
+
+                            const amount = typeof secondCell === 'number' ? secondCell : parseFloat(String(secondCell).replace('.', '').replace(',', '.'));
                             
-                            const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
                             if (date && isValid(date) && !isNaN(amount) && amount !== 0) {
                                 allTransactions.push({
                                     description,
                                     amount: Math.abs(amount),
                                     date,
-                                    categoryId: categoryName
+                                    categoryId: categoryName // Temporarily use name, map later
                                 });
                             }
+                            
                             // Special KV Case for "Timo"
                             if (categoryName.toLowerCase().startsWith('kv') && col + 2 < 11 && rowData[col + 2] !== null) {
                                 const timoAmountCell = rowData[col+2];
@@ -194,27 +196,28 @@ const categoryNameMap = useMemo(() => {
                         }
                     }
                 }
-
-                // Phase 2: Vertikale Blöcke (jetzt ab Spalte A, ab Zeile ~29)
-                let currentRow = 29;
-                while (currentRow < rawJson.length) {
-                    const categoryCell = rawJson[currentRow]?.[0]; // Spalte A
+                
+                // Phase 2: Vertikale Blöcke (ab Zeile 29 in Spalte A)
+                for (let rowIdx = 29; rowIdx < rawJson.length; rowIdx++) {
+                    const categoryCell = rawJson[rowIdx]?.[0];
                     if (typeof categoryCell === 'string' && categoryCell.trim() && !categoryCell.toLowerCase().includes('summe') && !categoryCell.toLowerCase().includes('einnahmen')) {
                         const categoryName = categoryCell.trim();
                         allDetectedCategories.add(categoryName);
-                        let dataRowIndex = currentRow + 2;
+                        
+                        let dataRowIndex = rowIdx + 2;
                         while(dataRowIndex < rawJson.length) {
                             const rowData = rawJson[dataRowIndex];
                             if (!rowData || !rowData[0] || (typeof rowData[0] === 'string' && String(rowData[0]).toLowerCase().includes('summe'))) {
-                                currentRow = dataRowIndex; // Nächste Suche nach diesem Block starten
+                                rowIdx = dataRowIndex; // Nächste Suche nach diesem Block starten
                                 break;
                             }
+                            
                             const descCell = rowData[0]; // Spalte A
                             const amountCell = rowData[1]; // Spalte B
                             
                             if(typeof descCell === 'string' && descCell.trim()) {
                                 const description = descCell.trim();
-                                const date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                                const date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0)); // Fallback date
                                 if (amountCell !== null && amountCell !== undefined) {
                                    const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
                                    if(isValid(date) && !isNaN(amount) && amount !== 0) {
@@ -224,13 +227,12 @@ const categoryNameMap = useMemo(() => {
                             }
                             dataRowIndex++;
                         }
-                        currentRow = dataRowIndex;
-                    } else {
-                        currentRow++;
+                        if (dataRowIndex >= rawJson.length) break; // End of sheet
+                        rowIdx = dataRowIndex -1;
                     }
                 }
-                
-                // Phase 3: Process Einnahmen block at the end
+
+                // Phase 3: Einnahmen-Block am Ende
                 const einnahmenRowIndex = rawJson.findIndex(row => typeof row?.[0] === 'string' && row[0].toLowerCase().startsWith('einnahmen'));
                 if (einnahmenRowIndex !== -1) {
                     allDetectedCategories.add("Einnahmen");
@@ -292,10 +294,14 @@ const categoryNameMap = useMemo(() => {
                 title: "Datei-Verarbeitung fehlgeschlagen",
                 description: error.message || "Die Datei konnte nicht verarbeitet werden. Stellen Sie sicher, dass sie das richtige Format hat.",
             });
+        } finally {
+            // Reset file input so user can select the same file again
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
         }
     };
     reader.readAsArrayBuffer(file);
-    event.target.value = "";
   };
 
 
@@ -310,7 +316,7 @@ const categoryNameMap = useMemo(() => {
           
           if (!mappedAppCategoryId) return null;
           
-          // Handle credits (negative values)
+          // Gutschriften als Einnahmen verbuchen
           if(t.amount < 0) {
             const incomeCatId = categoryNameMap.get('einnahmen');
             if(incomeCatId) {
