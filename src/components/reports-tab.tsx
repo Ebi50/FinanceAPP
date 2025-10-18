@@ -132,25 +132,36 @@ export function ReportsTab({ transactions, onImport }: ReportsTabProps) {
             const categoryId = appCategoryMap.get(categoryName);
             
             if (categoryId) {
-              // Assuming 'Datum' is in the same column and 'Betrag' is in the next one
               const dateCol = col;
               const amountCol = col + 1;
+              let lastValidDate = new Date();
+              
               if (headers[amountCol] === 'Betrag') {
                 for (const row of dataRows) {
                    const dateValue = row[dateCol];
                    const amountValue = row[amountCol];
 
+                   // Skip empty rows completely
+                   if ((dateValue === null || dateValue === '') && (amountValue === null || amountValue === '')) {
+                     continue;
+                   }
+                   
                    if (amountValue && (typeof amountValue === 'number' || (typeof amountValue === 'string' && amountValue.trim() !== ''))) {
                       // Stop when we hit a 'Summe' row for this block
                       if (typeof row[dateCol-1] === 'string' && row[dateCol-1].toLowerCase().includes('summe')) break;
                       
-                      let date;
+                      let date: Date | null = null;
+                      let description = categories.find(c => c.id === categoryId)?.name || 'Importiert';
+
                       if(dateValue) {
-                         // Handle Excel date serial number or string DD.MM
-                        if (typeof dateValue === 'number') {
-                          date = XLSX.SSF.parse_date_code(dateValue);
-                          date = new Date(year, date.m - 1, date.d);
-                        } else if (typeof dateValue === 'string') {
+                        // Handle text in date field
+                        if (typeof dateValue === 'string' && isNaN(Date.parse(dateValue)) && !/^\d{1,2}\.\d{1,2}\.?$/.test(dateValue)) {
+                            description = dateValue;
+                            date = new Date(year, lastValidDate.getMonth(), 15);
+                        } else if (typeof dateValue === 'number') { // Excel date serial number
+                          const d = XLSX.SSF.parse_date_code(dateValue);
+                          date = new Date(year, d.m - 1, d.d);
+                        } else if (typeof dateValue === 'string') { // String date like "DD.MM"
                           const parts = dateValue.split('.').map(p => parseInt(p.trim(), 10));
                           if (parts.length >= 2) {
                             date = new Date(year, parts[1] - 1, parts[0]);
@@ -159,9 +170,10 @@ export function ReportsTab({ transactions, onImport }: ReportsTabProps) {
                       }
                       
                       if(date) {
+                         lastValidDate = date;
                          newTransactions.push({
                             id: `imported-${Date.now()}-${newTransactions.length}`,
-                            description: categories.find(c => c.id === categoryId)?.name || 'Importiert',
+                            description: description,
                             amount: typeof amountValue === 'number' ? amountValue : parseFloat(amountValue.replace(',', '.')),
                             date,
                             categoryId,
