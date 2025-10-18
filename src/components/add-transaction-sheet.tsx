@@ -101,7 +101,7 @@ export function AddTransactionSheet({
     defaultValues: {
       id: undefined,
       description: '',
-      amounts: [{ value: 0 }],
+      amounts: [{ value: undefined as any }],
       categoryId: '',
       date: new Date(),
       isRecurring: false,
@@ -117,22 +117,25 @@ export function AddTransactionSheet({
     if (open) {
       const isEditing = !!transaction;
 
-      let defaultValues: TransactionFormValues = {
+      let defaultValues: Partial<TransactionFormValues> = {
         id: undefined,
         description: '',
-        amounts: [{ value: 0 }],
+        amounts: [{ value: undefined as any }],
         categoryId: '',
         date: new Date(),
         isRecurring: false,
       };
 
-      if (isEditing) {
+      if (isEditing && transaction) {
+        // This is a robust way to convert a Firestore Timestamp or a JS Date to a JS Date.
         const dateValue = transaction.date;
         let dateToSet: Date;
 
         if (dateValue && typeof (dateValue as any).toDate === 'function') {
+          // It's a Firestore Timestamp
           dateToSet = (dateValue as any).toDate();
         } else {
+          // It might be a string or JS Date, so we parse it
           const parsedDate = toDate(dateValue);
           dateToSet = isValid(parsedDate) ? parsedDate : new Date();
         }
@@ -140,17 +143,17 @@ export function AddTransactionSheet({
         defaultValues = {
           id: transaction.id,
           description: transaction.description || '',
-          amounts: transaction.amount ? [{ value: transaction.amount }] : [{ value: 0 }],
+          amounts: transaction.amount ? [{ value: transaction.amount }] : [{ value: undefined as any }],
           categoryId: transaction.categoryId || '',
           date: dateToSet,
           isRecurring: (transaction as any).isRecurring || false,
         };
       }
       
-      form.reset(defaultValues);
+      form.reset(defaultValues as TransactionFormValues);
       setSuggestion(null);
     }
-  }, [open, transaction, form]);
+  }, [open, transaction, form, categories]);
 
 
   const handleSuggestion = async () => {
@@ -228,7 +231,7 @@ export function AddTransactionSheet({
                     <Input
                       type="number"
                       step="0.01"
-                      placeholder="0.00"
+                      placeholder="0,00"
                       {...form.register(`amounts.${index}.value`, { valueAsNumber: true })}
                       className="text-right text-base"
                     />
@@ -238,7 +241,7 @@ export function AddTransactionSheet({
                   </div>
                 ))}
                  {form.formState.errors.amounts && <p className="text-sm text-destructive mt-1">{form.formState.errors.amounts.root?.message}</p>}
-                 <Button type="button" variant="outline" size="sm" onClick={() => append({ value: 0 })}>
+                 <Button type="button" variant="outline" size="sm" onClick={() => append({ value: undefined as any })}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Betrag hinzufügen
                 </Button>

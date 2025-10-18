@@ -71,24 +71,25 @@ export default function Dashboard() {
     if (!user) return;
     const coll = collection(firestore, 'users', user.uid, 'transactions');
     
-    // Create the base data object, converting the JS Date to a Firestore Timestamp
-    const dataToSave = {
-      description: transaction.description,
-      amount: transaction.amount,
-      categoryId: transaction.categoryId,
-      isRecurring: transaction.isRecurring,
-      date: Timestamp.fromDate(transaction.date), // Always convert to Timestamp
-    };
-
     if (transaction.id) {
-      // This is an update to an existing document
-      const docRef = doc(coll, transaction.id);
-      const updateData = { ...dataToSave, updatedAt: serverTimestamp() };
-      setDocumentNonBlocking(docRef, updateData, { merge: true });
+        // This is an update to an existing document
+        const docRef = doc(coll, transaction.id);
+        const { id, ...dataToUpdate } = transaction;
+        const updateData = {
+            ...dataToUpdate,
+            date: Timestamp.fromDate(transaction.date), // Ensure date is a Timestamp
+            updatedAt: serverTimestamp()
+        };
+        setDocumentNonBlocking(docRef, updateData, { merge: true });
     } else {
-      // This is a new document
-      const createData = { ...dataToSave, createdAt: serverTimestamp() };
-      addDocumentNonBlocking(coll, createData);
+        // This is a new document
+        const { id, ...dataToAdd } = transaction; 
+        const createData = {
+            ...dataToAdd,
+            date: Timestamp.fromDate(transaction.date), // Ensure date is a Timestamp
+            createdAt: serverTimestamp()
+        };
+        addDocumentNonBlocking(coll, createData);
     }
   };
 
