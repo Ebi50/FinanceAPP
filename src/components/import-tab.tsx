@@ -72,7 +72,7 @@ export function ImportTab({ transactions }: ImportTabProps) {
 
   const handleExportExcel = () => {
     const worksheetData = transactions.map((t) => ({
-      Datum: format(new Date(t.date.toString()), "yyyy-MM-dd"),
+      Datum: t.date instanceof Date ? format(t.date, "yyyy-MM-dd") : format(new Date(t.date.seconds * 1000), "yyyy-MM-dd"),
       Beschreibung: t.description,
       Kategorie: categoryMap.get(t.categoryId) || "Unbekannt",
       Betrag: t.amount,
@@ -164,7 +164,7 @@ export function ImportTab({ transactions }: ImportTabProps) {
     event.target.value = "";
   };
 
-  const processImport = () => {
+  const processImport = async () => {
     if (!rawTransactionData || !user) return;
     
     try {
@@ -279,6 +279,7 @@ export function ImportTab({ transactions }: ImportTabProps) {
         setRawTransactionData(null);
     }
   };
+
 
   const handleMappingChange = (excelHeader: string, appCategoryId: string) => {
     setHeaderMapping(prev => ({ ...prev, [excelHeader]: appCategoryId }));
