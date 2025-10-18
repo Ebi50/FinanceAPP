@@ -160,13 +160,19 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                                 if (!categoryName || !dateCell || amountCell === null || String(amountCell).trim() === '') continue;
                                 
                                 let date: Date | null = null;
+                                let day: number | null = null;
+                                
                                 if (dateCell instanceof Date) {
-                                   date = new Date(Date.UTC(fileYear, monthIndex, dateCell.getUTCDate()));
+                                    day = dateCell.getUTCDate();
                                 } else {
                                     const dayMatch = String(dateCell).match(/(\d{1,2})/);
                                     if(dayMatch) {
-                                       date = new Date(fileYear, monthIndex, parseInt(dayMatch[1], 10));
+                                       day = parseInt(dayMatch[1], 10);
                                     }
+                                }
+
+                                if (day) {
+                                    date = new Date(Date.UTC(fileYear, monthIndex, day));
                                 }
 
                                 if (!date) continue;
@@ -197,7 +203,7 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                                 allTransactions.push({
                                     description: "Rate Haus",
                                     amount: Math.abs(amount),
-                                    date: new Date(fileYear, monthIndex, 15), // Use mid-month as placeholder
+                                    date: new Date(Date.UTC(fileYear, monthIndex, 15)), // Use mid-month as placeholder
                                     categoryId: "Haushalt"
                                 });
                                 allDetectedCategories.add("Haushalt");
@@ -234,7 +240,7 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                                  allTransactions.push({
                                      description: description,
                                      amount: amount,
-                                     date: new Date(fileYear, monthIndex, 15), // Use mid-month
+                                     date: new Date(Date.UTC(fileYear, monthIndex, 15)), // Use mid-month
                                      categoryId: "Einnahmen"
                                  });
                                  allDetectedCategories.add("Einnahmen");
@@ -397,3 +403,5 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
     </>
   );
 }
+
+    
