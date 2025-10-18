@@ -127,6 +127,7 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
                 <Select
                     value={String(selectedYear)}
                     onValueChange={(value) => setSelectedYear(Number(value))}
+                    disabled={availableYears.length === 0}
                 >
                     <SelectTrigger id="year-select" className="w-[180px]">
                         <SelectValue placeholder="Jahr auswählen" />
