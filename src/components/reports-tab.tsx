@@ -18,7 +18,7 @@ import { Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
-import { format, toDate } from "date-fns";
+import { format, toDate, isValid } from "date-fns";
 import { de } from "date-fns/locale";
 import type { Transaction, Category } from "@/lib/types";
 import React, { useMemo, useState } from "react";
@@ -42,7 +42,14 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
 
   const availableYears = useMemo(() => {
     if (!transactions) return [];
-    const years = new Set(transactions.map(t => toDate(t.date).getFullYear()));
+    const years = new Set(
+      transactions
+        .map(t => {
+          const date = toDate(t.date);
+          return isValid(date) ? date.getFullYear() : null;
+        })
+        .filter((year): year is number => year !== null && !isNaN(year))
+    );
     return Array.from(years).sort((a, b) => b - a);
   }, [transactions]);
 
@@ -59,6 +66,7 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
     const now = new Date();
     const filteredTransactions = transactions.filter((t) => {
       const transactionDate = toDate(t.date);
+      if (!isValid(transactionDate)) return false;
       if (period === "monthly") {
         return (
           transactionDate.getMonth() === now.getMonth() &&
@@ -97,6 +105,13 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
     });
     doc.save(`${title.toLowerCase().replace(/\s/g, "-")}.pdf`);
   };
+  
+  // Set default year to latest available year if current year has no data
+  useEffect(() => {
+    if (availableYears.length > 0 && !availableYears.includes(selectedYear)) {
+      setSelectedYear(availableYears[0]);
+    }
+  }, [availableYears, selectedYear]);
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
