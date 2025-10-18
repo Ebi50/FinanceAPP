@@ -10,9 +10,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
-import { useAuth } from "@/firebase";
+import { useAuth, useUser } from "@/firebase";
 import { initiateEmailSignIn, initiateEmailSignUp } from "@/firebase/non-blocking-login";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 
@@ -21,7 +21,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const auth = useAuth();
+  const { user, isUserLoading } = useUser();
   const router = useRouter();
+
+  useEffect(() => {
+    if (!isUserLoading && user) {
+      router.push('/');
+    }
+  }, [user, isUserLoading, router]);
 
   const handleAuthAction = () => {
     if (isSignUp) {
@@ -29,8 +36,12 @@ export default function LoginPage() {
     } else {
       initiateEmailSignIn(auth, email, password);
     }
-    router.push('/');
+    // No longer need to push, useEffect will handle it.
   };
+
+  if (isUserLoading || user) {
+      return <div className="flex items-center justify-center min-h-screen">Laden...</div>
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">

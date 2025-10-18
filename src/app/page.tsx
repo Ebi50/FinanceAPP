@@ -17,36 +17,54 @@ import { ReportsTab } from "@/components/reports-tab";
 import { ImportTab } from "@/components/import-tab";
 import { AddTransactionSheet } from "@/components/add-transaction-sheet";
 import type { Transaction } from '@/lib/types';
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, addDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
+import { collection, addDoc, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+
 
 export default function Dashboard() {
-  const { user } = useUser();
+  const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
+  const router = useRouter();
   
+  useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, isUserLoading, router]);
+
   const transactionsQuery = useMemoFirebase(() => 
     user ? collection(firestore, 'users', user.uid, 'transactions') : null,
     [firestore, user]
   );
   const { data: transactions, isLoading: transactionsLoading } = useCollection<Transaction>(transactionsQuery);
 
-  const budgetQuery = useMemoFirebase(() =>
+  const userProfileQuery = useMemoFirebase(() =>
     user ? doc(firestore, 'users', user.uid) : null,
     [firestore, user]
   );
-  // This is simplified. We are not using useDoc as it's not ideal for a single field.
-  // A more complete solution would use useDoc and handle the user profile document.
-  const [budget, setBudget] = useState(2000); 
+  const { data: userProfile } = useDoc<{budget?: number}>(userProfileQuery);
+  const budget = userProfile?.budget ?? 2000;
 
 
-  const handleAddOrUpdateTransaction = (transaction: Omit<Transaction, 'id'> & { id?: string }) => {
+  const handleAddOrUpdateTransaction = (transaction: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date }) => {
     if (!user) return;
     const coll = collection(firestore, 'users', user.uid, 'transactions');
+    
+    const transactionData = {
+        ...transaction,
+        // @ts-ignore
+        createdAt: serverTimestamp(),
+    };
+    delete (transactionData as any).id;
+
+
     if (transaction.id) {
       const docRef = doc(coll, transaction.id);
-      setDoc(docRef, transaction, { merge: true });
+      setDoc(docRef, transactionData, { merge: true });
     } else {
-      addDoc(coll, transaction);
+      addDoc(coll, transactionData);
     }
   };
 
@@ -56,20 +74,30 @@ export default function Dashboard() {
     deleteDoc(docRef);
   };
   
-  const handleImportTransactions = (newTransactions: Omit<Transaction, 'id'>[]) => {
+  const handleImportTransactions = (newTransactions: (Omit<Transaction, 'id' | 'date'> & { date: Date })[]) => {
     if (!user) return;
     const coll = collection(firestore, 'users', user.uid, 'transactions');
     const batch = [];
     for (const newT of newTransactions) {
-        // Here we just add, assuming imported are new.
-        // A more complex logic could check for duplicates before adding.
         batch.push(addDoc(coll, newT));
     }
     Promise.all(batch);
   };
 
-  const sortedTransactions = transactions ? [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : [];
+  const sortedTransactions = transactions ? [...transactions].sort((a, b) => {
+    const dateA = a.date instanceof Date ? a.date.getTime() : a.date.toMillis();
+    const dateB = b.date instanceof Date ? b.date.getTime() : b.date.toMillis();
+    return dateB - dateA;
+  }) : [];
 
+
+  if (isUserLoading || !user) {
+    return (
+        <div className="flex items-center justify-center min-h-screen">
+            <p>Laden...</p>
+        </div>
+    )
+  }
 
   return (
     <div className="flex-col md:flex">
@@ -95,11 +123,11 @@ export default function Dashboard() {
         </div>
         <Tabs defaultValue="overview" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="categories">Kategorien</TabsTrigger>
-            <TabsTrigger value="import">Import/Export</TabsTrigger>
             <TabsTrigger value="overview">Übersicht</TabsTrigger>
-            <TabsTrigger value="reports">Berichte</TabsTrigger>
             <TabsTrigger value="transactions">Transaktionen</TabsTrigger>
+            <TabsTrigger value="categories">Kategorien</TabsTrigger>
+            <TabsTrigger value="reports">Berichte</TabsTrigger>
+            <TabsTrigger value="import">Import/Export</TabsTrigger>
           </TabsList>
           <TabsContent value="reports" className="space-y-4">
             <ReportsTab transactions={sortedTransactions} />
