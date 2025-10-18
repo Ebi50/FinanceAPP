@@ -104,7 +104,7 @@ export function ImportTab({ transactions }: ImportTabProps) {
         }) as RawTransactionData;
         
         if (!json || json.length < 2) {
-            throw new Error("Die Excel-Datei konnte nicht verarbeitet werden. Entweder ist sie leer oder zu klein. Bitte stellen Sie sicher, dass sie korrekt formatiert ist.");
+            throw new Error("Die Excel-Datei ist zu klein oder konnte nicht gelesen werden. Bitte stellen Sie sicher, dass sie korrekt formatiert ist.");
         }
 
         let dataHeaderRowIndex = -1;
