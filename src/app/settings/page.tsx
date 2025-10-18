@@ -159,9 +159,11 @@ export default function SettingsPage() {
     if (isProfileLoading) {
       return <p>Lade...</p>
     }
+    
+    let content;
     switch(activeTab) {
       case 'Allgemein':
-        return (
+        content = (
           <>
             <Card>
               <CardHeader>
@@ -269,15 +271,16 @@ export default function SettingsPage() {
             </Card>
           </>
         );
+        break;
       case 'Sicherheit':
-        return (
+        content = (
           <Card>
               <CardHeader>
                   <CardTitle>Passwort</CardTitle>
                   <CardDescription>
                       Ändern Sie hier Ihr Passwort.
                   </CardDescription>
-              </Header>
+              </CardHeader>
               <CardContent>
                   <form className="space-y-4" onSubmit={handlePasswordSave}>
                       <div className="space-y-2">
@@ -293,8 +296,9 @@ export default function SettingsPage() {
               </CardContent>
           </Card>
         );
+        break;
       default:
-        return (
+        content = (
           <Card>
             <CardHeader>
               <CardTitle>{activeTab}</CardTitle>
@@ -304,7 +308,9 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         );
+        break;
     }
+    return content;
   }
 
 
