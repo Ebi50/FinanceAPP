@@ -119,7 +119,14 @@ export function ReportsTab({ transactions, onImport }: ReportsTabProps) {
         );
         const newTransactions: Transaction[] = [];
 
-        const headerRowIndex = json.findIndex(row => row.some(cell => typeof cell === 'string' && appCategoryMap.has(cell.split(' ')[0].toLowerCase())));
+        const headerRowIndex = json.findIndex(row => 
+            Array.isArray(row) && row.some(cell => {
+                if (typeof cell !== 'string') return false;
+                const categoryName = cell.replace(/\s*\d+\s*$/, '').trim().toLowerCase();
+                return appCategoryMap.has(categoryName);
+            })
+        );
+
         if (headerRowIndex === -1) throw new Error("Keine gültigen Kategorie-Header gefunden.");
         
         const headers = json[headerRowIndex];
@@ -128,40 +135,37 @@ export function ReportsTab({ transactions, onImport }: ReportsTabProps) {
         for(let col = 0; col < headers.length; col++) {
           const header = headers[col];
           if (header && typeof header === 'string') {
-            const categoryName = header.split(' ')[0].toLowerCase();
+            const categoryName = header.replace(/\s*\d+\s*$/, '').trim().toLowerCase();
             const categoryId = appCategoryMap.get(categoryName);
             
             if (categoryId) {
               const dateCol = col;
               const amountCol = col + 1;
-              let lastValidDate = new Date();
+              let lastValidDate = new Date(year, 0, 15);
               
               if (headers[amountCol] === 'Betrag') {
                 for (const row of dataRows) {
                    const dateValue = row[dateCol];
                    const amountValue = row[amountCol];
 
-                   // Skip empty rows completely
                    if ((dateValue === null || dateValue === '') && (amountValue === null || amountValue === '')) {
                      continue;
                    }
                    
                    if (amountValue && (typeof amountValue === 'number' || (typeof amountValue === 'string' && amountValue.trim() !== ''))) {
-                      // Stop when we hit a 'Summe' row for this block
                       if (typeof row[dateCol-1] === 'string' && row[dateCol-1].toLowerCase().includes('summe')) break;
                       
                       let date: Date | null = null;
                       let description = categories.find(c => c.id === categoryId)?.name || 'Importiert';
 
                       if(dateValue) {
-                        // Handle text in date field
                         if (typeof dateValue === 'string' && isNaN(Date.parse(dateValue)) && !/^\d{1,2}\.\d{1,2}\.?$/.test(dateValue)) {
                             description = dateValue;
                             date = new Date(year, lastValidDate.getMonth(), 15);
-                        } else if (typeof dateValue === 'number') { // Excel date serial number
+                        } else if (typeof dateValue === 'number') {
                           const d = XLSX.SSF.parse_date_code(dateValue);
                           date = new Date(year, d.m - 1, d.d);
-                        } else if (typeof dateValue === 'string') { // String date like "DD.MM"
+                        } else if (typeof dateValue === 'string') {
                           const parts = dateValue.split('.').map(p => parseInt(p.trim(), 10));
                           if (parts.length >= 2) {
                             date = new Date(year, parts[1] - 1, parts[0]);
@@ -174,7 +178,7 @@ export function ReportsTab({ transactions, onImport }: ReportsTabProps) {
                          newTransactions.push({
                             id: `imported-${Date.now()}-${newTransactions.length}`,
                             description: description,
-                            amount: typeof amountValue === 'number' ? amountValue : parseFloat(amountValue.replace(',', '.')),
+                            amount: typeof amountValue === 'number' ? amountValue : parseFloat(String(amountValue).replace(',', '.')),
                             date,
                             categoryId,
                          });
@@ -210,7 +214,6 @@ export function ReportsTab({ transactions, onImport }: ReportsTabProps) {
       }
     };
     reader.readAsArrayBuffer(file);
-    // Reset file input to allow importing the same file again
     event.target.value = "";
   };
 
