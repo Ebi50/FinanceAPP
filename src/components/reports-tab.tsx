@@ -18,7 +18,7 @@ import { Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
-import { format, toDate, isValid } from "date-fns";
+import { format, toDate, isValid, getYear } from "date-fns";
 import { de } from "date-fns/locale";
 import type { Transaction, Category } from "@/lib/types";
 import React, { useMemo, useState, useEffect } from "react";
@@ -46,14 +46,14 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
       transactions
         .map(t => {
           const date = toDate(t.date);
-          return isValid(date) ? date.getFullYear() : null;
+          return isValid(date) ? getYear(date) : null;
         })
         .filter((year): year is number => year !== null && !isNaN(year))
     );
     return Array.from(years).sort((a, b) => b - a);
   }, [transactions]);
 
-  const categoryMap = useMemoFirebase(() => {
+  const categoryMap = useMemo(() => {
     if(!categories) return new Map();
     return new Map(categories.map((c) => [c.id, c.name]));
   }, [categories]);
@@ -70,10 +70,10 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
       if (period === "monthly") {
         return (
           transactionDate.getMonth() === now.getMonth() &&
-          transactionDate.getFullYear() === year
+          getYear(transactionDate) === year
         );
       } else {
-        return transactionDate.getFullYear() === year;
+        return getYear(transactionDate) === year;
       }
     });
 
@@ -106,7 +106,6 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
     doc.save(`${title.toLowerCase().replace(/\s/g, "-")}.pdf`);
   };
   
-  // Set default year to latest available year if current year has no data
   useEffect(() => {
     if (availableYears.length > 0 && !availableYears.includes(selectedYear)) {
       setSelectedYear(availableYears[0]);

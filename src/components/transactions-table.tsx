@@ -34,7 +34,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { AddTransactionSheet } from "./add-transaction-sheet";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection } from 'firebase/firestore';
 
@@ -50,7 +50,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
   const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null, [firestore, user]);
   const { data: categories } = useCollection<Category>(categoriesQuery);
 
-  const categoryMap = useMemoFirebase(() => {
+  const categoryMap = useMemo(() => {
     if (!categories) return new Map();
     return new Map(categories.map((c) => [c.id, c]));
   }, [categories]);
@@ -91,8 +91,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
           const incomeCategory = categories?.find(c => c.name.toLowerCase() === 'einnahmen');
           const isIncome = category?.id === incomeCategory?.id;
           
-          // Firebase may return Timestamp objects
-          const date = transaction.date instanceof Date ? transaction.date : toDate((transaction.date as any).seconds * 1000);
+          const date = toDate(transaction.date);
 
           return (
             <TableRow key={transaction.id}>

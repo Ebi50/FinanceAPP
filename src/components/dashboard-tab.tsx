@@ -7,6 +7,7 @@ import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebas
 import { collection } from 'firebase/firestore';
 import type { Category } from "@/lib/types";
 import { useMemo } from "react";
+import { toDate } from "date-fns";
 
 
 interface DashboardTabProps {
@@ -22,11 +23,15 @@ export function DashboardTab({ transactions, budget }: DashboardTabProps) {
   
   const incomeCategory = useMemo(() => categories?.find(c => c.name.toLowerCase() === 'einnahmen'), [categories]);
   
-  const totalExpenses = transactions
+  const transactionsWithDates = useMemo(() => {
+    return transactions.map(t => ({ ...t, date: toDate(t.date) }));
+  }, [transactions]);
+  
+  const totalExpenses = transactionsWithDates
     .filter(t => t.categoryId !== incomeCategory?.id)
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const totalIncome = transactions
+  const totalIncome = transactionsWithDates
     .filter(t => t.categoryId === incomeCategory?.id)
     .reduce((sum, t) => sum + t.amount, 0);
 
@@ -39,10 +44,10 @@ export function DashboardTab({ transactions, budget }: DashboardTabProps) {
             <CardTitle className="font-headline">Übersicht</CardTitle>
           </CardHeader>
           <CardContent className="pl-2">
-            <ExpensesChart transactions={transactions} />
+            <ExpensesChart transactions={transactionsWithDates} />
           </CardContent>
         </Card>
-        <RecentTransactions transactions={transactions} />
+        <RecentTransactions transactions={transactionsWithDates} />
       </div>
     </>
   );

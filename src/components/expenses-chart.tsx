@@ -6,6 +6,8 @@ import { formatCurrency } from "@/lib/utils"
 import type { Transaction, Category } from "@/lib/types";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection } from 'firebase/firestore';
+import { useMemo } from "react";
+import { toDate } from "date-fns";
 
 interface ExpensesChartProps {
   transactions: Transaction[];
@@ -17,28 +19,31 @@ export function ExpensesChart({ transactions }: ExpensesChartProps) {
   const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null, [firestore, user]);
   const { data: categories } = useCollection<Category>(categoriesQuery);
 
-  const categoryMap = useMemoFirebase(() => {
+  const categoryMap = useMemo(() => {
     if (!categories) return new Map();
     return new Map(categories.map(c => [c.id, c.name]));
   }, [categories]);
 
-  const expensesByCategory = transactions.reduce((acc, transaction) => {
-    const categoryName = categoryMap.get(transaction.categoryId) || 'Sonstiges';
-    if (!acc[categoryName]) {
-      acc[categoryName] = 0;
-    }
-    acc[categoryName] += transaction.amount;
-    return acc;
-  }, {} as Record<string, number>);
+  const expensesByCategory = useMemo(() => {
+    const expenses = transactions.reduce((acc, transaction) => {
+      const categoryName = categoryMap.get(transaction.categoryId) || 'Sonstiges';
+      if (!acc[categoryName]) {
+        acc[categoryName] = 0;
+      }
+      acc[categoryName] += transaction.amount;
+      return acc;
+    }, {} as Record<string, number>);
 
-  const data = Object.entries(expensesByCategory).map(([name, total]) => ({
-    name,
-    total
-  }));
+    return Object.entries(expenses).map(([name, total]) => ({
+      name,
+      total
+    }));
+  }, [transactions, categoryMap]);
+
 
   return (
     <ResponsiveContainer width="100%" height={350}>
-      <BarChart data={data}>
+      <BarChart data={expensesByCategory}>
         <XAxis
           dataKey="name"
           stroke="hsl(var(--muted-foreground))"

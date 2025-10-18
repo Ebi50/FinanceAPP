@@ -28,7 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
 import type { Transaction, Category } from "@/lib/types";
 import React, { useState, useMemo } from "react";
-import { format } from "date-fns";
+import { format, toDate } from "date-fns";
 
 type MappedTransaction = Omit<Transaction, 'id' | 'createdAt'>;
 type RawRow = (string | number | Date | null)[];
@@ -45,12 +45,24 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   
   const categoryIdMap = useMemo(() => {
-    return new Map(categories.map((c) => [c.id, c.name]));
-  }, [categories]);
+    const catMap = new Map<string, string>();
+    if (categories) {
+        categories.forEach(c => {
+            catMap.set(c.id, c.name);
+        });
+    }
+    return catMap;
+}, [categories]);
 
-  const categoryNameMap = useMemo(() => {
-    return new Map(categories.map((c) => [c.name.toLowerCase(), c.id]));
-  }, [categories]);
+const categoryNameMap = useMemo(() => {
+    const catMap = new Map<string, string>();
+    if (categories) {
+        categories.forEach(c => {
+            catMap.set(c.name.toLowerCase(), c.id);
+        });
+    }
+    return catMap;
+}, [categories]);
 
   const [isMappingDialogOpen, setIsMappingDialogOpen] = useState(false);
   const [detectedHeaders, setDetectedHeaders] = useState<string[]>([]);
@@ -71,7 +83,7 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
       return;
     }
     const worksheetData = transactions.map((t) => ({
-      Datum: t.date instanceof Date ? format(t.date, "yyyy-MM-dd") : format(new Date((t.date as any).seconds * 1000), "yyyy-MM-dd"),
+      Datum: format(toDate(t.date), "yyyy-MM-dd"),
       Beschreibung: t.description,
       Kategorie: categoryIdMap.get(t.categoryId) || "Unbekannt",
       Betrag: t.amount,
@@ -113,7 +125,6 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                 const sheetJson = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as RawRow[];
                 if (sheetJson.length < 2) return;
                 
-                // Process main expense blocks
                 let startRow = 0;
                 while (startRow < sheetJson.length) {
                     let categoryRowIndex = -1;
@@ -124,7 +135,7 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                         }
                     }
 
-                    if (categoryRowIndex === -1) break; // No more main category blocks
+                    if (categoryRowIndex === -1) break;
 
                     const dataHeaderRowIndex = categoryRowIndex + 1;
                     if (dataHeaderRowIndex >= sheetJson.length) break;
@@ -155,7 +166,7 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                             if (header === 'datum') {
                                 const categoryName = filledCategories[c];
                                 const dateCell = rowData[c];
-                                const amountCell = rowData[c + 1]; // Assuming amount is always next to date
+                                const amountCell = rowData[c + 1];
 
                                 if (!categoryName || !dateCell || amountCell === null || String(amountCell).trim() === '') continue;
                                 
@@ -192,7 +203,6 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                     }
                 }
                 
-                // Process special items like "Rate Haus"
                 for (let r = 0; r < sheetJson.length; r++) {
                     const rowData = sheetJson[r];
                     if (rowData && typeof rowData[0] === 'string' && String(rowData[0]).toLowerCase().includes('rate haus')) {
@@ -203,7 +213,7 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                                 allTransactions.push({
                                     description: "Rate Haus",
                                     amount: Math.abs(amount),
-                                    date: new Date(Date.UTC(fileYear, monthIndex, 15)), // Use mid-month as placeholder
+                                    date: new Date(Date.UTC(fileYear, monthIndex, 15)),
                                     categoryId: "Haushalt"
                                 });
                                 allDetectedCategories.add("Haushalt");
@@ -212,7 +222,6 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                     }
                 }
 
-                // Process Einnahmen
                 let einnahmenRowIndex = -1;
                 for (let r = 0; r < sheetJson.length; r++) {
                     const rowData = sheetJson[r];
@@ -228,19 +237,20 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                         const description = rowData?.[0];
                         const amountCell = rowData?.[1];
 
-                        if (!description || typeof description !== 'string' || description.toLowerCase().startsWith('sonstige') || description.toLowerCase().startsWith('summe')) {
+                        if (!description || typeof description !== 'string' || description.toLowerCase().startsWith('summe')) {
                            if (!description || String(description).trim() === '') break;
                            if (typeof description === 'string' && (description.toLowerCase().startsWith('summe'))) break;
                            continue;
                         }
                         
                         if (amountCell !== null && String(amountCell).trim() !== '' && Number(amountCell) > 0) {
-                            const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
+                             const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
                              if (!isNaN(amount) && amount > 0) {
+                                 const finalDescription = description.trim().toLowerCase() === 'sonstige' ? "Sonstige Einnahmen" : description;
                                  allTransactions.push({
-                                     description: description,
+                                     description: finalDescription,
                                      amount: amount,
-                                     date: new Date(Date.UTC(fileYear, monthIndex, 15)), // Use mid-month
+                                     date: new Date(Date.UTC(fileYear, monthIndex, 15)),
                                      categoryId: "Einnahmen"
                                  });
                                  allDetectedCategories.add("Einnahmen");

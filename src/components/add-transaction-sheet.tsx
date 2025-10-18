@@ -69,7 +69,7 @@ function SubmitButton() {
 
 interface AddTransactionSheetProps {
   children: React.ReactNode;
-  onTransactionAdded: (transaction: Omit<Transaction, 'id'> & { id?: string }) => void;
+  onTransactionAdded: (transaction: Omit<Transaction, 'id' | 'createdAt'> & { id?: string }) => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   transaction?: Transaction | null;
@@ -141,7 +141,7 @@ export function AddTransactionSheet({
         (c) => c.name.toLowerCase() === result.category.toLowerCase()
       );
       if (suggestedCategory) {
-        form.setValue('categoryId', suggestedCategory.id);
+        form.setValue('categoryId', suggestedCategory.id, { shouldValidate: true });
         setSuggestion(suggestedCategory.name);
       }
     } catch (error) {

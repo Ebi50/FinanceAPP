@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback } from "./ui/avatar";
 import type { Transaction, Category } from "@/lib/types";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection } from 'firebase/firestore';
+import { useMemo } from "react";
 
 interface RecentTransactionsProps {
   transactions: Transaction[];
@@ -23,12 +24,12 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
   const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null, [firestore, user]);
   const { data: categories } = useCollection<Category>(categoriesQuery);
 
-  const categoryMap = useMemoFirebase(() => {
+  const categoryMap = useMemo(() => {
     if (!categories) return new Map();
     return new Map(categories.map(c => [c.id, c]));
   }, [categories]);
 
-  const incomeCategory = useMemoFirebase(() => {
+  const incomeCategory = useMemo(() => {
     if (!categories) return undefined;
     return categories.find(c => c.name.toLowerCase() === 'einnahmen');
   }, [categories]);
