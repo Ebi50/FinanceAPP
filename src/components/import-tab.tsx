@@ -116,7 +116,7 @@ const categoryNameMap = useMemo(() => {
 
             const monthMap: {[key: string]: number} = { 'jan': 0, 'feb': 1, 'mär': 2, 'apr': 3, 'mai': 4, 'jun': 5, 'jul': 6, 'aug': 7, 'sep': 8, 'okt': 9, 'nov': 10, 'dez': 11 };
             
-            const allTransactions: MappedTransaction[] = [];
+            let allTransactions: MappedTransaction[] = [];
             const allDetectedCategories = new Set<string>();
 
             workbook.SheetNames.forEach(sheetName => {
@@ -132,7 +132,7 @@ const categoryNameMap = useMemo(() => {
                 
                 if (rawJson.length < 1) return;
                 
-                // --- PHASE 1: Horizontale Blöcke (A-K) ---
+                // --- PHASE 1: Horizontale Blöcke (oben, Spalten A-K) ---
                 const firstRow = rawJson[0] || [];
                 for (let col = 0; col < 11; col += 2) { // A, C, E, G, I, K
                     const headerCell = firstRow[col];
@@ -140,86 +140,71 @@ const categoryNameMap = useMemo(() => {
                         const categoryName = headerCell.trim();
                         allDetectedCategories.add(categoryName);
                         
-                        // Datenzeilen für diese Kategorie (ab Zeile 2 bis max Zeile 28)
-                        for (let rowIdx = 2; rowIdx < 29; rowIdx++) {
+                        for (let rowIdx = 1; rowIdx < 29; rowIdx++) {
                             const rowData = rawJson[rowIdx];
                             if (!rowData) continue;
                             
-                            const firstCell = rowData[col];
-                            const secondCell = rowData[col + 1];
+                            const descOrDateCell = rowData[col];
+                            const amountCell = rowData[col + 1];
 
-                            if ((firstCell === null && secondCell === null) || (typeof firstCell === 'string' && firstCell.toLowerCase().includes('summe'))) {
-                                break; // Ende des Blocks erreicht
-                            }
-
-                            if (firstCell === null && secondCell !== null) {
-                               // Nur Betrag, keine Beschreibung/Datum -> überspringen
-                               continue;
+                            if ((descOrDateCell === null && amountCell === null) || (typeof descOrDateCell === 'string' && descOrDateCell.toLowerCase().includes('summe'))) {
+                                break; 
                             }
                             
-                            let date: Date | null = null;
-                            let description: string = '';
+                            if (amountCell === null || isNaN(Number(amountCell))) {
+                                continue;
+                            }
+                            const amount = Number(amountCell);
+
+                            let date: Date;
+                            let description: string;
                             
-                            if (firstCell instanceof Date && isValid(firstCell)) {
-                                date = new Date(Date.UTC(fileYear, monthIndex, firstCell.getUTCDate(), 12, 0, 0));
+                            if (descOrDateCell instanceof Date && isValid(descOrDateCell)) {
+                                date = new Date(Date.UTC(fileYear, monthIndex, descOrDateCell.getUTCDate(), 12, 0, 0));
                                 description = categoryName;
-                            } else if (typeof firstCell === 'string' && firstCell.trim()) {
-                                const dayMatch = firstCell.match(/^(\d{1,2})/);
+                            } else if (typeof descOrDateCell === 'string' && descOrDateCell.trim()) {
+                               const dayMatch = descOrDateCell.match(/^(\d{1,2})/);
                                 if (dayMatch) {
                                    const day = parseInt(dayMatch[1], 10);
                                    date = new Date(Date.UTC(fileYear, monthIndex, day, 12, 0, 0));
-                                   description = firstCell.substring(dayMatch[0].length).trim() || categoryName;
+                                   description = descOrDateCell.substring(dayMatch[0].length).trim() || categoryName;
                                 } else {
-                                    description = firstCell.trim();
-                                    date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0)); // Fallback-Datum
+                                    description = descOrDateCell.trim();
+                                    date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
                                 }
                             } else {
-                                // Zeile ohne gültige Beschreibung/Datum überspringen
                                 continue;
                             }
-
-                            const amount = typeof secondCell === 'number' ? secondCell : parseFloat(String(secondCell).replace('.', '').replace(',', '.'));
                             
-                            if (date && isValid(date) && !isNaN(amount) && amount !== 0) {
+                            if (isValid(date) && amount !== 0) {
                                 allTransactions.push({ description, amount: Math.abs(amount), date, categoryId: categoryName });
-                            }
-                            
-                            // Sonderfall KV "Timo"
-                            if (categoryName.toLowerCase().startsWith('kv') && col + 2 < 11) {
-                                const timoAmountCell = rowData[col + 2];
-                                if (timoAmountCell !== null && !isNaN(Number(timoAmountCell))) {
-                                    const timoAmount = Number(timoAmountCell);
-                                    if (timoAmount !== 0) {
-                                        allTransactions.push({ description: `${description} (Timo)`, amount: Math.abs(timoAmount), date, categoryId: categoryName });
-                                    }
-                                }
                             }
                         }
                     }
                 }
 
-                // --- PHASE 2: Vertikale Blöcke (ab Zeile 29, in Spalte A) ---
+                // --- PHASE 2: Vertikale Blöcke (Mitte, ab Zeile 29, Spalte L) ---
                 for (let rowIdx = 29; rowIdx < rawJson.length; rowIdx++) {
-                     const categoryCell = rawJson[rowIdx]?.[0];
+                     const categoryCell = rawJson[rowIdx]?.[11]; // Spalte L
                      if (typeof categoryCell === 'string' && categoryCell.trim() && !categoryCell.toLowerCase().includes('summe') && !categoryCell.toLowerCase().includes('einnahmen')) {
                          const categoryName = categoryCell.trim();
                          allDetectedCategories.add(categoryName);
                          
-                         let dataRowIndex = rowIdx + 2; // Daten beginnen 2 Zeilen unter der Überschrift
+                         let dataRowIndex = rowIdx + 1; 
                          while(dataRowIndex < rawJson.length) {
                              const dataRow = rawJson[dataRowIndex];
-                             if (!dataRow || !dataRow[0] || (typeof dataRow[0] === 'string' && dataRow[0].toLowerCase().includes('summe'))) {
-                                 rowIdx = dataRowIndex; // Springe zur nächsten Suche nach diesem Block
+                             if (!dataRow || !dataRow[11] || (typeof dataRow[11] === 'string' && dataRow[11].toLowerCase().includes('summe'))) {
+                                 rowIdx = dataRowIndex; 
                                  break;
                              }
                              
-                             const descCell = dataRow[0]; // Spalte A
-                             const amountCell = dataRow[1]; // Spalte B
+                             const descCell = dataRow[11]; // Spalte L
+                             const amountCell = dataRow[12]; // Spalte M
 
                              if (typeof descCell === 'string' && descCell.trim()) {
                                  const description = descCell.trim();
                                  const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
-                                 const date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0)); // Fallback date
+                                 const date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0)); 
 
                                  if (isValid(date) && !isNaN(amount) && amount !== 0) {
                                      allTransactions.push({ description, amount: Math.abs(amount), date, categoryId: categoryName });
@@ -227,22 +212,22 @@ const categoryNameMap = useMemo(() => {
                              }
                              dataRowIndex++;
                          }
-                         if (dataRowIndex >= rawJson.length) break; // Ende des Blattes
+                         if (dataRowIndex >= rawJson.length) break; 
                          rowIdx = dataRowIndex - 1;
                      }
                 }
 
                 // --- PHASE 3: Einnahmen-Block ---
-                const einnahmenRowIndex = rawJson.findIndex(row => typeof row?.[0] === 'string' && row[0].toLowerCase().startsWith('einnahmen'));
+                const einnahmenRowIndex = rawJson.findIndex(row => typeof row?.[13] === 'string' && row[13].toLowerCase().startsWith('einnahmen')); // Spalte N
                 if (einnahmenRowIndex !== -1) {
                     allDetectedCategories.add("Einnahmen");
                     for (let r = einnahmenRowIndex + 1; r < rawJson.length; r++) {
                         const rowData = rawJson[r];
-                        if (!rowData || !rowData[0] || (typeof rowData[0] === 'string' && String(rowData[0]).toLowerCase().startsWith('summe'))) break;
+                        if (!rowData || !rowData[13] || (typeof rowData[13] === 'string' && String(rowData[13]).toLowerCase().startsWith('summe'))) break;
                         
-                        const description = rowData[0];
+                        const description = rowData[13];
                         if (description && typeof description === 'string' && description.trim() !== '') {
-                             const amountCell = rowData[1] ?? rowData[2] ?? rowData[3] ?? rowData[4]; // Check multiple columns
+                             const amountCell = rowData[14]; // Spalte O
                              if (amountCell !== null && String(amountCell).trim() !== '') {
                                 const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
                                 if (!isNaN(amount) && amount > 0) {
@@ -290,7 +275,6 @@ const categoryNameMap = useMemo(() => {
                 description: error.message || "Die Datei konnte nicht verarbeitet werden. Stellen Sie sicher, dass sie das richtige Format hat.",
             });
         } finally {
-            // Reset file input so user can select the same file again
             if (fileInputRef.current) {
                 fileInputRef.current.value = "";
             }
@@ -311,7 +295,6 @@ const categoryNameMap = useMemo(() => {
           
           if (!mappedAppCategoryId) return null;
           
-          // Gutschriften als Einnahmen verbuchen
           if(t.amount < 0) {
             const incomeCatId = categoryNameMap.get('einnahmen');
             if(incomeCatId) {
@@ -445,5 +428,3 @@ const categoryNameMap = useMemo(() => {
     </>
   );
 }
-
-    
