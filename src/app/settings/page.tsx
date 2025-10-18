@@ -271,27 +271,27 @@ export default function SettingsPage() {
         );
       case 'Sicherheit':
         return (
-            <Card>
-                <CardHeader>
-                    <CardTitle>Passwort</CardTitle>
-                    <CardDescription>
-                        Ändern Sie hier Ihr Passwort.
-                    </CardDescription>
-                </Header>
-                <CardContent>
-                    <form className="space-y-4" onSubmit={handlePasswordSave}>
-                        <div className="space-y-2">
-                            <Label htmlFor="password">Neues Passwort</Label>
-                            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="confirmPassword">Neues Passwort bestätigen</Label>
-                            <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
-                        </div>
-                        <Button type="submit">Neues Passwort speichern</Button>
-                    </form>
-                </CardContent>
-            </Card>
+          <Card>
+              <CardHeader>
+                  <CardTitle>Passwort</CardTitle>
+                  <CardDescription>
+                      Ändern Sie hier Ihr Passwort.
+                  </CardDescription>
+              </Header>
+              <CardContent>
+                  <form className="space-y-4" onSubmit={handlePasswordSave}>
+                      <div className="space-y-2">
+                          <Label htmlFor="password">Neues Passwort</Label>
+                          <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                      </div>
+                      <div className="space-y-2">
+                          <Label htmlFor="confirmPassword">Neues Passwort bestätigen</Label>
+                          <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+                      </div>
+                      <Button type="submit">Neues Passwort speichern</Button>
+                  </form>
+              </CardContent>
+          </Card>
         );
       default:
         return (
