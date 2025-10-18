@@ -114,7 +114,6 @@ const categoryNameMap = useMemo(() => {
             const fileYear = fileYearMatch ? parseInt(fileYearMatch[0], 10) : new Date().getFullYear();
 
             const monthMap: {[key: string]: number} = { 'jan': 0, 'feb': 1, 'mär': 2, 'apr': 3, 'mai': 4, 'jun': 5, 'jul': 6, 'aug': 7, 'sep': 8, 'okt': 9, 'nov': 10, 'dez': 11 };
-            const mainCategories = ['lebensmittel', 'körperpflege', 'kleidung', 'haushalt', 'auto', 'garten', 'zeitschr./bücher', 'freize./geschenke', 'radsport', 'telefon/büro', 'kinder', 'kv'];
             
             const allTransactions: MappedTransaction[] = [];
             const allDetectedCategories = new Set<string>();
@@ -131,142 +130,106 @@ const categoryNameMap = useMemo(() => {
                 const sheetJson = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as RawRow[];
                 if (sheetJson.length < 2) return;
                 
-                let startRow = 0;
-                while (startRow < sheetJson.length) {
-                    let categoryRowIndex = -1;
-                    for (let i = startRow; i < sheetJson.length; i++) {
-                        if (sheetJson[i].some(cell => typeof cell === 'string' && mainCategories.some(mc => String(cell).toLowerCase().startsWith(mc)))) {
-                            categoryRowIndex = i;
-                            break;
-                        }
-                    }
+                // Process expenses
+                for (let r = 0; r < sheetJson.length; r++) {
+                    const firstCell = sheetJson[r][0];
+                    if (typeof firstCell === 'string' && firstCell.match(/^[a-zA-ZäöüÄÖÜß\.\/]+ \d+$/)) {
+                        const categoryName = firstCell.replace(/\s+\d+$/, '').trim();
+                        allDetectedCategories.add(categoryName);
 
-                    if (categoryRowIndex === -1) break;
+                        let currentRow = r + 2; // Skip header row
+                        while(currentRow < sheetJson.length) {
+                            const rowData = sheetJson[currentRow];
+                            if (!rowData || !rowData.some(c => c !== null && c !== '')) {
+                                break;
+                            }
+                            const cell1 = rowData[0];
+                            const cell2 = rowData[1];
+                            if (typeof cell1 === 'string' && cell1.toLowerCase().includes('summe')) {
+                                break;
+                            }
 
-                    const dataHeaderRowIndex = categoryRowIndex + 1;
-                    if (dataHeaderRowIndex >= sheetJson.length) break;
+                            let description = '';
+                            let date: Date | null = null;
 
-                    const categoryRow = sheetJson[categoryRowIndex];
-                    const dataHeaderRow = sheetJson[dataHeaderRowIndex];
-                    
-                    const filledCategories: (string | null)[] = [];
-                    let lastCategory: string | null = null;
-                    categoryRow.forEach(cell => {
-                        if (typeof cell === 'string' && cell.trim() !== '') {
-                            lastCategory = cell.trim().replace(/\s+\d+$/, '');
-                        }
-                        filledCategories.push(lastCategory);
-                    });
+                            // Handle Date/Description column
+                            if (cell1 instanceof Date && isValid(cell1)) {
+                                date = new Date(Date.UTC(fileYear, monthIndex, cell1.getUTCDate(), 12, 0, 0));
+                                description = categoryName;
+                            } else if (typeof cell1 === 'string' && cell1.match(/^\d{1,2}\.\s[A-Za-z]{3}/)) {
+                                const dayMatch = cell1.match(/^(\d{1,2})/);
+                                if (dayMatch) {
+                                    const day = parseInt(dayMatch[1], 10);
+                                    date = new Date(Date.UTC(fileYear, monthIndex, day, 12, 0, 0));
+                                }
+                                description = categoryName;
+                            } else if (typeof cell1 === 'string' && cell1.trim() !== '') {
+                                description = cell1.trim();
+                                date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                            }
 
-                    filledCategories.forEach(cat => { if (cat) allDetectedCategories.add(cat); });
-                    
-                    for (let r = dataHeaderRowIndex + 1; r < sheetJson.length; r++) {
-                        const rowData = sheetJson[r];
-                        if (!rowData || !rowData.some(cell => cell !== null && cell !== '') || String(rowData[0]).toLowerCase().startsWith('summe')) {
-                            startRow = r + 1;
-                            break;
-                        }
-                        
-                        for (let c = 0; c < dataHeaderRow.length; c++) {
-                            const header = String(dataHeaderRow[c]).toLowerCase();
-                            if (header === 'datum') {
-                                const categoryName = filledCategories[c];
-                                const dateCell = rowData[c];
-                                const amountCell = rowData[c + 1];
-
-                                if (!categoryName || !dateCell || amountCell === null || String(amountCell).trim() === '') continue;
+                            if (date && isValid(date)) {
+                                // Handle Amount columns
+                                const columnsToProcess = categoryName.toLowerCase() === 'auto' ? [1] : (categoryName.toLowerCase() === 'kv' ? [1, 2] : [1]);
                                 
-                                let day: number | null = null;
-                                
-                                if (dateCell instanceof Date && isValid(dateCell)) {
-                                    day = dateCell.getUTCDate();
-                                } else {
-                                    const dayMatch = String(dateCell).match(/^(\d{1,2})/);
-                                    if(dayMatch && dayMatch[1]) {
-                                       day = parseInt(dayMatch[1], 10);
+                                for (const colIndex of columnsToProcess) {
+                                    const amountCell = rowData[colIndex];
+                                    if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '') {
+                                        const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
+                                        if (!isNaN(amount) && amount !== 0) {
+                                            if (amount < 0) { // Reimbursement
+                                                allTransactions.push({
+                                                    description: `${description} Erstattung`,
+                                                    amount: Math.abs(amount),
+                                                    date,
+                                                    categoryId: 'Einnahmen'
+                                                });
+                                                allDetectedCategories.add('Einnahmen');
+                                            } else {
+                                                allTransactions.push({
+                                                    description,
+                                                    amount,
+                                                    date,
+                                                    categoryId: categoryName
+                                                });
+                                            }
+                                        }
                                     }
                                 }
-
-                                if (day === null || isNaN(day) || day < 1 || day > 31) continue;
-
-                                const date = new Date(Date.UTC(fileYear, monthIndex, day, 12, 0, 0));
-                                if (!isValid(date)) continue;
-
-                                const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
-                                if (!isNaN(amount) && amount > 0) {
-                                    allTransactions.push({
-                                        description: categoryName,
-                                        amount: Math.abs(amount),
-                                        date,
-                                        categoryId: categoryName
-                                    });
-                                }
                             }
+                            currentRow++;
                         }
-                        if (r === sheetJson.length - 1) startRow = sheetJson.length;
+                        r = currentRow; // Continue search from where we left off
                     }
                 }
                 
-                for (let r = 0; r < sheetJson.length; r++) {
-                    const rowData = sheetJson[r];
-                    if (rowData && typeof rowData[0] === 'string' && String(rowData[0]).toLowerCase().includes('rate haus')) {
-                        const amountCell = sheetJson[r + 1]?.[1];
-                        if (amountCell) {
-                             const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
-                             if (!isNaN(amount) && amount > 0) {
-                                const date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
-                                if (isValid(date)) {
-                                    allTransactions.push({
-                                        description: "Rate Haus",
-                                        amount: Math.abs(amount),
-                                        date: date,
-                                        categoryId: "Haushalt"
-                                    });
-                                    allDetectedCategories.add("Haushalt");
-                                }
-                             }
-                        }
-                    }
-                }
-
-                let einnahmenRowIndex = -1;
-                for (let r = 0; r < sheetJson.length; r++) {
-                    const rowData = sheetJson[r];
-                    if (rowData && typeof rowData[0] === 'string' && String(rowData[0]).toLowerCase().startsWith('einnahmen')) {
-                        einnahmenRowIndex = r;
-                        break;
-                    }
-                }
+                // Process income
+                const einnahmenRowIndex = sheetJson.findIndex(row => typeof row[0] === 'string' && row[0].toLowerCase().startsWith('einnahmen'));
 
                 if (einnahmenRowIndex !== -1) {
+                    allDetectedCategories.add("Einnahmen");
                     for (let r = einnahmenRowIndex + 1; r < sheetJson.length; r++) {
                         const rowData = sheetJson[r];
-                        if (!rowData) break;
+                        if (!rowData || !rowData.some(cell => cell !== null && cell !== '')) break;
                         
-                        const description = rowData?.[0];
+                        const description = rowData[0];
+                        if (typeof description === 'string' && description.toLowerCase().startsWith('summe')) break;
                         
-                        if (!description || typeof description !== 'string' || description.toLowerCase().startsWith('summe')) {
-                           if (!description || String(description).trim() === '') break;
-                           if (typeof description === 'string' && (description.toLowerCase().startsWith('summe'))) break;
-                           continue;
-                        }
-
-                        const amountCell = rowData?.[1] ?? rowData?.[2];
-
-                        if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '' && Number(amountCell) > 0) {
-                             const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
-                             if (!isNaN(amount) && amount > 0) {
-                                 const finalDescription = description.trim().toLowerCase() === 'sonstige' ? "Sonstige Einnahmen" : description;
-                                 const date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
-                                 if (isValid(date)) {
-                                     allTransactions.push({
-                                         description: finalDescription,
-                                         amount: amount,
-                                         date: date,
-                                         categoryId: "Einnahmen"
-                                     });
-                                     allDetectedCategories.add("Einnahmen");
-                                 }
+                        if (description && typeof description === 'string' && description.trim() !== '') {
+                            const amountCell = rowData[1] ?? rowData[2];
+                             if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '' && Number(amountCell) > 0) {
+                                const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
+                                if (!isNaN(amount) && amount > 0) {
+                                    const date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                                    if (isValid(date)) {
+                                        allTransactions.push({
+                                            description: description.trim(),
+                                            amount: amount,
+                                            date: date,
+                                            categoryId: "Einnahmen"
+                                        });
+                                    }
+                                }
                              }
                         }
                     }
