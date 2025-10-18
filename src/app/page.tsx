@@ -90,12 +90,12 @@ export default function Dashboard() {
     };
     
     const transactionId = dataToSave.id;
-    // Remove the client-side 'id' before saving.
-    delete (dataToSave as any).id;
   
     if (transactionId) {
       // This is an update to an existing document.
       const docRef = doc(firestore, 'users', user.uid, 'transactions', transactionId);
+      // Remove the client-side 'id' before saving.
+      delete (dataToSave as any).id;
       // Add an 'updatedAt' field for updates.
       setDocumentNonBlocking(docRef, { ...dataToSave, updatedAt: serverTimestamp() }, { merge: true });
     } else {
@@ -165,9 +165,8 @@ export default function Dashboard() {
     }
   };
   
-  const { filteredTransactions, availableYears } = useMemo(() => {
-    const currentDefaultYear = new Date().getFullYear();
-    if (!allTransactions) return { filteredTransactions: [], availableYears: [currentDefaultYear] };
+  const availableYears = useMemo(() => {
+    if (!allTransactions) return [new Date().getFullYear()];
 
     const years = new Set<number>();
     allTransactions.forEach(t => {
@@ -178,8 +177,14 @@ export default function Dashboard() {
         }
       }
     });
+    
+    if (years.size === 0) return [new Date().getFullYear()];
 
-    const sortedYears = Array.from(years).sort((a, b) => b - a);
+    return Array.from(years).sort((a, b) => b - a);
+  }, [allTransactions]);
+
+  const filteredTransactions = useMemo(() => {
+    if (!allTransactions) return [];
 
     const filtered = allTransactions.filter(t => {
       if (!t.date) return false;
@@ -188,16 +193,13 @@ export default function Dashboard() {
       return getMonth(date) === currentMonth && getYear(date) === currentYear;
     });
 
-    const sorted = filtered.sort((a, b) => {
+    return filtered.sort((a, b) => {
         const dateA = toDate(a.date as any);
         const dateB = toDate(b.date as any);
         if (!isValid(dateA) || !isValid(dateB)) return 0;
         return dateB.getTime() - dateA.getTime();
     });
     
-    const finalYears = sortedYears.length > 0 ? sortedYears : [currentDefaultYear];
-
-    return { filteredTransactions: sorted, availableYears: finalYears };
   }, [allTransactions, currentMonth, currentYear]);
 
   useEffect(() => {

@@ -113,10 +113,10 @@ export function AddTransactionSheet({
 
   useEffect(() => {
     if (open) {
-        let defaultValues: TransactionFormValues = {
+        let defaultValues: Partial<TransactionFormValues> = {
             id: undefined,
             description: '',
-            amounts: [{ value: undefined as any }],
+            amounts: [{ value: '' as any }],
             categoryId: '',
             date: new Date(),
             isRecurring: false,
@@ -129,14 +129,14 @@ export function AddTransactionSheet({
             defaultValues = {
                 id: transaction.id,
                 description: transaction.description || '',
-                amounts: transaction.amount ? [{ value: transaction.amount }] : [{ value: undefined as any }],
+                amounts: transaction.amount ? [{ value: transaction.amount }] : [{ value: '' as any }],
                 categoryId: transaction.categoryId || '',
                 date: isValid(transactionDate) ? transactionDate : new Date(),
                 isRecurring: (transaction as any).isRecurring || false,
             };
         }
         
-        form.reset(defaultValues);
+        form.reset(defaultValues as TransactionFormValues);
         setSuggestion(null);
     }
   }, [open, transaction, form]);
@@ -235,7 +235,7 @@ export function AddTransactionSheet({
                   </div>
                 ))}
                  {form.formState.errors.amounts && <p className="text-sm text-destructive mt-1">{form.formState.errors.amounts.root?.message}</p>}
-                 <Button type="button" variant="outline" size="sm" onClick={() => append({ value: undefined as any })}>
+                 <Button type="button" variant="outline" size="sm" onClick={() => append({ value: '' as any })}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Betrag hinzufügen
                 </Button>
