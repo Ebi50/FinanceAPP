@@ -132,9 +132,9 @@ const categoryNameMap = useMemo(() => {
                 
                 const incomeCategoryId = categoryNameMap.get('einnahmen');
 
-                // Phase 1: Process horizontal blocks (upper part of the sheet)
+                // Phase 1: Process horizontal blocks (upper part of the sheet, A-K)
                 const headerRow = rawJson[0] || [];
-                for (let col = 0; col < 11; col += 2) { // Spalte A bis K
+                for (let col = 0; col < 11; col += 2) { 
                     const categoryNameCell = headerRow[col];
                     if (typeof categoryNameCell === 'string' && categoryNameCell.trim()) {
                         const categoryName = categoryNameCell.trim();
@@ -143,7 +143,7 @@ const categoryNameMap = useMemo(() => {
                         let currentRow = 2; // Start from the third row
                         while (currentRow < 29 && currentRow < rawJson.length) {
                             const rowData = rawJson[currentRow];
-                            if (!rowData || !rowData.some(c => c !== null && String(c).trim() !== '') || (typeof rowData[col] === 'string' && String(rowData[col]).toLowerCase().includes('summe'))) {
+                            if (!rowData || !rowData[col] && !rowData[col+1] || (typeof rowData[col] === 'string' && String(rowData[col]).toLowerCase().includes('summe'))) {
                                 break;
                             }
 
@@ -162,7 +162,7 @@ const categoryNameMap = useMemo(() => {
                                     if (dayMatch) {
                                        const day = parseInt(dayMatch[1], 10);
                                        date = new Date(Date.UTC(fileYear, monthIndex, day, 12, 0, 0));
-                                       description = categoryName;
+                                       description = dateOrDescCell.substring(dayMatch[0].length).trim() || categoryName;
                                     } else {
                                         description = dateOrDescCell.trim();
                                         date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
@@ -175,13 +175,13 @@ const categoryNameMap = useMemo(() => {
                                 const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
                                 if (date && isValid(date) && !isNaN(amount) && amount !== 0) {
                                     if (amount < 0 && incomeCategoryId) {
+                                        allDetectedCategories.add("Einnahmen");
                                         allTransactions.push({
                                             description: `${description} Erstattung`,
                                             amount: Math.abs(amount),
                                             date,
                                             categoryId: "Einnahmen"
                                         });
-                                        allDetectedCategories.add('Einnahmen');
                                     } else {
                                         allTransactions.push({
                                             description,
@@ -193,54 +193,52 @@ const categoryNameMap = useMemo(() => {
                                 }
                             }
                              // Special KV Case
-                            if (categoryName.toLowerCase() === 'kv' && rowData[col + 2] !== null) {
+                            if (categoryName.toLowerCase().startsWith('kv') && col + 2 < 11 && rowData[col + 2] !== null) {
                                 const timoAmountCell = rowData[col+2];
                                 const timoAmount = typeof timoAmountCell === 'number' ? timoAmountCell : parseFloat(String(timoAmountCell).replace('.', '').replace(',', '.'));
-                                if (date && isValid(date) && !isNaN(timoAmount) && timoAmount !== 0) {
+                                if (dateOrDescCell && !isNaN(timoAmount) && timoAmount !== 0) {
+                                     const date = dateOrDescCell instanceof Date ? new Date(Date.UTC(fileYear, monthIndex, dateOrDescCell.getUTCDate(), 12, 0, 0)) : new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
                                      allTransactions.push({
-                                        description: `${description} (Timo)`,
+                                        description: `${String(dateOrDescCell)} (Timo)`,
                                         amount: Math.abs(timoAmount),
                                         date,
                                         categoryId: categoryName
                                     });
                                 }
                             }
-
-
                             currentRow++;
                         }
                     }
                 }
 
-                // Phase 2: Process vertical blocks (lower part)
+                // Phase 2: Process vertical blocks (lower part, from L)
                 for (let startRow = 29; startRow < rawJson.length; startRow++) {
-                    const categoryNameCell = rawJson[startRow]?.[0]; // Usually in Column A for vertical
+                    const categoryNameCell = rawJson[startRow]?.[11]; // Column L
                      if (typeof categoryNameCell === 'string' && categoryNameCell.trim() && !categoryNameCell.toLowerCase().includes('summe') && !categoryNameCell.toLowerCase().includes('einnahmen')) {
                        const categoryName = categoryNameCell.trim();
                        allDetectedCategories.add(categoryName);
 
-                       let currentRow = startRow + 2;
+                       let currentRow = startRow + 2; // Data starts 2 rows below header
                        while(currentRow < rawJson.length) {
                          const rowData = rawJson[currentRow];
-                         if (!rowData || !rowData.some(c => c !== null && String(c).trim() !== '') || (typeof rowData[0] === 'string' && String(rowData[0]).toLowerCase().includes('summe'))) {
-                            startRow = currentRow; 
+                         if (!rowData || !rowData[11] || (typeof rowData[11] === 'string' && String(rowData[11]).toLowerCase().includes('summe'))) {
+                            startRow = currentRow; // Skip processed rows
                             break;
                          }
-                         const dateOrDescCell = rowData[0];
-                         const amountCell = rowData[1];
+                         const descCell = rowData[11];
+                         const amountCell = rowData[12];
                          
-                         let date: Date | null = null;
                          let description: string = '';
 
-                         if (typeof dateOrDescCell === 'string' && dateOrDescCell.trim()) {
-                             description = dateOrDescCell.trim();
+                         if (typeof descCell === 'string' && descCell.trim()) {
+                             description = descCell.trim();
                          }
-                         date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                         const date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
 
                          if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '') {
                             const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
-                            if(date && isValid(date) && !isNaN(amount) && amount !== 0) {
-                                allTransactions.push({ description, amount, date, categoryId: categoryName });
+                            if(isValid(date) && !isNaN(amount) && amount !== 0) {
+                                allTransactions.push({ description, amount: Math.abs(amount), date, categoryId: categoryName });
                             }
                          }
                          currentRow++;
@@ -254,7 +252,7 @@ const categoryNameMap = useMemo(() => {
                     allDetectedCategories.add("Einnahmen");
                     for (let r = einnahmenRowIndex + 1; r < rawJson.length; r++) {
                         const rowData = rawJson[r];
-                        if (!rowData || !rowData.some(cell => cell !== null && String(cell).trim() !== '') || (typeof rowData[0] === 'string' && String(rowData[0]).toLowerCase().startsWith('summe'))) break;
+                        if (!rowData || !rowData[0] || (typeof rowData[0] === 'string' && String(rowData[0]).toLowerCase().startsWith('summe'))) break;
                         
                         const description = rowData[0];
                         if (description && typeof description === 'string' && description.trim() !== '') {
@@ -318,14 +316,11 @@ const categoryNameMap = useMemo(() => {
     try {
       const transactionsWithMappedCategory = allParsedTransactions
         .map(t => {
-          // t.categoryId holds the original category name from Excel (the "Quell-Kategorie")
           const excelCategoryName = t.categoryId; 
           const mappedAppCategoryId = headerMapping[excelCategoryName];
           
-          // Only include transaction if a mapping was made
           if (!mappedAppCategoryId) return null;
 
-          // Create a new transaction object with the mapped category ID
           return { ...t, categoryId: mappedAppCategoryId };
         })
         .filter((t): t is MappedTransaction => t !== null);
@@ -405,7 +400,7 @@ const categoryNameMap = useMemo(() => {
             <DialogHeader>
                 <DialogTitle>Kategorien zuordnen</DialogTitle>
                 <DialogDescription>
-                    Bitte ordnen Sie die gefundenen Kategorien aus Ihrer Excel-Datei den App-Kategorien zu.
+                    Bitte ordnen Sie die gefundenen Kategorien aus Ihrer Excel-Datei den App-Kategorien zu. Nicht zugeordnete Kategorien werden nicht importiert.
                 </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4 max-h-96 overflow-y-auto pr-2">
@@ -434,7 +429,7 @@ const categoryNameMap = useMemo(() => {
             </div>
             <DialogFooter>
                 <Button variant="outline" onClick={() => setIsMappingDialogOpen(false)}>Abbrechen</Button>
-                <Button onClick={processImport} disabled={detectedHeaders.some(h => !headerMapping[h])}>Importieren</Button>
+                <Button onClick={processImport}>Importieren</Button>
             </DialogFooter>
         </DialogContent>
     </Dialog>
