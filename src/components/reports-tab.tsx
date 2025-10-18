@@ -33,6 +33,7 @@ interface ReportsTabProps {
   availableYears: number[];
   currentYear: number;
   setCurrentYear: (year: number) => void;
+  currentMonth: number;
 }
 
 interface AutoTableDoc extends jsPDF {
@@ -40,7 +41,7 @@ interface AutoTableDoc extends jsPDF {
 }
 
 
-export function ReportsTab({ transactions, availableYears, currentYear, setCurrentYear }: ReportsTabProps) {
+export function ReportsTab({ transactions, availableYears, currentYear, setCurrentYear, currentMonth }: ReportsTabProps) {
   const { toast } = useToast();
   const { user } = useUser();
   const firestore = useFirestore();
@@ -54,16 +55,16 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
   
   const incomeCategory = useMemo(() => categories?.find(c => c.name.toLowerCase() === 'einnahmen'), [categories]);
 
-  const generatePdf = (period: "monthly" | "yearly", year: number) => {
+  const generatePdf = (period: "monthly" | "yearly", year: number, month: number) => {
     const doc = new jsPDF() as AutoTableDoc;
 
-    const allDates = transactions.map(t => t.date.toDate()).filter(isValid);
-    if (allDates.length === 0 && period === "monthly") {
-        toast({ title: "Keine Daten", description: "Keine Transaktionen für die Berichterstellung vorhanden." });
-        return;
+    if (transactions.length === 0) {
+      toast({ title: "Keine Daten", description: "Keine Transaktionen für die Berichterstellung vorhanden." });
+      return;
     }
-    const reportMonth = period === "monthly" ? getMonth(allDates[0]) : new Date().getMonth();
-    const reportDate = new Date(year, reportMonth);
+    
+    // For monthly report, use the month passed in. For yearly, it doesn't matter.
+    const reportDate = new Date(year, month);
     
     const reportTransactions = transactions.filter(t => {
       const transactionDate = t.date.toDate();
@@ -72,10 +73,10 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
 
       if (period === "monthly") {
         return (
-          getMonth(transactionDate) === reportMonth &&
+          getMonth(transactionDate) === month &&
           transactionYear === year
         );
-      } else {
+      } else { // yearly
         return transactionYear === year;
       }
     });
@@ -212,11 +213,11 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                 </Select>
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
-                <Button variant="secondary" onClick={() => generatePdf("monthly", currentYear)}>
+                <Button variant="secondary" onClick={() => generatePdf("monthly", currentYear, currentMonth)}>
                     <Download className="mr-2 h-4 w-4" />
                     Monatlicher Bericht (PDF)
                 </Button>
-                <Button variant="secondary" onClick={() => generatePdf("yearly", currentYear)}>
+                <Button variant="secondary" onClick={() => generatePdf("yearly", currentYear, currentMonth)}>
                     <Download className="mr-2 h-4 w-4" />
                     Jahresbericht (PDF)
                 </Button>

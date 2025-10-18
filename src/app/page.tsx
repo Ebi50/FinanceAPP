@@ -312,10 +312,11 @@ export default function Dashboard() {
           </TabsList>
           <TabsContent value="reports" className="space-y-4">
             <ReportsTab 
-              transactions={allTransactions || []}
+              transactions={filteredTransactions || []}
               availableYears={availableYears}
               currentYear={currentYear}
               setCurrentYear={setCurrentYear}
+              currentMonth={currentMonth}
             />
           </TabsContent>
           <TabsContent value="import" className="space-y-4">
