@@ -28,7 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
 import type { Transaction, Category } from "@/lib/types";
 import React, { useState, useMemo } from "react";
-import { format, toDate, isValid, getYear, getMonth, set } from "date-fns";
+import { format, isValid, getYear } from "date-fns";
 
 type MappedTransaction = Omit<Transaction, 'id' | 'createdAt'>;
 type RawRow = (string | number | Date | null)[];
@@ -83,7 +83,6 @@ const categoryNameMap = useMemo(() => {
       return;
     }
     const worksheetData = transactions.map((t) => {
-      // This is now safe because we ensured date is a valid object
       const date = t.date.toDate();
       const category = categoryIdMap.get(t.categoryId);
       const isIncome = category?.toLowerCase() === 'einnahmen';
@@ -129,19 +128,17 @@ const categoryNameMap = useMemo(() => {
 
                 const rawJson = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as RawRow[];
                 
-                // Cut off all columns from 'O' (15th column, index 14) onwards.
                 const sheetJson = rawJson.map(row => row.slice(0, 14));
                 
                 if (sheetJson.length < 2) return;
                 
-                // Process expenses
                 for (let r = 0; r < sheetJson.length; r++) {
                     const firstCell = sheetJson[r][0];
                     if (typeof firstCell === 'string' && firstCell.match(/^[a-zA-ZäöüÄÖÜß\.\/\s]+ \d+$/)) {
                         const categoryName = firstCell.replace(/\s+\d+$/, '').trim();
                         allDetectedCategories.add(categoryName);
 
-                        let currentRow = r + 2; // Skip header row
+                        let currentRow = r + 2; 
                         while(currentRow < sheetJson.length) {
                             const rowData = sheetJson[currentRow];
                             if (!rowData || !rowData.some(c => c !== null && c !== '')) {
@@ -154,25 +151,24 @@ const categoryNameMap = useMemo(() => {
 
                             let description = '';
                             let date: Date | null = null;
-
-                            // Handle Date/Description column
-                            if (cell1 instanceof Date && isValid(cell1)) {
-                                date = new Date(Date.UTC(fileYear, monthIndex, cell1.getUTCDate(), 12, 0, 0));
-                                description = categoryName;
-                            } else if (typeof cell1 === 'string' && cell1.match(/^\d{1,2}\.\s[A-Za-z]{3}/)) {
-                                const dayMatch = cell1.match(/^(\d{1,2})/);
+                            
+                            const dayString = String(cell1);
+                            if (dayString.match(/^\d{1,2}\.\s[A-Za-z]{3}/)) {
+                                const dayMatch = dayString.match(/^(\d{1,2})/);
                                 if (dayMatch) {
                                     const day = parseInt(dayMatch[1], 10);
                                     date = new Date(Date.UTC(fileYear, monthIndex, day, 12, 0, 0));
                                 }
                                 description = categoryName;
+                            } else if (cell1 instanceof Date && isValid(cell1)) {
+                                date = new Date(Date.UTC(fileYear, monthIndex, cell1.getUTCDate(), 12, 0, 0));
+                                description = categoryName;
                             } else if (typeof cell1 === 'string' && cell1.trim() !== '') {
                                 description = cell1.trim();
                                 date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
                             }
-
+                            
                             if (date && isValid(date)) {
-                                // Handle Amount columns
                                 const columnsToProcess = categoryName.toLowerCase() === 'auto' ? [1] : (categoryName.toLowerCase() === 'kv' ? [1, 2] : [1]);
                                 
                                 for (const colIndex of columnsToProcess) {
@@ -180,7 +176,7 @@ const categoryNameMap = useMemo(() => {
                                     if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '') {
                                         const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
                                         if (!isNaN(amount) && amount !== 0) {
-                                            if (amount < 0) { // Reimbursement
+                                            if (amount < 0) { 
                                                 allTransactions.push({
                                                     description: `${description} Erstattung`,
                                                     amount: Math.abs(amount),
@@ -202,11 +198,10 @@ const categoryNameMap = useMemo(() => {
                             }
                             currentRow++;
                         }
-                        r = currentRow; // Continue search from where we left off
+                        r = currentRow; 
                     }
                 }
                 
-                // Process income
                 const einnahmenRowIndex = sheetJson.findIndex(row => typeof row[0] === 'string' && row[0].toLowerCase().startsWith('einnahmen'));
 
                 if (einnahmenRowIndex !== -1) {
@@ -219,7 +214,7 @@ const categoryNameMap = useMemo(() => {
                         if (typeof description === 'string' && description.toLowerCase().startsWith('summe')) break;
                         
                         if (description && typeof description === 'string' && description.trim() !== '') {
-                            const amountCell = rowData[1] ?? rowData[2];
+                             const amountCell = rowData[1] ?? rowData[2];
                              if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '' && Number(amountCell) > 0) {
                                 const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
                                 if (!isNaN(amount) && amount > 0) {
@@ -275,25 +270,28 @@ const categoryNameMap = useMemo(() => {
 
   const processImport = () => {
     if (allParsedTransactions.length === 0) return;
-
+  
     try {
-      const transactionsWithMappedCategory = allParsedTransactions.map(t => {
-        const mappedCatId = headerMapping[t.categoryId]; // t.categoryId is still the name here
-        if (!mappedCatId) return null; // Skip if category is not mapped
-        return { ...t, categoryId: mappedCatId };
-      }).filter((t): t is MappedTransaction => t !== null);
-
+      const transactionsWithMappedCategory = allParsedTransactions
+        .map(t => {
+          // Here, t.categoryId is still the original category name from Excel (e.g., "Lebensmittel")
+          const mappedCatId = headerMapping[t.categoryId]; 
+          if (!mappedCatId) return null; // Skip if category is not mapped
+          return { ...t, categoryId: mappedCatId }; // Replace original name with the mapped ID
+        })
+        .filter((t): t is MappedTransaction => t !== null);
+  
       if (transactionsWithMappedCategory.length === 0) {
-        throw new Error("Keine Transaktionen nach der Kategoriezuordnung übrig.");
+        throw new Error("Keine Transaktionen nach der Kategoriezuordnung übrig. Bitte stellen Sie sicher, dass alle Kategorien zugeordnet sind.");
       }
-
+  
       onImport(transactionsWithMappedCategory);
       
       toast({
           title: "Import erfolgreich gestartet",
           description: `${transactionsWithMappedCategory.length} Transaktionen werden im Hintergrund importiert.`,
       });
-
+  
     } catch (error: any) {
         console.error("Fehler beim Importieren der Datei:", error);
         toast({
