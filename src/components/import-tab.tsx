@@ -104,7 +104,7 @@ export function ImportTab({ transactions }: ImportTabProps) {
         }) as RawTransactionData;
         
         if (!json || json.length < 2) {
-            throw new Error("Die Excel-Datei ist zu klein oder konnte nicht gelesen werden.");
+            throw new Error("Die Excel-Datei konnte nicht verarbeitet werden. Entweder ist sie leer oder zu klein. Bitte stellen Sie sicher, dass sie korrekt formatiert ist.");
         }
 
         let dataHeaderRowIndex = -1;
@@ -137,17 +137,16 @@ export function ImportTab({ transactions }: ImportTabProps) {
         }
         
         const dataHeaderRow = json[dataHeaderRowIndex].map(h => String(h || '').toLowerCase());
-        const headersToMap: string[] = [];
+        const headersToMapSet = new Set<string>();
 
         dataHeaderRow.forEach((header, index) => {
             if (header === 'datum' && filledCategoryRow[index]) {
                 const categoryName = filledCategoryRow[index]!;
-                if (!headersToMap.includes(categoryName)) {
-                    headersToMap.push(categoryName);
-                }
+                headersToMapSet.add(categoryName);
             }
         });
-
+        
+        const headersToMap = Array.from(headersToMapSet);
 
         if (headersToMap.length === 0) {
           throw new Error("Keine zuzuordnenden Kategorien in der Datei gefunden. Bitte prüfen Sie die Struktur Ihrer Excel-Datei.");
@@ -361,7 +360,7 @@ export function ImportTab({ transactions }: ImportTabProps) {
             </DialogHeader>
             <div className="space-y-4 py-4 max-h-96 overflow-y-auto pr-2">
                 {detectedHeaders.map(header => (
-                    <div key={header} className="grid grid-cols-[1fr_auto] items-center gap-4">
+                    <div key={header} className="grid grid-cols-2 items-center gap-4">
                         <Label htmlFor={`mapping-${header}`} className="text-left font-semibold truncate">
                           {header}
                         </Label>
@@ -369,7 +368,7 @@ export function ImportTab({ transactions }: ImportTabProps) {
                             value={headerMapping[header] || ''}
                             onValueChange={(value) => handleMappingChange(header, value)}
                         >
-                            <SelectTrigger id={`mapping-${header}`} className="w-full min-w-[200px]">
+                            <SelectTrigger id={`mapping-${header}`} className="w-full">
                                 <SelectValue placeholder="Kategorie auswählen" />
                             </SelectTrigger>
                             <SelectContent>
