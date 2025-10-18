@@ -17,10 +17,10 @@ import { ReportsTab } from "@/components/reports-tab";
 import { ImportTab } from "@/components/import-tab";
 import { AddTransactionSheet } from "@/components/add-transaction-sheet";
 import type { Transaction, Category } from '@/lib/types';
-import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase, addDocumentNonBlocking, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { useUser, useFirestore, useCollection, useDoc, setDocumentNonBlocking, deleteDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
 import { collection, doc, serverTimestamp, writeBatch, getDocs, Timestamp } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -33,6 +33,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { useMemoFirebase } from '@/firebase/provider';
 
 
 export default function Dashboard() {
@@ -67,29 +68,24 @@ export default function Dashboard() {
   const budget = userProfile?.budget ?? 2000;
 
 
-  const handleAddOrUpdateTransaction = (transaction: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date }) => {
-    if (!user) return;
+  const handleAddOrUpdateTransaction = (transactionData: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date }) => {
+    if (!user || !firestore) return;
     const coll = collection(firestore, 'users', user.uid, 'transactions');
     
-    if (transaction.id) {
-        // This is an update to an existing document
-        const docRef = doc(coll, transaction.id);
-        const { id, ...dataToUpdate } = transaction;
-        const updateData = {
-            ...dataToUpdate,
-            date: Timestamp.fromDate(transaction.date), // Ensure date is a Timestamp
-            updatedAt: serverTimestamp()
-        };
-        setDocumentNonBlocking(docRef, updateData, { merge: true });
+    // Prepare the data by converting the JS Date to a Firestore Timestamp.
+    const { id, date, ...data } = transactionData;
+    const dataToSave = {
+        ...data,
+        date: Timestamp.fromDate(date),
+    };
+
+    if (id) {
+        // This is an update to an existing document.
+        const docRef = doc(coll, id);
+        setDocumentNonBlocking(docRef, { ...dataToSave, updatedAt: serverTimestamp() }, { merge: true });
     } else {
-        // This is a new document
-        const { id, ...dataToAdd } = transaction; 
-        const createData = {
-            ...dataToAdd,
-            date: Timestamp.fromDate(transaction.date), // Ensure date is a Timestamp
-            createdAt: serverTimestamp()
-        };
-        addDocumentNonBlocking(coll, createData);
+        // This is a new document.
+        addDocumentNonBlocking(coll, { ...dataToSave, createdAt: serverTimestamp() });
     }
   };
 

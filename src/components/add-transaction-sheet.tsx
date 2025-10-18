@@ -40,7 +40,7 @@ import * as z from 'zod';
 import { suggestExpenseCategory } from '@/ai/flows/suggest-expense-category';
 import type { Transaction, Category } from '@/lib/types';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, serverTimestamp } from 'firebase/firestore';
+import { collection } from 'firebase/firestore';
 
 const transactionSchema = z.object({
   id: z.string().optional(),
@@ -116,41 +116,46 @@ export function AddTransactionSheet({
   useEffect(() => {
     if (open) {
       const isEditing = !!transaction;
-
-      let defaultValues: Partial<TransactionFormValues> = {
-        id: undefined,
-        description: '',
-        amounts: [{ value: undefined as any }],
-        categoryId: '',
-        date: new Date(),
-        isRecurring: false,
-      };
+      let defaultDate = new Date();
+      let defaultAmounts: { value: number | '' }[] = [{ value: '' }];
 
       if (isEditing && transaction) {
         // This is a robust way to convert a Firestore Timestamp or a JS Date to a JS Date.
         const dateValue = transaction.date;
-        let dateToSet: Date;
-
         if (dateValue && typeof (dateValue as any).toDate === 'function') {
           // It's a Firestore Timestamp
-          dateToSet = (dateValue as any).toDate();
+          defaultDate = (dateValue as any).toDate();
+        } else if (dateValue instanceof Date) {
+          defaultDate = dateValue;
         } else {
-          // It might be a string or JS Date, so we parse it
-          const parsedDate = toDate(dateValue);
-          dateToSet = isValid(parsedDate) ? parsedDate : new Date();
+            const parsed = toDate(dateValue);
+            if(isValid(parsed)) {
+                defaultDate = parsed;
+            }
         }
+        
+        defaultAmounts = transaction.amount ? [{ value: transaction.amount }] : [{ value: '' }];
 
-        defaultValues = {
+        form.reset({
           id: transaction.id,
           description: transaction.description || '',
-          amounts: transaction.amount ? [{ value: transaction.amount }] : [{ value: undefined as any }],
+          amounts: defaultAmounts,
           categoryId: transaction.categoryId || '',
-          date: dateToSet,
+          date: defaultDate,
           isRecurring: (transaction as any).isRecurring || false,
-        };
+        });
+
+      } else {
+        // Reset for new transaction
+        form.reset({
+          id: undefined,
+          description: '',
+          amounts: [{ value: '' }],
+          categoryId: '',
+          date: new Date(),
+          isRecurring: false,
+        });
       }
-      
-      form.reset(defaultValues as TransactionFormValues);
       setSuggestion(null);
     }
   }, [open, transaction, form, categories]);
@@ -228,12 +233,20 @@ export function AddTransactionSheet({
                 <Label>Beträge</Label>
                 {fields.map((field, index) => (
                   <div key={field.id} className="flex items-center gap-2">
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0,00"
-                      {...form.register(`amounts.${index}.value`, { valueAsNumber: true })}
-                      className="text-right text-base"
+                    <Controller
+                        control={form.control}
+                        name={`amounts.${index}.value`}
+                        render={({ field }) => (
+                            <Input
+                                {...field}
+                                type="number"
+                                step="0.01"
+                                placeholder="0,00"
+                                className="text-right text-base"
+                                value={field.value === 0 ? '' : field.value}
+                                onChange={e => field.onChange(e.target.valueAsNumber || '')}
+                            />
+                        )}
                     />
                     <Button type="button" variant="outline" size="icon" onClick={() => remove(index)} disabled={fields.length <= 1}>
                       <Trash2 className="h-4 w-4" />
@@ -241,7 +254,7 @@ export function AddTransactionSheet({
                   </div>
                 ))}
                  {form.formState.errors.amounts && <p className="text-sm text-destructive mt-1">{form.formState.errors.amounts.root?.message}</p>}
-                 <Button type="button" variant="outline" size="sm" onClick={() => append({ value: undefined as any })}>
+                 <Button type="button" variant="outline" size="sm" onClick={() => append({ value: '' })}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Betrag hinzufügen
                 </Button>
@@ -318,8 +331,8 @@ export function AddTransactionSheet({
                           )}
                         >
                           <CalendarIcon className="mr-2 h-4 w-4" />
-                          {field.value && isValid(new Date(field.value)) ? (
-                            format(new Date(field.value), 'PPP', { locale: de })
+                          {field.value && isValid(field.value) ? (
+                            format(field.value, 'PPP', { locale: de })
                           ) : (
                             <span>Datum auswählen</span>
                           )}
