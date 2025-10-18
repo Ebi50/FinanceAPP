@@ -328,7 +328,7 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
             </DialogHeader>
             <div className="space-y-4 py-4 max-h-96 overflow-y-auto pr-2">
                 {detectedHeaders.map(header => (
-                    <div key={header} className="grid grid-cols-[1fr_auto] items-center gap-4">
+                    <div key={header} className="grid grid-cols-[1fr_1fr] items-center gap-4">
                         <Label htmlFor={`mapping-${header}`} className="text-left font-semibold truncate">
                           {header}
                         </Label>
