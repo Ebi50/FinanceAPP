@@ -115,7 +115,7 @@ export function AddTransactionSheet({
 
   useEffect(() => {
     // Only reset form if the sheet is open and categories have loaded.
-    if (open && !categoriesLoading) {
+    if (open && !categoriesLoading && categories) {
         const isEditing = !!transaction;
 
         // Default values for a new transaction
@@ -133,13 +133,16 @@ export function AddTransactionSheet({
             let dateToSet: Date;
             const dateValue = transaction.date;
 
-            if (dateValue instanceof Date) {
-                dateToSet = dateValue;
-            } else if (dateValue && typeof (dateValue as any).toDate === 'function') {
-                // It's a Firestore Timestamp
+            // Check if it's a Firestore Timestamp and convert
+            if (dateValue && typeof (dateValue as any).toDate === 'function') {
                 dateToSet = (dateValue as any).toDate();
-            } else {
-                // Try to parse it, assuming it might be a string or number, otherwise fallback.
+            } 
+            // Check if it's already a valid Date object
+            else if (dateValue instanceof Date && isValid(dateValue)) {
+                dateToSet = dateValue;
+            } 
+            // Try to parse it, assuming it might be a string or number, otherwise fallback.
+            else {
                 const parsedDate = toDate(dateValue);
                 dateToSet = isValid(parsedDate) ? parsedDate : new Date();
             }
@@ -159,7 +162,7 @@ export function AddTransactionSheet({
     }
   // This effect should re-run when the 'open' state changes, when a new 'transaction' is passed in,
   // or when the categories finish loading.
-  }, [open, transaction, categoriesLoading, form]);
+  }, [open, transaction, categories, categoriesLoading, form]);
 
 
   const handleSuggestion = async () => {
