@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import {
   Card,
@@ -42,12 +42,43 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
 
 export function CategoriesTab() {
-  const [categories, setCategories] = useState<Category[]>(initialCategories);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [open, setOpen] = useState(false);
   const [currentCategory, setCurrentCategory] = useState<Category | null>(null);
   const [categoryName, setCategoryName] = useState("");
+  const { toast } = useToast();
+
+  useEffect(() => {
+    try {
+      const storedCategories = localStorage.getItem('userCategories');
+      if (storedCategories) {
+        // We need to re-assign the icon components as they are not stored in JSON
+        const parsedCategories = JSON.parse(storedCategories);
+        const categoriesWithIcons = parsedCategories.map((cat: Category) => {
+            const initialCat = initialCategories.find(ic => ic.name.toLowerCase() === cat.name.toLowerCase() || ic.id === cat.id);
+            return { ...cat, icon: initialCat?.icon || initialCategories[0].icon };
+        });
+        setCategories(categoriesWithIcons);
+      } else {
+        setCategories(initialCategories);
+        localStorage.setItem('userCategories', JSON.stringify(initialCategories));
+      }
+    } catch (error) {
+      console.error("Failed to parse categories from localStorage", error);
+      setCategories(initialCategories);
+    }
+  }, []);
+
+  const updateCategories = (newCategories: Category[]) => {
+    setCategories(newCategories);
+    // When saving to localStorage, we strip out the icon component
+    const categoriesToStore = newCategories.map(({ icon, ...rest }) => rest);
+    localStorage.setItem('userCategories', JSON.stringify(categoriesToStore));
+  };
+
 
   const handleAddClick = () => {
     setCurrentCategory(null);
@@ -62,25 +93,46 @@ export function CategoriesTab() {
   };
 
   const handleDelete = (categoryId: string) => {
-    setCategories(categories.filter((c) => c.id !== categoryId));
+    const newCategories = categories.filter((c) => c.id !== categoryId);
+    updateCategories(newCategories);
+    toast({
+      title: 'Kategorie gelöscht',
+      description: 'Die Kategorie wurde erfolgreich entfernt.',
+    });
   };
 
   const handleSave = () => {
+    if (!categoryName.trim()) {
+        toast({
+            variant: "destructive",
+            title: "Fehler",
+            description: "Der Kategoriename darf nicht leer sein.",
+        });
+        return;
+    }
+
     if (currentCategory) {
       // Edit
-      setCategories(
-        categories.map((c) =>
+      const newCategories = categories.map((c) =>
           c.id === currentCategory.id ? { ...c, name: categoryName } : c
-        )
-      );
+        );
+      updateCategories(newCategories);
+       toast({
+        title: 'Kategorie aktualisiert',
+        description: 'Die Änderungen wurden erfolgreich gespeichert.',
+      });
     } else {
       // Add
       const newCategory: Category = {
         id: `cat-${Date.now()}`,
         name: categoryName,
-        icon: initialCategories[0].icon, // Default icon
+        icon: initialCategories[0].icon, // Default icon, can be made selectable later
       };
-      setCategories([...categories, newCategory]);
+      updateCategories([...categories, newCategory]);
+      toast({
+        title: 'Kategorie hinzugefügt',
+        description: `${categoryName} wurde erfolgreich erstellt.`,
+      });
     }
     setOpen(false);
     setCategoryName("");
@@ -116,7 +168,7 @@ export function CategoriesTab() {
               {categories.map((category) => (
                 <TableRow key={category.id}>
                   <TableCell className="font-medium flex items-center gap-3">
-                    <category.icon className="h-5 w-5 text-muted-foreground" />
+                    {category.icon && <category.icon className="h-5 w-5 text-muted-foreground" />}
                     {category.name}
                   </TableCell>
                   <TableCell className="text-right">
