@@ -71,7 +71,7 @@ export default function Dashboard() {
     if (!user) return;
     const coll = collection(firestore, 'users', user.uid, 'transactions');
     
-    // Prepare the data, converting the JS Date to a Firestore Timestamp
+    // Create the base data object, converting the JS Date to a Firestore Timestamp
     const dataToSave = {
       description: transaction.description,
       amount: transaction.amount,
@@ -81,12 +81,14 @@ export default function Dashboard() {
     };
 
     if (transaction.id) {
-      // This is an update
+      // This is an update to an existing document
       const docRef = doc(coll, transaction.id);
-      setDocumentNonBlocking(docRef, { ...dataToSave, updatedAt: serverTimestamp() }, { merge: true });
+      const updateData = { ...dataToSave, updatedAt: serverTimestamp() };
+      setDocumentNonBlocking(docRef, updateData, { merge: true });
     } else {
       // This is a new document
-      addDocumentNonBlocking(coll, { ...dataToSave, createdAt: serverTimestamp() });
+      const createData = { ...dataToSave, createdAt: serverTimestamp() };
+      addDocumentNonBlocking(coll, createData);
     }
   };
 

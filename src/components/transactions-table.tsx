@@ -41,7 +41,7 @@ import { collection } from 'firebase/firestore';
 interface TransactionsTableProps {
   transactions: Transaction[];
   onDelete: (id: string) => void;
-  onUpdate: (transaction: Omit<Transaction, 'id'> & { id?: string }) => void;
+  onUpdate: (transaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date; }) => void;
 }
 
 export function TransactionsTable({ transactions, onDelete, onUpdate }: TransactionsTableProps) {
@@ -65,7 +65,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
     setEditingTransaction(transaction);
   }
 
-  const handleUpdate = (updatedTransaction: Omit<Transaction, 'id'> & { id?: string }) => {
+  const handleUpdate = (updatedTransaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date; }) => {
     onUpdate(updatedTransaction);
     setEditingTransaction(null);
   }
@@ -90,6 +90,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
             const incomeCategory = categories?.find(c => c.name.toLowerCase() === 'einnahmen');
             const isIncome = category?.id === incomeCategory?.id;
             
+            // This robustly converts Firestore Timestamps or JS Dates into a JS Date for formatting
             const transactionDate = toDate(transaction.date);
 
             return (

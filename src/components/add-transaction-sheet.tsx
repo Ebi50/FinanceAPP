@@ -69,7 +69,7 @@ function SubmitButton() {
 
 interface AddTransactionSheetProps {
   children?: React.ReactNode;
-  onTransactionAdded: (transaction: Omit<Transaction, 'id' | 'createdAt'> & { id?: string }) => void;
+  onTransactionAdded: (transaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date }) => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   transaction?: Transaction | null;
@@ -114,55 +114,43 @@ export function AddTransactionSheet({
   });
 
   useEffect(() => {
-    // Only reset form if the sheet is open and categories have loaded.
-    if (open && !categoriesLoading && categories) {
-        const isEditing = !!transaction;
+    if (open) {
+      const isEditing = !!transaction;
 
-        // Default values for a new transaction
-        let defaultValues: TransactionFormValues = {
-            id: undefined,
-            description: '',
-            amounts: [{ value: 0 }],
-            categoryId: '',
-            date: new Date(),
-            isRecurring: false,
-        };
+      let defaultValues: TransactionFormValues = {
+        id: undefined,
+        description: '',
+        amounts: [{ value: 0 }],
+        categoryId: '',
+        date: new Date(),
+        isRecurring: false,
+      };
 
-        // If editing, override with transaction data
-        if (isEditing) {
-            let dateToSet: Date;
-            const dateValue = transaction.date;
+      if (isEditing) {
+        const dateValue = transaction.date;
+        let dateToSet: Date;
 
-            // Check if it's a Firestore Timestamp and convert
-            if (dateValue && typeof (dateValue as any).toDate === 'function') {
-                dateToSet = (dateValue as any).toDate();
-            } 
-            // Check if it's already a valid Date object
-            else if (dateValue instanceof Date && isValid(dateValue)) {
-                dateToSet = dateValue;
-            } 
-            // Try to parse it, assuming it might be a string or number, otherwise fallback.
-            else {
-                const parsedDate = toDate(dateValue);
-                dateToSet = isValid(parsedDate) ? parsedDate : new Date();
-            }
-
-            defaultValues = {
-                id: transaction.id,
-                description: transaction.description || '',
-                amounts: transaction.amount ? [{ value: transaction.amount }] : [{ value: 0 }],
-                categoryId: transaction.categoryId || '',
-                date: dateToSet,
-                isRecurring: (transaction as any).isRecurring || false,
-            };
+        if (dateValue && typeof (dateValue as any).toDate === 'function') {
+          dateToSet = (dateValue as any).toDate();
+        } else {
+          const parsedDate = toDate(dateValue);
+          dateToSet = isValid(parsedDate) ? parsedDate : new Date();
         }
 
-        form.reset(defaultValues);
-        setSuggestion(null);
+        defaultValues = {
+          id: transaction.id,
+          description: transaction.description || '',
+          amounts: transaction.amount ? [{ value: transaction.amount }] : [{ value: 0 }],
+          categoryId: transaction.categoryId || '',
+          date: dateToSet,
+          isRecurring: (transaction as any).isRecurring || false,
+        };
+      }
+      
+      form.reset(defaultValues);
+      setSuggestion(null);
     }
-  // This effect should re-run when the 'open' state changes, when a new 'transaction' is passed in,
-  // or when the categories finish loading.
-  }, [open, transaction, categories, categoriesLoading, form]);
+  }, [open, transaction, form]);
 
 
   const handleSuggestion = async () => {
@@ -200,15 +188,6 @@ export function AddTransactionSheet({
       isRecurring: data.isRecurring,
     };
     onTransactionAdded(newTransaction);
-    if (!isEditing) {
-      form.reset({
-        description: '',
-        amounts: [{value: 0}],
-        categoryId: '',
-        date: new Date(),
-        isRecurring: false
-      });
-    }
     setOpen(false);
   };
   
@@ -280,11 +259,15 @@ export function AddTransactionSheet({
                           <SelectValue placeholder="Kategorie auswählen" />
                         </SelectTrigger>
                         <SelectContent>
-                          {categories?.map((cat) => (
-                            <SelectItem key={cat.id} value={cat.id}>
-                              {cat.name}
-                            </SelectItem>
-                          ))}
+                          {categoriesLoading ? (
+                             <SelectItem value="loading" disabled>Lade...</SelectItem>
+                          ) : (
+                            categories?.map((cat) => (
+                              <SelectItem key={cat.id} value={cat.id}>
+                                {cat.name}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     )}
