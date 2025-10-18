@@ -52,11 +52,20 @@ export default function SettingsPage() {
     if (storedBudget) {
       setBudget(JSON.parse(storedBudget));
     }
+    const storedName = localStorage.getItem('userName');
+    if(storedName) {
+      setName(storedName);
+    }
+    const storedEmail = localStorage.getItem('userEmail');
+    if(storedEmail) {
+      setEmail(storedEmail);
+    }
   }, []);
 
   const handleProfileSave = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Saving profile:', { name, email });
+    localStorage.setItem('userName', name);
+    localStorage.setItem('userEmail', email);
     toast({
       title: 'Profil gespeichert',
       description: 'Ihre Daten wurden erfolgreich aktualisiert.',
@@ -81,7 +90,7 @@ export default function SettingsPage() {
         });
         return;
     }
-    console.log('Saving new password');
+    console.log('Saving new password'); // For security, we don't store passwords in local storage
     toast({
       title: 'Passwort geändert',
       description: 'Ihr Passwort wurde erfolgreich geändert.',
