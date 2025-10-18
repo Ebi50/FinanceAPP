@@ -36,17 +36,8 @@ interface ImportTabProps {
   transactions: Transaction[];
 }
 
-type RawTransactionData = any[][];
+type RawTransactionData = (string | number | null)[][];
 type HeaderMapping = { [key: string]: string };
-
-interface Block {
-    categoryName: string;
-    startCol: number;
-    dateCol?: number;
-    descriptionCol?: number;
-    amountCol?: number;
-    endCol: number;
-}
 
 export function ImportTab({ transactions }: ImportTabProps) {
   const { toast } = useToast();
@@ -61,7 +52,7 @@ export function ImportTab({ transactions }: ImportTabProps) {
     if (!categories) return new Map();
     return new Map(categories.map((c) => [c.id, c.name]));
   }, [categories]);
-
+  
   const appCategoryMap = useMemo(() => {
     if (!categories) return new Map();
     return new Map(categories.map((c) => [c.name.toLowerCase(), c.id]));
@@ -111,45 +102,49 @@ export function ImportTab({ transactions }: ImportTabProps) {
               defval: null
             }) as RawTransactionData;
     
-            if (!json || json.length < 2) {
-                throw new Error("Die Excel-Datei ist zu klein oder konnte nicht gelesen werden.");
+            if (!json || json.length < 1) {
+                throw new Error("Die Excel-Datei ist leer oder konnte nicht gelesen werden.");
             }
 
-            const excelCategories = new Set<string>();
+            const headerRowIndex = json.findIndex(row => 
+                Array.isArray(row) && 
+                row.some(cell => String(cell).trim().toLowerCase() === 'datum') &&
+                row.some(cell => String(cell).trim().toLowerCase() === 'betrag')
+            );
+            
+            if (headerRowIndex === -1 || headerRowIndex === 0) {
+                 throw new Error("Gültige Kopfzeile mit 'Datum' und 'Betrag' nicht gefunden oder sie befindet sich in der ersten Zeile.");
+            }
 
-            // Find all potential category rows
-            for (let i = 0; i < json.length; i++) {
-                const row = json[i];
-                if (!Array.isArray(row)) continue;
-
-                // A category row has names and is followed by a header row with 'Datum' & 'Betrag'
-                const nextRow = json[i+1];
-                if(nextRow && Array.isArray(nextRow) && nextRow.some(cell => String(cell).toLowerCase().trim() === 'datum')) {
-                    let lastCategory: string | null = null;
-                    for(const cell of row) {
-                        const cellStr = cell ? String(cell).trim() : null;
-                        if(cellStr) {
-                             const cleanedCategory = cellStr.replace(/\s+\d+$/, '').trim();
-                             if(cleanedCategory) {
-                                excelCategories.add(cleanedCategory);
-                                lastCategory = cleanedCategory;
-                             }
-                        }
+            const categoryRow = json[headerRowIndex - 1];
+            if (!Array.isArray(categoryRow)) {
+                 throw new Error("Die Zeile über der Kopfzeile konnte nicht als Kategoriezeile gelesen werden.");
+            }
+            
+            let lastCategory = '';
+            const filledCategoryRow = categoryRow.map(cell => {
+                const cellStr = cell ? String(cell).trim() : '';
+                if (cellStr) {
+                    const cleanedCategory = cellStr.replace(/\s+\d+$/, '').trim();
+                    if(cleanedCategory) {
+                       lastCategory = cleanedCategory;
+                       return lastCategory;
                     }
                 }
-            }
-             
-            const headersToMap = Array.from(excelCategories);
+                return lastCategory;
+            });
+            
+            const uniqueCategories = [...new Set(filledCategoryRow.filter(c => c))];
 
-            if (headersToMap.length === 0) {
+            if (uniqueCategories.length === 0) {
               throw new Error("Keine zuzuordnenden Kategorien in der Datei gefunden. Bitte prüfen Sie die Struktur Ihrer Excel-Datei.");
             }
     
             setRawTransactionData(json);
-            setDetectedHeaders(headersToMap);
+            setDetectedHeaders(uniqueCategories);
     
             const initialMapping: HeaderMapping = {};
-            headersToMap.forEach(header => {
+            uniqueCategories.forEach(header => {
                 const foundCatId = appCategoryMap.get(header.toLowerCase());
                 if (foundCatId) {
                     initialMapping[header] = foundCatId;
@@ -180,62 +175,67 @@ export function ImportTab({ transactions }: ImportTabProps) {
 
     try {
         const newTransactions: Omit<Transaction, 'id' | 'createdAt'>[] = [];
-        const json = rawTransactionData;
+        const data = rawTransactionData;
 
-        for(let i = 0; i < json.length; i++) {
-            const categoryRow = json[i];
-            const headerRow = json[i + 1];
+        for (let rowIndex = 0; rowIndex < data.length; rowIndex++) {
+            const row = data[rowIndex];
+            if (!Array.isArray(row)) continue;
 
-            if (!Array.isArray(categoryRow) || !Array.isArray(headerRow)) continue;
+            const isHeaderRow = row.some(cell => String(cell).trim().toLowerCase() === 'datum') &&
+                                row.some(cell => String(cell).trim().toLowerCase() === 'betrag');
 
-            // Check if this is a valid block
-            if(!headerRow.some(cell => String(cell).toLowerCase().trim() === 'datum')) {
-                continue;
-            }
-
-            let currentCategory: string | null = null;
-            for(let c = 0; c < categoryRow.length; c++) {
-                 const categoryCell = categoryRow[c] ? String(categoryRow[c]).replace(/\s+\d+$/, '').trim() : null;
-                 if(categoryCell) {
-                     currentCategory = categoryCell;
-                 }
+            if (isHeaderRow && rowIndex > 0) {
+                const categoryRow = data[rowIndex - 1];
+                let lastCategory = '';
+                const filledCategoryRow = categoryRow.map(cell => {
+                    const cellStr = cell ? String(cell).trim() : '';
+                    if (cellStr) {
+                        const cleanedCategory = cellStr.replace(/\s+\d+$/, '').trim();
+                        if(cleanedCategory) {
+                           lastCategory = cleanedCategory;
+                           return lastCategory;
+                        }
+                    }
+                    return lastCategory;
+                });
                 
-                 if (!currentCategory) continue;
-                 
-                 const appCategoryId = headerMapping[currentCategory];
-                 if (!appCategoryId) continue;
+                const colMap: { [key: string]: number } = {};
+                row.forEach((cell, index) => {
+                    const cellStr = String(cell).trim().toLowerCase();
+                    if (cellStr === 'datum' || cellStr === 'beschreibung' || cellStr === 'betrag') {
+                        colMap[cellStr] = index;
+                    }
+                });
 
-                 const headerCell = String(headerRow[c]).toLowerCase().trim();
-                 if (headerCell !== 'datum') continue;
+                if (colMap['datum'] === undefined || colMap['betrag'] === undefined) {
+                    continue; 
+                }
 
-                 const descriptionCol = c + 1;
-                 const amountCol = c + 2;
-
-                 // Process data rows for this block
-                 for (let r = i + 2; r < json.length; r++) {
-                    const dataRow = json[r];
-                    if (!dataRow || !Array.isArray(dataRow)) break;
+                for (let dataRowIndex = rowIndex + 1; dataRowIndex < data.length; dataRowIndex++) {
+                    const dataRow = data[dataRowIndex];
+                    if (!Array.isArray(dataRow) || dataRow.every(c => c === null || String(c).trim() === '') || String(dataRow[colMap['datum']]).toLowerCase().includes('summe')) {
+                        rowIndex = dataRowIndex;
+                        break; 
+                    }
                     
-                    const firstCellInRow = String(dataRow[c] || '').toLowerCase();
-                    if(firstCellInRow.startsWith('summe')) break;
-                    if(dataRow.every(cell => cell === null || String(cell).trim() === '')) continue;
-                     
-                    const dateValue = dataRow[c];
-                    const descriptionValue = dataRow[descriptionCol] || currentCategory;
-                    const amountValue = dataRow[amountCol];
+                    const dateValue = dataRow[colMap['datum']];
+                    const descriptionValue = colMap['beschreibung'] !== undefined ? dataRow[colMap['beschreibung']] : null;
+                    const amountValue = dataRow[colMap['betrag']];
+                    const categoryName = filledCategoryRow[colMap['datum']];
 
-                    if (amountValue === null || amountValue === undefined || String(amountValue).trim() === '') continue;
-                     
+                    if (!categoryName || amountValue === null || amountValue === undefined || String(amountValue).trim() === '') continue;
+
+                    const appCategoryId = headerMapping[categoryName];
+                    if (!appCategoryId) continue;
+                    
                     let date: Date | null = null;
-                    // Handle Excel dates (numbers or date objects)
                     if (dateValue instanceof Date) {
                        date = dateValue;
-                    } else if (typeof dateValue === 'number') {
-                        // Use a library function to convert Excel date serial number to a Date object.
-                        // The `cellDates: true` option in XLSX.read should handle this, but as a fallback:
-                        date = XLSX.SSF.parse_date_code(dateValue);
+                    } else if (typeof dateValue === 'number' && dateValue > 1) { // Excel date number
+                        const excelEpoch = new Date(1899, 11, 30);
+                        date = new Date(excelEpoch.getTime() + dateValue * 24 * 60 * 60 * 1000);
                     } else if (typeof dateValue === 'string') {
-                       const parts = dateValue.match(/(\d{1,2})\.\s*(\d{1,2})/);
+                       const parts = dateValue.match(/(\d{1,2})\.(\d{1,2})/);
                        if(parts) {
                            const day = parseInt(parts[1], 10);
                            const month = parseInt(parts[2], 10);
@@ -244,20 +244,21 @@ export function ImportTab({ transactions }: ImportTabProps) {
                            }
                        }
                     }
-
-                    if(!date || !descriptionValue) continue;
-
-                    const amount = typeof amountValue === 'number' ? amountValue : parseFloat(String(amountValue).replace('.', '').replace(',', '.'));
                     
+                    const description = descriptionValue ? String(descriptionValue) : categoryName;
+                    if(!date || !description) continue;
+                    
+                    const amount = typeof amountValue === 'number' ? amountValue : parseFloat(String(amountValue).replace('.', '').replace(',', '.'));
+
                     if (!isNaN(amount) && amount !== 0) {
                         newTransactions.push({
-                            description: String(descriptionValue),
+                            description: String(description),
                             amount: Math.abs(amount),
                             date,
                             categoryId: appCategoryId,
                         });
                     }
-                 }
+                }
             }
         }
         
@@ -318,7 +319,7 @@ export function ImportTab({ transactions }: ImportTabProps) {
               ref={fileInputRef}
               onChange={handleFileImport}
               className="hidden"
-              accept=".xlsx, .xls"
+              accept=".xlsx, .xls, .ods"
             />
           </CardContent>
         </Card>
