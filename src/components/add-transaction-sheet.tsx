@@ -113,31 +113,33 @@ export function AddTransactionSheet({
 
   useEffect(() => {
     if (open) {
-        let defaultValues: Partial<TransactionFormValues> = {
-            id: undefined,
-            description: '',
-            amounts: [{ value: '' as any }],
-            categoryId: '',
-            date: new Date(),
-            isRecurring: false,
-        };
+      form.reset(); // Reset form state and errors
+      let defaultValues: Partial<TransactionFormValues> = {
+          id: undefined,
+          description: '',
+          amounts: [{ value: '' as any }],
+          categoryId: '',
+          date: new Date(),
+          isRecurring: false,
+      };
 
-        if (transaction) {
-            // Safely convert timestamp/date string/number to JS Date object
-            const transactionDate = toDate(transaction.date as any);
+      if (transaction) {
+          // Robustly convert Firestore Timestamp (or any other format) to a JS Date object.
+          // This is the critical part to fix the date issue.
+          const transactionDate = (transaction.date as Timestamp)?.toDate ? (transaction.date as Timestamp).toDate() : toDate(transaction.date);
 
-            defaultValues = {
-                id: transaction.id,
-                description: transaction.description || '',
-                amounts: transaction.amount ? [{ value: transaction.amount }] : [{ value: '' as any }],
-                categoryId: transaction.categoryId || '',
-                date: isValid(transactionDate) ? transactionDate : new Date(),
-                isRecurring: (transaction as any).isRecurring || false,
-            };
-        }
-        
-        form.reset(defaultValues as TransactionFormValues);
-        setSuggestion(null);
+          defaultValues = {
+              id: transaction.id,
+              description: transaction.description || '',
+              amounts: transaction.amount ? [{ value: transaction.amount }] : [{ value: '' as any }],
+              categoryId: transaction.categoryId || '',
+              date: isValid(transactionDate) ? transactionDate : new Date(),
+              isRecurring: (transaction as any).isRecurring || false,
+          };
+      }
+      
+      form.reset(defaultValues as TransactionFormValues);
+      setSuggestion(null);
     }
   }, [open, transaction, form]);
 
@@ -168,6 +170,12 @@ export function AddTransactionSheet({
   const onSubmit = (data: TransactionFormValues) => {
     const totalAmount = data.amounts.reduce((sum, current) => sum + Number(current.value), 0);
     
+    // Ensure date is a valid Date object before submitting
+    if (!data.date || !isValid(data.date)) {
+        form.setError('date', { type: 'manual', message: 'Ungültiges Datum.' });
+        return;
+    }
+
     const newTransaction: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date } = {
       id: data.id,
       description: data.description,
@@ -234,7 +242,7 @@ export function AddTransactionSheet({
                     </Button>
                   </div>
                 ))}
-                 {form.formState.errors.amounts && <p className="text-sm text-destructive mt-1">{form.formState.errors.amounts.root?.message}</p>}
+                 {form.formState.errors.amounts && <p className="text-sm text-destructive mt-1">{form.formState.errors.amounts.root?.message || (form.formState.errors.amounts as any)[0]?.value.message}</p>}
                  <Button type="button" variant="outline" size="sm" onClick={() => append({ value: '' as any })}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Betrag hinzufügen
