@@ -145,8 +145,8 @@ const categoryNameMap = useMemo(() => {
                             const dateOrDescCell = rowData[col];
                             const amountCell = rowData[col + 1];
 
-                            if (typeof dateOrDescCell === 'string' && dateOrDescCell.toLowerCase().includes('summe')) break;
-                            if (amountCell === null || amountCell === undefined || String(amountCell).trim() === '') continue;
+                            if ((typeof dateOrDescCell === 'string' && dateOrDescCell.toLowerCase().includes('summe')) || amountCell === null) break;
+                            if (dateOrDescCell === null) continue;
 
                             let date: Date | null = null;
                             let description: string = '';
@@ -195,38 +195,38 @@ const categoryNameMap = useMemo(() => {
                     }
                 }
 
-                // Phase 2: Vertikale Blöcke (L-N)
-                for (let startRow = 29; startRow < rawJson.length; startRow++) {
-                    const categoryNameCell = rawJson[startRow]?.[11]; // Column L
-                     if (typeof categoryNameCell === 'string' && categoryNameCell.trim() && !categoryNameCell.toLowerCase().includes('summe') && !categoryNameCell.toLowerCase().includes('einnahmen')) {
-                       const categoryName = categoryNameCell.trim();
-                       allDetectedCategories.add(categoryName);
-
-                       for(let row = startRow + 2; row < rawJson.length; row++) {
-                         const rowData = rawJson[row];
-                         if (!rowData || !rowData[11] || (typeof rowData[11] === 'string' && String(rowData[11]).toLowerCase().includes('summe'))) {
-                            startRow = row; // Skip processed rows
-                            break;
-                         }
-                         const descCell = rowData[11];
-                         const amountCell = rowData[12];
-                         
-                         let description: string = '';
-
-                         if (typeof descCell === 'string' && descCell.trim()) {
-                             description = descCell.trim();
-                         } else {
-                            continue; // Skip if description is empty
-                         }
-                         const date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
-
-                         if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '') {
-                            const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
-                            if(isValid(date) && !isNaN(amount) && amount !== 0) {
-                                allTransactions.push({ description, amount: Math.abs(amount), date, categoryId: categoryName });
+                // Phase 2: Vertikale Blöcke (jetzt ab Spalte A, ab Zeile ~29)
+                let currentRow = 29;
+                while (currentRow < rawJson.length) {
+                    const categoryCell = rawJson[currentRow]?.[0]; // Spalte A
+                    if (typeof categoryCell === 'string' && categoryCell.trim() && !categoryCell.toLowerCase().includes('summe') && !categoryCell.toLowerCase().includes('einnahmen')) {
+                        const categoryName = categoryCell.trim();
+                        allDetectedCategories.add(categoryName);
+                        let dataRowIndex = currentRow + 2;
+                        while(dataRowIndex < rawJson.length) {
+                            const rowData = rawJson[dataRowIndex];
+                            if (!rowData || !rowData[0] || (typeof rowData[0] === 'string' && String(rowData[0]).toLowerCase().includes('summe'))) {
+                                currentRow = dataRowIndex; // Nächste Suche nach diesem Block starten
+                                break;
                             }
-                         }
-                       }
+                            const descCell = rowData[0]; // Spalte A
+                            const amountCell = rowData[1]; // Spalte B
+                            
+                            if(typeof descCell === 'string' && descCell.trim()) {
+                                const description = descCell.trim();
+                                const date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                                if (amountCell !== null && amountCell !== undefined) {
+                                   const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
+                                   if(isValid(date) && !isNaN(amount) && amount !== 0) {
+                                       allTransactions.push({ description, amount: Math.abs(amount), date, categoryId: categoryName });
+                                   }
+                                }
+                            }
+                            dataRowIndex++;
+                        }
+                        currentRow = dataRowIndex;
+                    } else {
+                        currentRow++;
                     }
                 }
                 
@@ -261,7 +261,7 @@ const categoryNameMap = useMemo(() => {
             });
 
             if (allTransactions.length === 0) {
-              toast({
+                toast({
                   variant: "destructive",
                   title: "Keine Transaktionen gefunden",
                   description: "Die Datei konnte nicht verarbeitet werden oder enthält keine gültigen Transaktionen. Bitte überprüfen Sie das Format.",
@@ -444,5 +444,3 @@ const categoryNameMap = useMemo(() => {
     </>
   );
 }
-
-    
