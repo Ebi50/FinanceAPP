@@ -200,7 +200,7 @@ const categoryNameMap = useMemo(() => {
                             }
                             currentRow++;
                         }
-                        r = currentRow; 
+                        r = currentRow -1; 
                     }
                 }
                 
