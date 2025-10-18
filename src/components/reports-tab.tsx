@@ -102,62 +102,98 @@ export function ReportsTab({ transactions, onImport }: ReportsTabProps) {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
+        const yearMatch = file.name.match(/\d{4}/);
+        const year = yearMatch ? parseInt(yearMatch[0], 10) : new Date().getFullYear();
+
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: "array" });
+        const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         const json = XLSX.utils.sheet_to_json(worksheet, {
-          header: ["date", "description", "category", "amount"],
-          range: 1, // Skip header row
-        }) as any[];
+          header: 1,
+          defval: null
+        }) as any[][];
 
-        const categoryNameMap = new Map(
+        const appCategoryMap = new Map(
           categories.map((c) => [c.name.toLowerCase(), c.id])
         );
+        const newTransactions: Transaction[] = [];
 
-        const newTransactions: Transaction[] = json
-          .map((row, index) => {
-            const categoryId = categoryNameMap.get(
-              row.category?.toLowerCase()
-            );
+        const headerRowIndex = json.findIndex(row => row.some(cell => typeof cell === 'string' && appCategoryMap.has(cell.split(' ')[0].toLowerCase())));
+        if (headerRowIndex === -1) throw new Error("Keine gültigen Kategorie-Header gefunden.");
+        
+        const headers = json[headerRowIndex];
+        const dataRows = json.slice(headerRowIndex + 1);
 
-            if (!row.date || !row.description || !row.amount || !categoryId) {
-              console.warn(`Zeile ${index + 2} übersprungen: Unvollständige oder ungültige Daten.`);
-              return null;
-            }
+        for(let col = 0; col < headers.length; col++) {
+          const header = headers[col];
+          if (header && typeof header === 'string') {
+            const categoryName = header.split(' ')[0].toLowerCase();
+            const categoryId = appCategoryMap.get(categoryName);
             
-            // Handle Excel date serial number
-            let date;
-            if (typeof row.date === 'number') {
-              date = new Date(Math.round((row.date - 25569) * 86400 * 1000));
-            } else if (typeof row.date === 'string') {
-              date = new Date(row.date)
-            } else {
-              return null
+            if (categoryId) {
+              // Assuming 'Datum' is in the same column and 'Betrag' is in the next one
+              const dateCol = col;
+              const amountCol = col + 1;
+              if (headers[amountCol] === 'Betrag') {
+                for (const row of dataRows) {
+                   const dateValue = row[dateCol];
+                   const amountValue = row[amountCol];
+
+                   if (amountValue && (typeof amountValue === 'number' || (typeof amountValue === 'string' && amountValue.trim() !== ''))) {
+                      // Stop when we hit a 'Summe' row for this block
+                      if (typeof row[dateCol-1] === 'string' && row[dateCol-1].toLowerCase().includes('summe')) break;
+                      
+                      let date;
+                      if(dateValue) {
+                         // Handle Excel date serial number or string DD.MM
+                        if (typeof dateValue === 'number') {
+                          date = XLSX.SSF.parse_date_code(dateValue);
+                          date = new Date(year, date.m - 1, date.d);
+                        } else if (typeof dateValue === 'string') {
+                          const parts = dateValue.split('.').map(p => parseInt(p.trim(), 10));
+                          if (parts.length >= 2) {
+                            date = new Date(year, parts[1] - 1, parts[0]);
+                          }
+                        }
+                      }
+                      
+                      if(date) {
+                         newTransactions.push({
+                            id: `imported-${Date.now()}-${newTransactions.length}`,
+                            description: categories.find(c => c.id === categoryId)?.name || 'Importiert',
+                            amount: typeof amountValue === 'number' ? amountValue : parseFloat(amountValue.replace(',', '.')),
+                            date,
+                            categoryId,
+                         });
+                      }
+                   }
+                }
+              }
             }
+          }
+        }
 
-
-            return {
-              id: `imported-${Date.now()}-${index}`,
-              date,
-              description: row.description,
-              categoryId,
-              amount: parseFloat(row.amount),
-            };
-          })
-          .filter((t): t is Transaction => t !== null);
+        if (newTransactions.length === 0) {
+          toast({
+            variant: "destructive",
+            title: "Import fehlgeschlagen",
+            description: "Es konnten keine gültigen Transaktionen in der Datei gefunden werden. Bitte prüfen Sie das Format.",
+          });
+          return;
+        }
 
         onImport(newTransactions);
         toast({
           title: "Import erfolgreich",
           description: `${newTransactions.length} Transaktionen wurden importiert.`,
         });
-      } catch (error) {
+      } catch (error: any) {
         console.error("Fehler beim Importieren der Datei:", error);
         toast({
           variant: "destructive",
           title: "Import fehlgeschlagen",
-          description: "Die Datei konnte nicht verarbeitet werden. Stellen Sie sicher, dass sie das richtige Format hat.",
+          description: error.message || "Die Datei konnte nicht verarbeitet werden. Stellen Sie sicher, dass sie das richtige Format hat.",
         });
       }
     };
