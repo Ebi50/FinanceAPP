@@ -30,15 +30,16 @@ import type { Transaction, Category } from "@/lib/types";
 import React, { useState, useMemo } from "react";
 import { format, isValid } from "date-fns";
 import { de } from "date-fns/locale";
+import { Timestamp } from "firebase/firestore";
 
 
-type MappedTransaction = Omit<Transaction, 'id' | 'createdAt'>;
+type MappedTransaction = Omit<Transaction, 'id'> & { date: Date };
 type RawRow = (string | number | Date | null)[];
 type HeaderMapping = { [key: string]: string };
 
 interface ImportTabProps {
   transactions: Transaction[];
-  onImport: (transactions: MappedTransaction[]) => void;
+  onImport: (transactions: (Omit<Transaction, "id" | "date"> & { date: Date; })[]) => void;
   categories: Category[];
 }
 
@@ -85,20 +86,20 @@ const categoryNameMap = useMemo(() => {
       return;
     }
     const worksheetData = transactions.map((t) => {
-      const date = t.date.toDate ? t.date.toDate() : t.date;
-      const category = categoryIdMap.get(t.categoryId);
-      const isIncome = category?.toLowerCase() === 'einnahmen';
-      return {
-        Datum: isValid(date) ? format(date, "yyyy-MM-dd") : "Ungültiges Datum",
-        Beschreibung: t.description,
-        Kategorie: category || "Unbekannt",
-        Betrag: isIncome ? t.amount : -t.amount,
-      }
-    });
-    const worksheet = XLSX.utils.json_to_sheet(worksheetData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Transaktionen");
-    XLSX.writeFile(workbook, "transaktionen.xlsx");
+        const dateObject = t.date instanceof Timestamp ? t.date.toDate() : t.date;
+        const category = categoryIdMap.get(t.categoryId);
+        const isIncome = category?.toLowerCase() === 'einnahmen';
+        return {
+          Datum: isValid(dateObject) ? format(dateObject, "yyyy-MM-dd") : "Ungültiges Datum",
+          Beschreibung: t.description,
+          Kategorie: category || "Unbekannt",
+          Betrag: isIncome ? t.amount : -t.amount,
+        }
+      });
+      const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Transaktionen");
+      XLSX.writeFile(workbook, "transaktionen.xlsx");
   };
 
   const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -111,121 +112,117 @@ const categoryNameMap = useMemo(() => {
             const data = new Uint8Array(e.target?.result as ArrayBuffer);
             const workbook = XLSX.read(data, { type: 'array', cellDates: true });
             
-            const fileYearMatch = file.name.match(/\d{4}/);
-            const fileYear = fileYearMatch ? parseInt(fileYearMatch[0], 10) : new Date().getFullYear();
-
-            const monthMap: {[key: string]: number} = { 'jan': 0, 'feb': 1, 'mär': 2, 'apr': 3, 'mai': 4, 'jun': 5, 'jul': 6, 'aug': 7, 'sep': 8, 'okt': 9, 'nov': 10, 'dez': 11 };
-            
             let allTransactions: MappedTransaction[] = [];
             const allDetectedCategories = new Set<string>();
 
             workbook.SheetNames.forEach(sheetName => {
-                const monthStr = sheetName.toLowerCase().slice(0, 3);
-                const monthIndex = monthMap[monthStr];
-
-                if (monthIndex === undefined) return;
-
                 const worksheet = workbook.Sheets[sheetName];
                 if (!worksheet) return;
 
-                const rawJson = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as RawRow[];
+                const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as RawRow[];
+
+                const fileYearMatch = file.name.match(/\d{4}/);
+                const fileYear = fileYearMatch ? parseInt(fileYearMatch[0], 10) : new Date().getFullYear();
                 
-                if (rawJson.length < 1) return;
-                
-                const processBlock = (startRow: number, startCol: number) => {
-                    const headerCell = rawJson[startRow]?.[startCol];
-                    if (typeof headerCell !== 'string' || !headerCell.trim()) {
-                        return;
-                    }
+                const monthIndex = workbook.SheetNames.indexOf(sheetName);
 
-                    const categoryName = headerCell.trim();
-                    allDetectedCategories.add(categoryName);
-                    
-                    let isKV = categoryName.toLowerCase().includes('kv');
+                // Process Upper Block
+                const upperBlockHeaderRow = json[2]; // Row 3 in Excel
+                if (upperBlockHeaderRow) {
+                    for (let colIdx = 0; colIdx <= 8; colIdx += 2) { // A-J -> 0-9
+                        const categoryName = upperBlockHeaderRow[colIdx] as string;
+                        if (categoryName && typeof categoryName === 'string') {
+                            allDetectedCategories.add(categoryName);
+                            for (let rowIdx = 3; rowIdx < 27; rowIdx++) { // Rows 4-27
+                                const row = json[rowIdx];
+                                if (!row) continue;
+                                const cell1 = row[colIdx];
+                                if (typeof cell1 === 'string' && cell1.toLowerCase().includes('summe')) break;
+                                if (cell1 === null && row[colIdx + 1] === null) continue; // Skip empty lines
 
-                    for (let rowIdx = startRow + 1; rowIdx < rawJson.length; rowIdx++) {
-                        const rowData = rawJson[rowIdx];
-                        if (!rowData) continue;
-                        
-                        const descOrDateCell = rowData[startCol];
-                        
-                        if (descOrDateCell === null && rowData[startCol+1] === null) {
-                            break; 
-                        }
+                                const amount = row[colIdx + 1] as number;
+                                if (typeof amount !== 'number') continue;
+                                
+                                let description = categoryName;
+                                let date: Date;
 
-                        if (typeof descOrDateCell === 'string' && descOrDateCell.toLowerCase().includes('summe')) {
-                            break;
-                        }
-                        
-                        let amount = 0;
-                        if (isKV) {
-                            const amountEbi = rowData[startCol + 1];
-                            const amountTimo = rowData[startCol + 2];
-                            if (typeof amountEbi === 'number') amount += amountEbi;
-                            if (typeof amountTimo === 'number') amount += amountTimo;
-                        } else {
-                            const amountCell = rowData[startCol + 1];
-                            if (typeof amountCell === 'number') amount = amountCell;
-                        }
-                        
-                        if (amount === 0) continue;
-                        
-                        let date: Date;
-                        let description: string;
-                        
-                        if (descOrDateCell instanceof Date && isValid(descOrDateCell)) {
-                            date = new Date(Date.UTC(fileYear, monthIndex, descOrDateCell.getUTCDate(), 12, 0, 0));
-                            description = categoryName;
-                        } else if (typeof descOrDateCell === 'string' && descOrDateCell.trim()) {
-                            const dayMatch = descOrDateCell.match(/^(\d{1,2})/);
-                            if (dayMatch) {
-                               const day = parseInt(dayMatch[1], 10);
-                               date = new Date(Date.UTC(fileYear, monthIndex, day, 12, 0, 0));
-                               description = descOrDateCell.substring(dayMatch[0].length).trim() || categoryName;
-                            } else {
-                                description = descOrDateCell.trim();
-                                date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
-                            }
-                        } else {
-                            continue;
-                        }
-                        
-                        if (isValid(date)) {
-                            if (amount < 0) {
-                                allTransactions.push({ description, amount: Math.abs(amount), date, categoryId: 'Einnahmen' });
-                                allDetectedCategories.add('Einnahmen');
-                            } else {
-                                allTransactions.push({ description, amount, date, categoryId: categoryName });
+                                if (cell1 instanceof Date) {
+                                    date = cell1;
+                                } else if (typeof cell1 === 'string' && cell1.trim()) {
+                                    description = cell1.trim();
+                                    date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                                } else {
+                                    date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                                }
+                                
+                                if (isValid(date)) {
+                                    allTransactions.push({ description, amount, date, categoryId: categoryName });
+                                }
                             }
                         }
                     }
                 }
-                
-                // Phase 1: Horizontale Blöcke (oben)
-                for (let col = 0; col < 11; col += 2) {
-                    processBlock(0, col);
-                }
 
-                // Phase 2: Vertikale Blöcke (Mitte)
-                for (let row = 29; row < rawJson.length; row++) {
-                    const headerCell = rawJson[row]?.[0];
-                    if (typeof headerCell === 'string' && headerCell.trim() && !headerCell.toLowerCase().includes('summe')) {
-                         processBlock(row, 0);
+                 // Process Lower Block
+                const lowerBlockHeaderRow = json[29]; // Row 30
+                if (lowerBlockHeaderRow) {
+                    for (let colIdx = 0; colIdx <= 12; colIdx += 2) { // A-N -> 0-13
+                        const categoryName = lowerBlockHeaderRow[colIdx] as string;
+                        if (categoryName && typeof categoryName === 'string') {
+                             allDetectedCategories.add(categoryName);
+                             for (let rowIdx = 30; rowIdx < 54; rowIdx++) { // Rows 31-54
+                                const row = json[rowIdx];
+                                if (!row) continue;
+                                const cell1 = row[colIdx];
+                                if (typeof cell1 === 'string' && cell1.toLowerCase().includes('summe')) break;
+                                if (cell1 === null && row[colIdx + 1] === null) continue;
+
+                                let amount = 0;
+                                // Special KV logic
+                                if (categoryName.toLowerCase().includes('kv')) {
+                                    const amount1 = row[colIdx + 1] as number;
+                                    const amount2 = row[colIdx + 2] as number; // Assuming second amount is next column
+                                    if(typeof amount1 === 'number') amount += amount1;
+                                    if(typeof amount2 === 'number') amount += amount2;
+                                } else {
+                                    const amountCell = row[colIdx + 1] as number;
+                                     if(typeof amountCell === 'number') amount = amountCell;
+                                }
+
+                                if (amount === 0) continue;
+                                
+                                let description = categoryName;
+                                let date: Date;
+                                
+                                 if (cell1 instanceof Date) {
+                                    date = cell1;
+                                } else if (typeof cell1 === 'string' && cell1.trim()) {
+                                    description = cell1.trim();
+                                    date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                                } else {
+                                    date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                                }
+
+                                if (isValid(date)) {
+                                     if (amount < 0) {
+                                        allTransactions.push({ description, amount: Math.abs(amount), date, categoryId: 'Einnahmen' });
+                                        allDetectedCategories.add('Einnahmen');
+                                    } else {
+                                        allTransactions.push({ description, amount, date, categoryId: categoryName });
+                                    }
+                                }
+                            }
+                             if(categoryName.toLowerCase().includes('kv')) colIdx++; // Skip one extra column for KV
+                        }
                     }
-                }
-                
-                // Phase 3: Einnahmen
-                const einnahmenRowIndex = rawJson.findIndex(row => typeof row?.[0] === 'string' && row[0].toLowerCase().startsWith('einnahmen'));
-                if (einnahmenRowIndex !== -1) {
-                    processBlock(einnahmenRowIndex, 0);
                 }
             });
 
             if (allTransactions.length === 0) {
               toast({
-                variant: "destructive",
-                title: "Keine Transaktionen gefunden",
-                description: "Die Datei konnte nicht verarbeitet werden oder enthält keine gültigen Transaktionen. Bitte überprüfen Sie das Format.",
+                  variant: "destructive",
+                  title: "Keine Transaktionen gefunden",
+                  description: "Es konnten keine gültigen Transaktionen aus der Datei gelesen werden. Bitte überprüfen Sie das Format.",
               });
               return;
             }
