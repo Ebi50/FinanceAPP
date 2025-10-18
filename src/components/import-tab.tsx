@@ -317,7 +317,7 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
             <div className="grid gap-4 py-4 max-h-96 overflow-y-auto pr-2">
                 {detectedHeaders.map(header => (
                     <div key={header} className="grid grid-cols-2 items-center gap-4">
-                        <Label htmlFor={`mapping-${header}`}>{header}</Label>
+                        <Label htmlFor={`mapping-${header}`} className="text-left font-semibold">{header}</Label>
                         <Select
                             value={headerMapping[header] || ''}
                             onValueChange={(value) => handleMappingChange(header, value)}
