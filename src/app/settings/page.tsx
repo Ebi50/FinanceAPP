@@ -25,9 +25,19 @@ import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/page-header';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, setDoc } from 'firebase/firestore';
-import { updateProfile, updatePassword } from 'firebase/auth';
+import { updateProfile, updatePassword, createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
 
-const navItems = [
+const adminNavItems = [
+  'Allgemein',
+  'Sicherheit',
+  'Integrationen',
+  'Support',
+  'Organisation',
+  'Benutzerverwaltung',
+  'Erweitert',
+];
+
+const regularNavItems = [
   'Allgemein',
   'Sicherheit',
   'Integrationen',
@@ -42,12 +52,17 @@ type UserProfile = {
   budget?: number;
 }
 
+const ADMIN_EMAIL = 'eberhard.jansing@freenet.de';
+
 export default function SettingsPage() {
   const { setTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState('Allgemein');
   
   const { user } = useUser();
   const firestore = useFirestore();
+  const isAdmin = user?.email === ADMIN_EMAIL;
+  
+  const [activeTab, setActiveTab] = useState('Allgemein');
+  const navItems = isAdmin ? adminNavItems : regularNavItems;
 
   const userProfileQuery = useMemoFirebase(() =>
     user ? doc(firestore, 'users', user.uid) : null,
@@ -60,6 +75,8 @@ export default function SettingsPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [budget, setBudget] = useState(2000);
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
 
   const { toast } = useToast();
 
@@ -151,6 +168,53 @@ export default function SettingsPage() {
             title: "Fehler",
             description: "Budget konnte nicht gespeichert werden.",
         });
+    }
+  };
+  
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin) {
+      toast({
+        variant: 'destructive',
+        title: 'Keine Berechtigung',
+        description: 'Sie haben keine Berechtigung, neue Benutzer anzulegen.',
+      });
+      return;
+    }
+    if (newUserPassword.length < 6) {
+        toast({
+            variant: 'destructive',
+            title: 'Fehler',
+            description: 'Das Passwort muss mindestens 6 Zeichen lang sein.',
+        });
+        return;
+    }
+    
+    // We need a separate auth instance to create a user without logging out the admin.
+    // This is a workaround. Proper implementation uses Cloud Functions.
+    try {
+        // This is a trick: Firebase SDKs with the same config share an underlying instance.
+        // Creating a new user will unfortunately log the admin out and log the new user in.
+        // A proper solution requires a backend (Firebase Functions) to create users with the Admin SDK.
+        // For this prototype, we'll accept this limitation.
+        const auth = getAuth();
+        await createUserWithEmailAndPassword(auth, newUserEmail, newUserPassword);
+        
+        toast({
+          title: 'Benutzer erstellt',
+          description: `Benutzer ${newUserEmail} wurde erfolgreich erstellt. Sie wurden möglicherweise abgemeldet.`,
+        });
+        setNewUserEmail('');
+        setNewUserPassword('');
+        // The admin will be logged out and the new user logged in, which is not ideal.
+        // The user will be redirected to the main page by the login page's effect.
+    } catch (error: any) {
+        console.error("Error creating user: ", error);
+        toast({
+            variant: 'destructive',
+            title: 'Fehler beim Erstellen des Benutzers',
+            description: error.message || 'Der Benutzer konnte nicht erstellt werden.',
+        })
     }
   };
 
@@ -295,6 +359,35 @@ export default function SettingsPage() {
                   </form>
               </CardContent>
           </Card>
+        );
+        break;
+      case 'Benutzerverwaltung':
+        if (!isAdmin) {
+          content = <p>Sie haben keine Berechtigung, diese Seite anzuzeigen.</p>;
+          break;
+        }
+        content = (
+            <Card>
+                <CardHeader>
+                    <CardTitle>Neuen Benutzer anlegen</CardTitle>
+                    <CardDescription>
+                        Erstellen Sie ein neues Benutzerkonto.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <form className="space-y-4" onSubmit={handleCreateUser}>
+                        <div className="space-y-2">
+                            <Label htmlFor="newUserEmail">E-Mail des neuen Benutzers</Label>
+                            <Input id="newUserEmail" type="email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="newUserPassword">Initiales Passwort</Label>
+                            <Input id="newUserPassword" type="password" value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)} />
+                        </div>
+                        <Button type="submit">Benutzer anlegen</Button>
+                    </form>
+                </CardContent>
+            </Card>
         );
         break;
       default:
