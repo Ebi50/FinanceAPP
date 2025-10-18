@@ -25,7 +25,8 @@ import React, { useMemo, useState, useEffect } from "react";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection } from 'firebase/firestore';
 import { Label } from "./ui/label";
-
+import { ExpensesPieChart } from "./expenses-pie-chart";
+import { formatCurrency } from "@/lib/utils";
 
 interface ReportsTabProps {
   transactions: Transaction[];
@@ -33,6 +34,11 @@ interface ReportsTabProps {
   currentYear: number;
   setCurrentYear: (year: number) => void;
 }
+
+interface AutoTableDoc extends jsPDF {
+  autoTable: (options: any) => jsPDF;
+}
+
 
 export function ReportsTab({ transactions, availableYears, currentYear, setCurrentYear }: ReportsTabProps) {
   const { toast } = useToast();
@@ -45,16 +51,14 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
     if(!categories) return new Map();
     return new Map(categories.map((c) => [c.id, c.name]));
   }, [categories]);
+  
+  const incomeCategory = useMemo(() => categories?.find(c => c.name.toLowerCase() === 'einnahmen'), [categories]);
 
   const generatePdf = (period: "monthly" | "yearly", year: number) => {
-    const doc = new jsPDF();
-    const tableColumn = ["Datum", "Beschreibung", "Kategorie", "Betrag"];
-    const tableRows: (string | number)[][] = [];
-
+    const doc = new jsPDF() as AutoTableDoc;
     const now = new Date();
     const currentMonth = now.getMonth();
     
-    // Use all transactions for the selected year for the yearly report
     const reportTransactions = transactions.filter(t => {
       const transactionDate = t.date.toDate();
       if (!isValid(transactionDate)) return false;
@@ -79,27 +83,95 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
       return;
     }
 
-    reportTransactions.forEach((t) => {
-      const transactionData = [
-        format(t.date.toDate(), "dd.MM.yyyy", { locale: de }),
+    const expenses = reportTransactions.filter(t => t.categoryId !== incomeCategory?.id);
+    const income = reportTransactions.filter(t => t.categoryId === incomeCategory?.id);
+
+    const totalExpenses = expenses.reduce((sum, t) => sum + t.amount, 0);
+    const totalIncome = income.reduce((sum, t) => sum + t.amount, 0);
+    const balance = totalIncome - totalExpenses;
+
+    const title = period === "monthly" ? `Monatlicher Bericht (${format(now, 'MMMM yyyy', { locale: de })})` : `Jahresbericht ${year}`;
+    doc.text(title, 14, 20);
+
+    let lastY = 30;
+
+    if (expenses.length > 0) {
+      doc.text("Ausgaben", 14, lastY);
+      const expensesByCategory = expenses.reduce((acc, t) => {
+        const categoryName = categoryMap.get(t.categoryId) || 'Unbekannt';
+        if (!acc[categoryName]) {
+          acc[categoryName] = { transactions: [], total: 0 };
+        }
+        acc[categoryName].transactions.push(t);
+        acc[categoryName].total += t.amount;
+        return acc;
+      }, {} as Record<string, {transactions: Transaction[], total: number}>);
+      
+      const expenseBody = [];
+      for (const categoryName in expensesByCategory) {
+        expenseBody.push([{ content: categoryName, colSpan: 4, styles: { fontStyle: 'bold', fillColor: '#f0f0f0' } }]);
+        expensesByCategory[categoryName].transactions.forEach(t => {
+          expenseBody.push([
+            format(t.date.toDate(), "dd.MM.yyyy"),
+            t.description,
+            formatCurrency(t.amount)
+          ]);
+        });
+        expenseBody.push([{ content: `Summe ${categoryName}`, colSpan: 2, styles: { fontStyle: 'bold', halign: 'right' } }, { content: formatCurrency(expensesByCategory[categoryName].total), styles: { fontStyle: 'bold' } }]);
+      }
+      
+      doc.autoTable({
+        startY: lastY + 5,
+        head: [['Datum', 'Beschreibung', 'Betrag']],
+        body: expenseBody,
+        theme: 'striped'
+      });
+      lastY = doc.autoTable.previous.finalY;
+    }
+
+    if (income.length > 0) {
+       lastY += 10;
+      doc.text("Einnahmen", 14, lastY);
+      const incomeBody = income.map(t => [
+        format(t.date.toDate(), "dd.MM.yyyy"),
         t.description,
-        categoryMap.get(t.categoryId) || "Unbekannt",
-        `-${t.amount.toFixed(2)} €`,
-      ];
-      tableRows.push(transactionData);
+        formatCurrency(t.amount)
+      ]);
+       doc.autoTable({
+        startY: lastY + 5,
+        head: [['Datum', 'Beschreibung', 'Betrag']],
+        body: incomeBody,
+        theme: 'striped'
+      });
+      lastY = doc.autoTable.previous.finalY;
+    }
+   
+    lastY += 10;
+    doc.autoTable({
+      startY: lastY,
+      body: [
+        [{ content: 'Gesamteinnahmen:', styles: { fontStyle: 'bold' } }, { content: formatCurrency(totalIncome), styles: { halign: 'right' } }],
+        [{ content: 'Gesamtausgaben:', styles: { fontStyle: 'bold' } }, { content: formatCurrency(totalExpenses), styles: { halign: 'right' } }],
+        [{ content: 'Ergebnis:', styles: { fontStyle: 'bold', fillColor: balance >= 0 ? [200, 255, 200] : [255, 200, 200] } }, { content: formatCurrency(balance), styles: { halign: 'right', fontStyle: 'bold', fillColor: balance >= 0 ? [200, 255, 200] : [255, 200, 200] } }],
+      ],
+      theme: 'grid',
     });
 
-    const title =
-      period === "monthly" ? `Monatlicher Bericht (${format(now, 'MMMM yyyy', { locale: de })})` : `Jahresbericht ${year}`;
-    doc.text(title, 14, 15);
-    (doc as any).autoTable({
-      startY: 20,
-      head: [tableColumn],
-      body: tableRows,
-    });
     doc.save(`${title.toLowerCase().replace(/\s/g, "-")}.pdf`);
   };
   
+  const transactionsForYear = useMemo(() => {
+    return transactions.filter(t => {
+        const transactionDate = t.date.toDate();
+        return isValid(transactionDate) && getYear(transactionDate) === currentYear;
+    });
+  }, [transactions, currentYear]);
+
+  const expensesForYear = useMemo(() => {
+    return transactionsForYear.filter(t => t.categoryId !== incomeCategory?.id);
+  }, [transactionsForYear, incomeCategory]);
+
+
   useEffect(() => {
     if (availableYears.length > 0 && !availableYears.includes(currentYear)) {
       setCurrentYear(availableYears[0]);
@@ -145,8 +217,15 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
             </div>
         </CardContent>
       </Card>
+      <Card>
+        <CardHeader>
+            <CardTitle className="font-headline">Ausgabenverteilung {currentYear}</CardTitle>
+            <CardDescription>Visuelle Aufschlüsselung Ihrer Ausgaben nach Kategorien für das ausgewählte Jahr.</CardDescription>
+        </CardHeader>
+        <CardContent>
+            <ExpensesPieChart transactions={expensesForYear} />
+        </CardContent>
+      </Card>
     </div>
   );
 }
-
-    
