@@ -120,35 +120,35 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
         if (dataHeaderRowIndex === -1 || dataHeaderRowIndex === 0) {
             throw new Error("Es konnte keine gültige Kopfzeile mit 'Datum' und 'Betrag' gefunden werden. Stellen Sie sicher, dass eine Zeile darüber für die Kategorien existiert.");
         }
-
+        
         const categoryRow = json[dataHeaderRowIndex - 1];
         const dataHeaderRow = json[dataHeaderRowIndex].map(h => String(h || '').toLowerCase());
         
         const excelHeadersToMap: string[] = [];
-        const categoryColumnMap: { [key: string]: number } = {};
-
+        
         for (let i = 0; i < dataHeaderRow.length; i++) {
             const header = dataHeaderRow[i];
             const categoryName = categoryRow[i];
-
-            if (header === 'datum' && categoryName && typeof categoryName === 'string') {
+            
+            // A column is a category column if it is "Datum" and the cell above it is not empty
+            if (header === 'datum' && categoryName && typeof categoryName === 'string' && categoryName.trim() !== '') {
                 const cleanHeader = categoryName.trim();
-                if(cleanHeader) {
-                    excelHeadersToMap.push(cleanHeader);
-                    categoryColumnMap[cleanHeader] = i;
-                }
+                excelHeadersToMap.push(cleanHeader);
             }
         }
         
         const uniqueHeaders = [...new Set(excelHeadersToMap)];
+
         if (uniqueHeaders.length === 0) {
-          throw new Error("Keine zuzuordnenden Kategorien in der Datei gefunden. Stellen Sie sicher, dass über den Spalten 'Datum' und 'Betrag' ein Kategoriename steht.");
+          throw new Error("Keine zuzuordnenden Kategorien in der Datei gefunden. Stellen Sie sicher, dass über den Spalten 'Datum' ein Kategoriename steht.");
         }
 
         setDetectedHeaders(uniqueHeaders);
         const initialMapping: HeaderMapping = {};
         uniqueHeaders.forEach(header => {
-            const foundCatId = appCategoryMap.get(header.toLowerCase().replace(/\s*\d+\s*$/, '').trim());
+            // Try to find a direct match or a partial match (e.g. 'Lebensmittel 1' -> 'Lebensmittel')
+            const simplifiedHeader = header.toLowerCase().replace(/\s*\d+\s*$/, '').trim();
+            const foundCatId = appCategoryMap.get(header.toLowerCase()) || appCategoryMap.get(simplifiedHeader);
             if (foundCatId) {
                 initialMapping[header] = foundCatId;
             } else {
@@ -194,7 +194,7 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
 
         for (let col = 0; col < dataHeaderRow.length; col++) {
             const dataHeader = dataHeaderRow[col];
-            const nextDataHeader = dataHeaderRow[col + 2]; // Betrag is 2 columns after Datum
+            const nextDataHeader = dataHeaderRow[col + 2];
             const rawCategoryHeader = categoryRow[col];
 
             if (rawCategoryHeader && dataHeader === 'datum' && nextDataHeader === 'betrag') {
@@ -204,7 +204,8 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
                 if (categoryId) {
                     let lastValidDate: Date | null = null;
                     for (const row of dataRows) {
-                        if (!row[col] && !row[col + 1] && !row[col + 2]) continue;
+                        // Stop if the row is empty or a sum row for this category block
+                        if ((!row[col] && !row[col + 1] && !row[col + 2])) continue;
                         if (String(row[col] || '').toLowerCase().includes('summe') || String(row[col + 2] || '').toLowerCase().includes('summe')) break;
 
                         const dateValue = row[col];
@@ -213,16 +214,20 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
                         
                         if (amountValue && (typeof amountValue === 'number' || String(amountValue).trim() !== '')) {
                             let date: Date | null = null;
+                            // Handle Excel date serial numbers or string dates
                             if (dateValue instanceof Date) {
                                 date = dateValue;
                                 lastValidDate = date;
-                            } else if (typeof dateValue === 'string') {
+                            } else if (typeof dateValue === 'string' && dateValue.includes('.')) {
                                 const parts = dateValue.split('.').map(p => parseInt(p.trim(), 10));
-                                if (parts.length >= 2) {
-                                    date = new Date(currentYear, parts[1] - 1, parts[0] || 1);
+                                if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                                    date = new Date(currentYear, parts[1] - 1, parts[0]);
                                     lastValidDate = date;
                                 }
-                            } else if (lastValidDate) {
+                            } else if (typeof dateValue === 'number') { // Excel serial date
+                                date = XLSX.SSF.parse_date_code(dateValue);
+                                lastValidDate = date;
+                            } else if (lastValidDate) { // If date is missing, use the last valid one
                                 date = lastValidDate;
                             }
 
