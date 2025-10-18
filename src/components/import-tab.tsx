@@ -29,8 +29,6 @@ import * as XLSX from "xlsx";
 import type { Transaction, Category } from "@/lib/types";
 import React, { useState, useMemo } from "react";
 import { format } from "date-fns";
-import { useUser, useFirestore, addDocumentNonBlocking } from "@/firebase";
-import { collection, serverTimestamp } from "firebase/firestore";
 
 type MappedTransaction = Omit<Transaction, 'id' | 'createdAt'>;
 type RawRow = (string | number | Date | null)[];
@@ -57,8 +55,7 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
   const [isMappingDialogOpen, setIsMappingDialogOpen] = useState(false);
   const [detectedHeaders, setDetectedHeaders] = useState<string[]>([]);
   const [headerMapping, setHeaderMapping] = useState<HeaderMapping>({});
-  const [rawTransactionData, setRawTransactionData] = useState<RawRow[] | null>(null);
-  const [fileYear, setFileYear] = useState<number>(new Date().getFullYear());
+  const [allParsedTransactions, setAllParsedTransactions] = useState<MappedTransaction[]>([]);
 
 
   const handleImportClick = () => {
@@ -94,61 +91,121 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
     reader.onload = (e) => {
         try {
             const data = new Uint8Array(e.target?.result as ArrayBuffer);
-            const workbook = XLSX.read(data, { type: 'array', cellDates: true, sheets: 0 });
-            const sheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-            const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as RawRow[];
-
-            if (!json || json.length < 2) {
-                throw new Error("Die Excel-Datei ist zu klein oder konnte nicht gelesen werden.");
-            }
+            const workbook = XLSX.read(data, { type: 'array', cellDates: true });
             
             const yearMatch = file.name.match(/\d{4}/);
-            setFileYear(yearMatch ? parseInt(yearMatch[0], 10) : new Date().getFullYear());
+            const fileYear = yearMatch ? parseInt(yearMatch[0], 10) : new Date().getFullYear();
 
-            let categoryHeaderRow: RawRow | null = null;
-            let dataHeaderRowIndex = -1;
-            
-            for(let i = 0; i < json.length; i++) {
-                const row = json[i];
-                if (Array.isArray(row)) {
-                    // Find the data header row first
-                    const hasDatum = row.some(cell => typeof cell === 'string' && cell.trim().toLowerCase() === 'datum');
-                    const hasBetrag = row.some(cell => typeof cell === 'string' && cell.trim().toLowerCase() === 'betrag');
-                    if(hasDatum && hasBetrag) {
-                        dataHeaderRowIndex = i;
-                        // The category header is expected to be right above the data header
-                        if(i > 0) {
-                            categoryHeaderRow = json[i-1];
+            const monthMap: {[key: string]: number} = { 'jan': 0, 'feb': 1, 'mär': 2, 'apr': 3, 'mai': 4, 'jun': 5, 'jul': 6, 'aug': 7, 'sep': 8, 'okt': 9, 'nov': 10, 'dez': 11 };
+
+            const allTransactions: MappedTransaction[] = [];
+            const allDetectedCategories = new Set<string>();
+
+            workbook.SheetNames.forEach(sheetName => {
+                const monthStr = sheetName.toLowerCase().slice(0, 3);
+                const monthIndex = monthMap[monthStr];
+
+                if (monthIndex === undefined) {
+                    return; // Skip sheets that are not months
+                }
+
+                const worksheet = workbook.Sheets[sheetName];
+                const sheetJson = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as RawRow[];
+
+                if (sheetJson.length < 2) return;
+
+                let categoryRow: RawRow | null = null;
+                let dataHeaderRow: RawRow | null = null;
+                let categoryRowIndex = -1;
+                let dataHeaderRowIndex = -1;
+
+                // Find category and data header rows
+                for(let i = 0; i < sheetJson.length; i++) {
+                    const row = sheetJson[i];
+                    if(Array.isArray(row) && row.some(cell => typeof cell === 'string' && cell.toLowerCase().includes('garten 6'))) {
+                        categoryRow = row;
+                        categoryRowIndex = i;
+                        if (sheetJson[i+1] && sheetJson[i+1].some(cell => typeof cell === 'string' && cell.toLowerCase() === 'datum')) {
+                            dataHeaderRow = sheetJson[i+1];
+                            dataHeaderRowIndex = i + 1;
                         }
                         break;
                     }
                 }
-            }
-            
-            if (dataHeaderRowIndex === -1 || !categoryHeaderRow) {
-                 throw new Error("Kopfzeile mit 'Datum' und 'Betrag' und eine darüberliegende Kategorie-Zeile nicht gefunden.");
-            }
-            
-            let lastCategory = '';
-            const filledCategoryRow = categoryHeaderRow.map(cell => {
-                const cellStr = cell ? String(cell).trim().replace(/\s\d+$/, '') : '';
-                if (cellStr) {
-                    lastCategory = cellStr;
+                
+                if (!categoryRow || !dataHeaderRow || dataHeaderRowIndex === -1) return;
+
+                // Process categories with fill-forward
+                const filledCategories: (string | null)[] = [];
+                let lastCategory: string | null = null;
+                for(const cell of categoryRow) {
+                    const cellStr = cell ? String(cell).trim() : null;
+                    if(cellStr) {
+                      lastCategory = cellStr.replace(/\s\d+$/, '').trim();
+                      allDetectedCategories.add(lastCategory);
+                    }
+                    filledCategories.push(lastCategory);
                 }
-                return lastCategory;
+                
+                // Find column indices for Datum and Betrag
+                const dataColIndices: { [key: string]: { category: string | null, date: number, amount: number, desc: number } } = {};
+                for(let c = 0; c < dataHeaderRow.length; c++) {
+                    const header = String(dataHeaderRow[c]).toLowerCase();
+                    if(header === 'datum' && filledCategories[c]) {
+                        const categoryName = filledCategories[c]!;
+                        dataColIndices[c] = {
+                            category: categoryName,
+                            date: c,
+                            amount: c + 1,
+                            desc: c // Assuming description is same as date cell if no dedicated description column
+                        };
+                    }
+                }
+
+                // Read data rows
+                for(let r = dataHeaderRowIndex + 1; r < sheetJson.length; r++) {
+                    const rowData = sheetJson[r];
+                    if(!rowData || String(rowData[0]).toLowerCase().startsWith('summe')) break;
+
+                    Object.values(dataColIndices).forEach(indices => {
+                        const dateCell = rowData[indices.date];
+                        const amountCell = rowData[indices.amount];
+
+                        if (amountCell === null || String(amountCell).trim() === '') return;
+                        
+                        let date: Date | null = null;
+                        if(dateCell) {
+                           const dayMatch = String(dateCell).match(/(\d{1,2})\./);
+                           if(dayMatch) {
+                               const day = parseInt(dayMatch[1], 10);
+                               date = new Date(fileYear, monthIndex, day);
+                           }
+                        }
+
+                        if(!date) return;
+                        
+                        const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
+                        const description = rowData[indices.desc] && String(rowData[indices.date]).toLowerCase() !== 'datum' ? String(rowData[indices.desc]) : indices.category;
+                        
+                        if(!isNaN(amount) && amount !== 0) {
+                            allTransactions.push({
+                                description: description || "Unbekannte Transaktion",
+                                amount: Math.abs(amount),
+                                date,
+                                categoryId: indices.category || '' // Temporarily store category name
+                            });
+                        }
+                    });
+                }
             });
 
-            const uniqueCategories = [...new Set(filledCategoryRow.filter(c => c))];
-
-            if (uniqueCategories.length === 0) {
-              throw new Error("Keine zuzuordnenden Kategorien in der Datei gefunden.");
+            if (allTransactions.length === 0) {
+              throw new Error("Keine gültigen Transaktionen zum Importieren gefunden.");
             }
             
-            // Pass the whole sheet data for processing
-            setRawTransactionData(json);
+            const uniqueCategories = Array.from(allDetectedCategories);
             setDetectedHeaders(uniqueCategories);
-
+            
             const initialMapping: HeaderMapping = {};
             uniqueCategories.forEach(header => {
                 const foundCatId = categoryNameMap.get(header.toLowerCase());
@@ -158,9 +215,10 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                     initialMapping[header] = '';
                 }
             });
-
             setHeaderMapping(initialMapping);
+            setAllParsedTransactions(allTransactions);
             setIsMappingDialogOpen(true);
+
 
         } catch (error: any) {
             console.error("Fehler beim Verarbeiten der Datei:", error);
@@ -177,114 +235,25 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
 
 
   const processImport = () => {
-    if (!rawTransactionData) return;
+    if (allParsedTransactions.length === 0) return;
 
     try {
-        const newTransactions: MappedTransaction[] = [];
-        
-        let dataHeaderRowIndex = -1;
-        let categoryHeaderRow: RawRow | null = null;
+      const transactionsWithMappedCategory = allParsedTransactions.map(t => {
+        const mappedCatId = headerMapping[t.categoryId]; // t.categoryId is still the name here
+        if (!mappedCatId) return null; // Skip if category is not mapped
+        return { ...t, categoryId: mappedCatId };
+      }).filter((t): t is MappedTransaction => t !== null);
 
-        for(let i = 0; i < rawTransactionData.length; i++) {
-            const row = rawTransactionData[i];
-            if (Array.isArray(row)) {
-                const hasDatum = row.some(cell => typeof cell === 'string' && cell.trim().toLowerCase() === 'datum');
-                const hasBetrag = row.some(cell => typeof cell === 'string' && cell.trim().toLowerCase() === 'betrag');
-                if(hasDatum && hasBetrag) {
-                    dataHeaderRowIndex = i;
-                    if(i > 0) {
-                        categoryHeaderRow = rawTransactionData[i-1];
-                    }
-                    break;
-                }
-            }
-        }
+      if (transactionsWithMappedCategory.length === 0) {
+        throw new Error("Keine Transaktionen nach der Kategoriezuordnung übrig.");
+      }
 
-        if (dataHeaderRowIndex === -1 || !categoryHeaderRow) {
-            throw new Error("Konnte die Kopfzeile beim Verarbeiten nicht finden.");
-        }
-
-        let lastCategory = '';
-        const filledCategoryRow = categoryHeaderRow.map(cell => {
-            const cellStr = cell ? String(cell).trim().replace(/\s\d+$/, '') : '';
-            if (cellStr) lastCategory = cellStr;
-            return lastCategory;
-        });
-
-        const dataHeaderRow = rawTransactionData[dataHeaderRowIndex] as RawRow;
-        
-        for (let dataRowIndex = dataHeaderRowIndex + 1; dataRowIndex < rawTransactionData.length; dataRowIndex++) {
-            const dataRow = rawTransactionData[dataRowIndex] as RawRow;
-            
-            if (!Array.isArray(dataRow) || dataRow.every(c => c === null || String(c).trim() === '') || String(dataRow[0]).toLowerCase().includes('summe')) {
-                continue;
-            }
-
-            for(let colIndex = 0; colIndex < dataRow.length; colIndex++) {
-                const headerCell = String(dataHeaderRow[colIndex] || '').toLowerCase().trim();
-                
-                if (headerCell === 'betrag') {
-                    const amountValue = dataRow[colIndex];
-                    if (amountValue === null || String(amountValue).trim() === '') continue;
-
-                    const dateColIndex = colIndex - 1; // Assume date is just before amount
-                    const dateValue = dataRow[dateColIndex];
-                    
-                    const descriptionValue = String(dataHeaderRow[dateColIndex] || '').toLowerCase().trim() !== 'datum' ? dataRow[dateColIndex] : null;
-
-                    const categoryName = filledCategoryRow[dateColIndex];
-                    if (!categoryName) continue;
-
-                    const appCategoryId = headerMapping[categoryName];
-                    if (!appCategoryId) continue;
-                    
-                    let date: Date | null = null;
-                    if (dateValue instanceof Date) {
-                       date = dateValue;
-                    } else if (typeof dateValue === 'number' && dateValue > 1) { // Excel date number
-                        const excelEpoch = new Date(1899, 11, 30);
-                        date = new Date(excelEpoch.getTime() + dateValue * 24 * 60 * 60 * 1000);
-                    } else if (typeof dateValue === 'string') {
-                       const parts = dateValue.match(/(\d{1,2})\.\s*(\w+)/);
-                       if(parts) {
-                           const day = parseInt(parts[1], 10);
-                           // simple month mapping
-                           const monthMap: {[key: string]: number} = { 'dez': 11, 'nov': 10, 'okt': 9, 'sep': 8, 'aug': 7, 'jul': 6, 'jun': 5, 'mai': 4, 'apr': 3, 'mär': 2, 'feb': 1, 'jan': 0 };
-                           const monthStr = parts[2].toLowerCase().replace('.','');
-                           const month = monthMap[monthStr];
-                           if (!isNaN(day) && month !== undefined) {
-                               date = new Date(fileYear, month, day);
-                           }
-                       }
-                    }
-                    if(!date) continue;
-                    
-                    const description = descriptionValue ? String(descriptionValue) : categoryName;
-                    const amount = typeof amountValue === 'number' ? amountValue : parseFloat(String(amountValue).replace('.', '').replace(',', '.'));
-                    
-                    if (!isNaN(amount) && amount !== 0) {
-                        newTransactions.push({
-                            description: String(description),
-                            amount: Math.abs(amount),
-                            date,
-                            categoryId: appCategoryId,
-                        });
-                    }
-                }
-            }
-        }
-        
-        if (newTransactions.length === 0) {
-          throw new Error("Es konnten keine gültigen Transaktionen zum Importieren gefunden werden.");
-        }
-
-        onImport(newTransactions);
-
-        toast({
-            title: "Import erfolgreich gestartet",
-            description: `${newTransactions.length} Transaktionen werden im Hintergrund importiert.`,
-        });
-
+      onImport(transactionsWithMappedCategory);
+      
+      toast({
+          title: "Import erfolgreich gestartet",
+          description: `${transactionsWithMappedCategory.length} Transaktionen werden im Hintergrund importiert.`,
+      });
 
     } catch (error: any) {
         console.error("Fehler beim Importieren der Datei:", error);
@@ -295,7 +264,7 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
         });
     } finally {
         setIsMappingDialogOpen(false);
-        setRawTransactionData(null);
+        setAllParsedTransactions([]);
     }
   };
 
@@ -384,3 +353,5 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
     </>
   );
 }
+
+    
