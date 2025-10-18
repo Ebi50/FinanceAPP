@@ -328,7 +328,13 @@ const categoryNameMap = useMemo(() => {
         .filter((t): t is MappedTransaction => t !== null);
   
       if (transactionsWithMappedCategory.length === 0) {
-        throw new Error("Keine Transaktionen nach der Kategoriezuordnung übrig. Bitte stellen Sie sicher, dass alle Kategorien zugeordnet sind.");
+        toast({
+            variant: "destructive",
+            title: "Keine Transaktionen zuzuordnen",
+            description: "Es wurden keine Transaktionen importiert, weil keine Kategorien zugeordnet wurden.",
+        });
+        setIsMappingDialogOpen(false);
+        return;
       }
   
       onImport(transactionsWithMappedCategory);
@@ -438,3 +444,5 @@ const categoryNameMap = useMemo(() => {
     </>
   );
 }
+
+    
