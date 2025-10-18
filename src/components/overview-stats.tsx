@@ -6,11 +6,12 @@ import { Progress } from "./ui/progress";
 interface OverviewStatsProps {
     totalExpenses: number;
     totalIncome: number;
+    budget: number;
 }
 
-export function OverviewStats({ totalExpenses, totalIncome }: OverviewStatsProps) {
-    const budget = 2000; // This is still static, we can make it dynamic later
-    const budgetProgress = totalIncome > 0 ? (totalExpenses / totalIncome) * 100 : (totalExpenses / budget) * 100;
+export function OverviewStats({ totalExpenses, totalIncome, budget }: OverviewStatsProps) {
+    const budgetToShow = totalIncome > 0 ? totalIncome : budget;
+    const budgetProgress = budgetToShow > 0 ? (totalExpenses / budgetToShow) * 100 : 0;
     const savings = totalIncome - totalExpenses;
 
   return (
@@ -49,9 +50,9 @@ export function OverviewStats({ totalExpenses, totalIncome }: OverviewStatsProps
             <CreditCard className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalIncome > 0 ? totalIncome : budget)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(budgetToShow)}</div>
              <p className="text-xs text-muted-foreground mb-2">
-                {formatCurrency(totalExpenses)} von {formatCurrency(totalIncome > 0 ? totalIncome : budget)} verwendet
+                {formatCurrency(totalExpenses)} von {formatCurrency(budgetToShow)} verwendet
             </p>
             <Progress value={budgetProgress} />
             </CardContent>

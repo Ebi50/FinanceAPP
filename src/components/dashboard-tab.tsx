@@ -6,9 +6,10 @@ import type { Transaction } from "@/lib/types";
 
 interface DashboardTabProps {
   transactions: Transaction[];
+  budget: number;
 }
 
-export function DashboardTab({ transactions }: DashboardTabProps) {
+export function DashboardTab({ transactions, budget }: DashboardTabProps) {
   
   const totalExpenses = transactions
     .filter(t => t.categoryId !== 'cat-14') // Filter out income
@@ -20,7 +21,7 @@ export function DashboardTab({ transactions }: DashboardTabProps) {
 
   return (
     <>
-      <OverviewStats totalExpenses={totalExpenses} totalIncome={totalIncome} />
+      <OverviewStats totalExpenses={totalExpenses} totalIncome={totalIncome} budget={budget} />
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <Card className="col-span-4">
           <CardHeader>

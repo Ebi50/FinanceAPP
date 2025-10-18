@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -28,6 +28,14 @@ import type { Transaction } from '@/lib/types';
 
 export default function Dashboard() {
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
+  const [budget, setBudget] = useState(2000);
+
+  useEffect(() => {
+    const storedBudget = localStorage.getItem('monthlyBudget');
+    if (storedBudget) {
+      setBudget(JSON.parse(storedBudget));
+    }
+  }, []);
 
   const handleAddOrUpdateTransaction = (transaction: Transaction) => {
     setTransactions((prev) => {
@@ -85,11 +93,11 @@ export default function Dashboard() {
         </div>
         <Tabs defaultValue="overview" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="reports">Berichte</TabsTrigger>
             <TabsTrigger value="categories">Kategorien</TabsTrigger>
             <TabsTrigger value="import">Import/Export</TabsTrigger>
-            <TabsTrigger value="transactions">Transaktionen</TabsTrigger>
             <TabsTrigger value="overview">Übersicht</TabsTrigger>
+            <TabsTrigger value="reports">Berichte</TabsTrigger>
+            <TabsTrigger value="transactions">Transaktionen</TabsTrigger>
           </TabsList>
           <TabsContent value="reports" className="space-y-4">
             <ReportsTab transactions={transactions} />
@@ -108,7 +116,7 @@ export default function Dashboard() {
             />
           </TabsContent>
           <TabsContent value="overview" className="space-y-4">
-            <DashboardTab transactions={transactions} />
+            <DashboardTab transactions={transactions} budget={budget} />
           </TabsContent>
         </Tabs>
       </div>

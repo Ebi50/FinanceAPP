@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { UserNav } from '@/components/user-nav';
 import { Button } from '@/components/ui/button';
 import {
@@ -43,8 +43,16 @@ export default function SettingsPage() {
   const [email, setEmail] = useState('jane.doe@beispiel.com');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [budget, setBudget] = useState(2000);
 
   const { toast } = useToast();
+
+  useEffect(() => {
+    const storedBudget = localStorage.getItem('monthlyBudget');
+    if (storedBudget) {
+      setBudget(JSON.parse(storedBudget));
+    }
+  }, []);
 
   const handleProfileSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,6 +90,15 @@ export default function SettingsPage() {
     setConfirmPassword('');
   };
 
+  const handleBudgetSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    localStorage.setItem('monthlyBudget', JSON.stringify(budget));
+    toast({
+      title: 'Budget gespeichert',
+      description: `Ihr monatliches Budget wurde auf ${budget} € festgelegt.`,
+    });
+  };
+
 
   const renderContent = () => {
     switch(activeTab) {
@@ -111,6 +128,24 @@ export default function SettingsPage() {
                     />
                   </div>
                   <Button type="submit">Änderungen speichern</Button>
+                </form>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Budget</CardTitle>
+                <CardDescription>
+                  Legen Sie Ihr monatliches Budget fest.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form className="space-y-4" onSubmit={handleBudgetSave}>
+                  <div className="space-y-2">
+                    <Label htmlFor="budget">Monatliches Budget (€)</Label>
+                    <Input id="budget" type="number" value={budget} onChange={(e) => setBudget(Number(e.target.value))} />
+                  </div>
+                  <Button type="submit">Budget speichern</Button>
                 </form>
               </CardContent>
             </Card>
