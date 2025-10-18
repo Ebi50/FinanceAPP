@@ -76,14 +76,20 @@ export default function Dashboard() {
         </div>
         <Tabs defaultValue="overview" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="overview">Übersicht</TabsTrigger>
-            <TabsTrigger value="transactions">Transaktionen</TabsTrigger>
-            <TabsTrigger value="categories">Kategorien</TabsTrigger>
             <TabsTrigger value="reports">Berichte</TabsTrigger>
-            <TabsTrigger value="import">Import</TabsTrigger>
+            <TabsTrigger value="import">Import/Export</TabsTrigger>
+            <TabsTrigger value="categories">Kategorien</TabsTrigger>
+            <TabsTrigger value="transactions">Transaktionen</TabsTrigger>
+            <TabsTrigger value="overview">Übersicht</TabsTrigger>
           </TabsList>
-          <TabsContent value="overview" className="space-y-4">
-            <DashboardTab transactions={transactions} />
+          <TabsContent value="reports" className="space-y-4">
+            <ReportsTab transactions={transactions} />
+          </TabsContent>
+          <TabsContent value="import" className="space-y-4">
+            <ImportTab onImport={handleImportTransactions} transactions={transactions} />
+          </TabsContent>
+          <TabsContent value="categories" className="space-y-4">
+            <CategoriesTab />
           </TabsContent>
           <TabsContent value="transactions" className="space-y-4">
             <TransactionsTab 
@@ -92,14 +98,8 @@ export default function Dashboard() {
               onUpdate={handleAddOrUpdateTransaction}
             />
           </TabsContent>
-          <TabsContent value="categories" className="space-y-4">
-            <CategoriesTab />
-          </TabsContent>
-          <TabsContent value="reports" className="space-y-4">
-            <ReportsTab transactions={transactions} />
-          </TabsContent>
-          <TabsContent value="import" className="space-y-4">
-            <ImportTab onImport={handleImportTransactions} />
+          <TabsContent value="overview" className="space-y-4">
+            <DashboardTab transactions={transactions} />
           </TabsContent>
         </Tabs>
       </div>

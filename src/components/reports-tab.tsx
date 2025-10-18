@@ -76,19 +76,6 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
     doc.save(`${title.toLowerCase().replace(" ", "-")}.pdf`);
   };
 
-  const handleExportExcel = () => {
-    const worksheetData = transactions.map((t) => ({
-      Datum: format(new Date(t.date), "yyyy-MM-dd"),
-      Beschreibung: t.description,
-      Kategorie: categoryMap.get(t.categoryId) || "Unbekannt",
-      Betrag: t.amount,
-    }));
-    const worksheet = XLSX.utils.json_to_sheet(worksheetData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Transaktionen");
-    XLSX.writeFile(workbook, "transaktionen.xlsx");
-  };
-
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <Card>
@@ -106,20 +93,6 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
           <Button variant="secondary" onClick={() => generatePdf("yearly")}>
             <Download className="mr-2 h-4 w-4" />
             Jahresbericht (PDF)
-          </Button>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-headline">Daten exportieren</CardTitle>
-          <CardDescription>
-            Laden Sie Ihre Ausgabendaten als Excel-Datei herunter.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col sm:flex-row gap-2">
-          <Button variant="secondary" onClick={handleExportExcel}>
-            <FileDown className="mr-2 h-4 w-4" />
-            Nach Excel exportieren
           </Button>
         </CardContent>
       </Card>

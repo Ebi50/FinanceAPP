@@ -7,23 +7,41 @@ import {
   CardHeader,
   CardTitle,
 } from "./ui/card";
-import { FileUp } from "lucide-react";
+import { FileUp, FileDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
 import type { Transaction } from "@/lib/types";
 import { categories } from "@/lib/data";
 import React from "react";
+import { format } from "date-fns";
 
 interface ImportTabProps {
   onImport: (transactions: Transaction[]) => void;
+  transactions: Transaction[];
 }
 
-export function ImportTab({ onImport }: ImportTabProps) {
+export function ImportTab({ onImport, transactions }: ImportTabProps) {
   const { toast } = useToast();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  
+  const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
+
 
   const handleImportClick = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleExportExcel = () => {
+    const worksheetData = transactions.map((t) => ({
+      Datum: format(new Date(t.date), "yyyy-MM-dd"),
+      Beschreibung: t.description,
+      Kategorie: categoryMap.get(t.categoryId) || "Unbekannt",
+      Betrag: t.amount,
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Transaktionen");
+    XLSX.writeFile(workbook, "transaktionen.xlsx");
   };
 
   const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -149,26 +167,42 @@ export function ImportTab({ onImport }: ImportTabProps) {
   };
 
   return (
-    <Card>
-        <CardHeader>
-          <CardTitle className="font-headline">Daten importieren</CardTitle>
-          <CardDescription>
-            Laden Sie Ihre Ausgabendaten aus einer Excel-Datei hoch.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col sm:flex-row gap-2">
-          <Button variant="secondary" onClick={handleImportClick}>
-            <FileUp className="mr-2 h-4 w-4" />
-            Aus Excel importieren
-          </Button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileImport}
-            className="hidden"
-            accept=".xlsx, .xls"
-          />
-        </CardContent>
-      </Card>
+    <div className="grid gap-4 md:grid-cols-2">
+      <Card>
+          <CardHeader>
+            <CardTitle className="font-headline">Daten importieren</CardTitle>
+            <CardDescription>
+              Laden Sie Ihre Ausgabendaten aus einer Excel-Datei hoch.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col sm:flex-row gap-2">
+            <Button variant="secondary" onClick={handleImportClick}>
+              <FileUp className="mr-2 h-4 w-4" />
+              Aus Excel importieren
+            </Button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileImport}
+              className="hidden"
+              accept=".xlsx, .xls"
+            />
+          </CardContent>
+        </Card>
+        <Card>
+            <CardHeader>
+            <CardTitle className="font-headline">Daten exportieren</CardTitle>
+            <CardDescription>
+                Laden Sie Ihre Ausgabendaten als Excel-Datei herunter.
+            </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col sm:flex-row gap-2">
+            <Button variant="secondary" onClick={handleExportExcel}>
+                <FileDown className="mr-2 h-4 w-4" />
+                Nach Excel exportieren
+            </Button>
+            </CardContent>
+        </Card>
+    </div>
   );
 }
