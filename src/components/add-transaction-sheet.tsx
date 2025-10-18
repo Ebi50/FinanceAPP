@@ -31,7 +31,7 @@ import { Checkbox } from './ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
 import { cn, formatCurrency } from '@/lib/utils';
-import { format, isValid, toDate } from 'date-fns';
+import { format, isValid } from 'date-fns';
 import { de } from 'date-fns/locale';
 import React, { useState, useEffect } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
@@ -123,16 +123,14 @@ export function AddTransactionSheet({
       };
 
       if (transaction) {
-          // This ensures that any date format (Timestamp, Date string, etc.) from Firestore
-          // is converted to a JS Date object that react-day-picker can understand.
-          const transactionDate = toDate(transaction.date);
+          // This ensures that a Firestore Timestamp is converted to a JS Date object
+          const transactionDate = transaction.date ? transaction.date.toDate() : new Date();
 
           defaultValues = {
               id: transaction.id,
               description: transaction.description || '',
               amounts: transaction.amount ? [{ value: transaction.amount }] : [{ value: '' as any }],
               categoryId: transaction.categoryId || '',
-              // Only set the date if it's a valid date, otherwise fall back to a new Date().
               date: isValid(transactionDate) ? transactionDate : new Date(),
               isRecurring: (transaction as any).isRecurring || false,
           };
@@ -170,7 +168,6 @@ export function AddTransactionSheet({
   const onSubmit = (data: TransactionFormValues) => {
     const totalAmount = data.amounts.reduce((sum, current) => sum + Number(current.value), 0);
     
-    // Ensure date is a valid Date object before submitting
     if (!data.date || !isValid(data.date)) {
         form.setError('date', { type: 'manual', message: 'Ungültiges Datum.' });
         return;
@@ -371,3 +368,5 @@ export function AddTransactionSheet({
     </Sheet>
   );
 }
+
+    

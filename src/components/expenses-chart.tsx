@@ -7,7 +7,6 @@ import type { Transaction, Category } from "@/lib/types";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection } from 'firebase/firestore';
 import { useMemo } from "react";
-import { toDate } from "date-fns";
 
 interface ExpensesChartProps {
   transactions: Transaction[];
@@ -71,3 +70,5 @@ export function ExpensesChart({ transactions }: ExpensesChartProps) {
     </ResponsiveContainer>
   )
 }
+
+    

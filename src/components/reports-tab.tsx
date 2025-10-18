@@ -18,7 +18,7 @@ import { Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
-import { format, toDate, isValid, getYear } from "date-fns";
+import { format, isValid, getYear } from "date-fns";
 import { de } from "date-fns/locale";
 import type { Transaction, Category } from "@/lib/types";
 import React, { useMemo, useState, useEffect } from "react";
@@ -53,8 +53,10 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
 
     const now = new Date();
     const currentMonth = now.getMonth();
-    const filteredTransactions = transactions.filter((t) => {
-      const transactionDate = toDate(t.date);
+    
+    // Use all transactions for the selected year for the yearly report
+    const reportTransactions = transactions.filter(t => {
+      const transactionDate = t.date.toDate();
       if (!isValid(transactionDate)) return false;
       const transactionYear = getYear(transactionDate);
 
@@ -67,17 +69,9 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
         return transactionYear === year;
       }
     });
-    
-    // Use all transactions for the selected year for the yearly report
-    const yearlyReportTransactions = period === "yearly" ? 
-      transactions.filter(t => {
-        const d = toDate(t.date);
-        return isValid(d) && getYear(d) === year;
-      })
-      : filteredTransactions;
 
 
-    if (yearlyReportTransactions.length === 0) {
+    if (reportTransactions.length === 0) {
       toast({
         title: "Keine Daten",
         description: `Für den ausgewählten Zeitraum im Jahr ${year} wurden keine Transaktionen gefunden.`,
@@ -85,9 +79,9 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
       return;
     }
 
-    yearlyReportTransactions.forEach((t) => {
+    reportTransactions.forEach((t) => {
       const transactionData = [
-        format(toDate(t.date), "dd.MM.yyyy", { locale: de }),
+        format(t.date.toDate(), "dd.MM.yyyy", { locale: de }),
         t.description,
         categoryMap.get(t.categoryId) || "Unbekannt",
         `-${t.amount.toFixed(2)} €`,
@@ -154,3 +148,5 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
     </div>
   );
 }
+
+    

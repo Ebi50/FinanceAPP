@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { Badge } from "./ui/badge";
-import { format, toDate, isValid } from "date-fns";
+import { format, isValid } from "date-fns";
 import { de } from 'date-fns/locale';
 import {
   AlertDialog,
@@ -90,8 +90,8 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
             const incomeCategory = categories?.find(c => c.name.toLowerCase() === 'einnahmen');
             const isIncome = category?.id === incomeCategory?.id;
             
-            // This robustly converts Firestore Timestamps or JS Dates into a JS Date for formatting
-            const transactionDate = toDate(transaction.date);
+            // This robustly converts Firestore Timestamps into a JS Date for formatting
+            const transactionDate = transaction.date.toDate();
 
             return (
               <TableRow key={transaction.id}>
@@ -169,3 +169,5 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
     </>
   );
 }
+
+    

@@ -41,7 +41,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useMemoFirebase } from '@/firebase/provider';
-import { toDate, getMonth, getYear, isValid } from 'date-fns';
+import { isValid } from 'date-fns';
 import { de } from 'date-fns/locale';
 
 
@@ -82,15 +82,18 @@ export default function Dashboard() {
 
   const handleAddOrUpdateTransaction = (transactionData: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date }) => {
     if (!user || !firestore) return;
-
+  
     const { id: transactionId, date, ...restOfData } = transactionData;
+  
+    // Always convert the JS Date from the form to a Firestore Timestamp
+    const firestoreTimestamp = Timestamp.fromDate(date);
   
     if (transactionId) {
       // This is an update.
       const docRef = doc(firestore, 'users', user.uid, 'transactions', transactionId);
       const dataToUpdate = {
         ...restOfData,
-        date: Timestamp.fromDate(date), // Convert JS Date to Firestore Timestamp
+        date: firestoreTimestamp,
         updatedAt: serverTimestamp(),
       };
       setDocumentNonBlocking(docRef, dataToUpdate, { merge: true });
@@ -99,7 +102,7 @@ export default function Dashboard() {
       const coll = collection(firestore, 'users', user.uid, 'transactions');
       const dataToCreate = {
         ...restOfData,
-        date: Timestamp.fromDate(date), // Convert JS Date to Firestore Timestamp
+        date: firestoreTimestamp,
         createdAt: serverTimestamp(),
       };
       addDocumentNonBlocking(coll, dataToCreate);
@@ -170,16 +173,15 @@ export default function Dashboard() {
 
     const years = new Set<number>();
     allTransactions.forEach(t => {
-      if (t.date) {
-        // Use toDate for robust conversion from Timestamp or other formats
-        const date = toDate(t.date as any);
+      if (t.date && t.date.toDate) { // Check if date exists and has toDate method
+        const date = t.date.toDate(); // Convert Firestore Timestamp to JS Date
         if (isValid(date)) {
-            years.add(getYear(date));
+            years.add(date.getFullYear());
         }
       }
     });
     
-    // Ensure the current year is always an option, even if there are no transactions
+    // Ensure the current year is always an option
     years.add(new Date().getFullYear());
 
     return Array.from(years).sort((a, b) => b - a);
@@ -187,17 +189,22 @@ export default function Dashboard() {
 
   const filteredTransactions = useMemo(() => {
     if (!allTransactions) return [];
-
+  
     const filtered = allTransactions.filter(t => {
-      if (!t.date) return false;
-      const date = toDate(t.date as any);
+      if (!t.date || !t.date.toDate) return false;
+  
+      // Convert Firestore Timestamp to JS Date. This is timezone-aware
+      // but getMonth() and getFullYear() will use the browser's local timezone.
+      // This is generally the desired behavior.
+      const date = t.date.toDate();
       if (!isValid(date)) return false;
-      return getMonth(date) === currentMonth && getYear(date) === currentYear;
+      
+      return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
     });
-
+  
     return filtered.sort((a, b) => {
-        const dateA = toDate(a.date as any);
-        const dateB = toDate(b.date as any);
+        const dateA = a.date.toDate();
+        const dateB = b.date.toDate();
         if (!isValid(dateA) || !isValid(dateB)) return 0;
         return dateB.getTime() - dateA.getTime();
     });
@@ -205,8 +212,7 @@ export default function Dashboard() {
   }, [allTransactions, currentMonth, currentYear]);
 
   useEffect(() => {
-    // If the currently selected year is not in the list of available years (e.g., after deleting all transactions for that year),
-    // reset to the most recent available year.
+    // If the currently selected year is not in the list of available years, reset to the most recent available year.
     if (availableYears.length > 0 && !availableYears.includes(currentYear)) {
       setCurrentYear(availableYears[0]);
     }
@@ -337,3 +343,5 @@ export default function Dashboard() {
     </div>
   );
 }
+
+    
