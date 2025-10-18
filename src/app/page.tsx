@@ -18,7 +18,7 @@ import { ImportTab } from "@/components/import-tab";
 import { AddTransactionSheet } from "@/components/add-transaction-sheet";
 import type { Transaction, Category } from '@/lib/types';
 import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase, addDocumentNonBlocking, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, doc, serverTimestamp, writeBatch, getDocs } from 'firebase/firestore';
+import { collection, doc, serverTimestamp, writeBatch, getDocs, Timestamp } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
@@ -71,19 +71,19 @@ export default function Dashboard() {
     if (!user) return;
     const coll = collection(firestore, 'users', user.uid, 'transactions');
     
-    // Create a mutable copy
-    const transactionData: any = { ...transaction };
+    // Create a mutable copy to work with
+    const transactionData: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date | Timestamp } = { ...transaction };
+    
+    // Convert Date to Firestore Timestamp
+    transactionData.date = Timestamp.fromDate(transaction.date);
 
     if (transaction.id) {
       const docRef = doc(coll, transaction.id);
-      // For updates, we don't want to change the ID field in the document.
-      const id = transactionData.id;
-      delete transactionData.id;
-      setDocumentNonBlocking(docRef, { ...transactionData, updatedAt: serverTimestamp() }, { merge: true });
+      const { id, ...dataToUpdate } = transactionData;
+      setDocumentNonBlocking(docRef, { ...dataToUpdate, updatedAt: serverTimestamp() }, { merge: true });
     } else {
-      // For new documents, add createdAt.
-      delete transactionData.id; // ensure no id field is written
-      addDocumentNonBlocking(coll, { ...transactionData, createdAt: serverTimestamp() });
+      const { id, ...dataToAdd } = transactionData;
+      addDocumentNonBlocking(coll, { ...dataToAdd, createdAt: serverTimestamp() });
     }
   };
 
