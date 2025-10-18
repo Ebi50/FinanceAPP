@@ -116,9 +116,19 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
         
         if (headerRowIndex === -1) throw new Error("Keine gültigen Kategorie-Header gefunden.");
         
-        const excelHeaders = json[headerRowIndex].filter(h => h && typeof h === 'string' && h.trim() !== '' && h.toLowerCase() !== 'betrag');
+        const headersFromExcel = json[headerRowIndex] as string[];
+        
+        const excelHeadersToMap = headersFromExcel
+            .map((header, index) => ({ header, index }))
+            .filter(({ header, index }) => {
+                if (!header || typeof header !== 'string') return false;
+                const nextCell = headersFromExcel[index + 1];
+                return (nextCell === 'Betrag' || nextCell === null || nextCell === '');
+            })
+            .map(({ header }) => header.replace(/\s*\d+\s*$/, '').trim());
 
-        const uniqueHeaders = [...new Set(excelHeaders.map(h => h.replace(/\s*\d+\s*$/, '').trim()))];
+        const uniqueHeaders = [...new Set(excelHeadersToMap)];
+
 
         setDetectedHeaders(uniqueHeaders);
         const initialMapping: HeaderMapping = {};
@@ -317,14 +327,11 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
             <div className="space-y-4 py-4 max-h-96 overflow-y-auto pr-2">
                 {detectedHeaders.map(header => (
                     <div key={header} className="grid grid-cols-[1fr_auto] items-center gap-4">
-                        <Label htmlFor={`mapping-${header}`} className="text-left font-semibold truncate">
-                          {header}
-                        </Label>
                         <Select
                             value={headerMapping[header] || ''}
                             onValueChange={(value) => handleMappingChange(header, value)}
                         >
-                            <SelectTrigger id={`mapping-${header}`} className="w-[180px]">
+                            <SelectTrigger id={`mapping-${header}`} className="w-full">
                                 <SelectValue placeholder="Kategorie auswählen" />
                             </SelectTrigger>
                             <SelectContent>
@@ -337,6 +344,9 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
                                 ))}
                             </SelectContent>
                         </Select>
+                        <Label htmlFor={`mapping-${header}`} className="text-left font-semibold truncate">
+                          {header}
+                        </Label>
                     </div>
                 ))}
             </div>
