@@ -103,48 +103,57 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
           header: 1,
           defval: null
         }) as RawTransactionData;
+        
+        if (!json || json.length === 0) {
+            throw new Error("Die Excel-Datei ist leer oder konnte nicht gelesen werden.");
+        }
 
         setRawTransactionData(json);
         
         const headerRowIndex = json.findIndex(row => 
             Array.isArray(row) && row.some(cell => {
-                if (typeof cell !== 'string' || !cell.trim()) return false;
-                const categoryName = cell.replace(/\s*\d+\s*$/, '').trim().toLowerCase();
-                return appCategoryMap.has(categoryName) || ['einnahmen:', 'haushalt', 'betrag'].includes(categoryName);
+                const cellStr = String(cell || '').trim().toLowerCase();
+                const keywords = ['rechnungsdatum', 'einnahmen', 'haushalt', 'betrag', 'summe', 'lebensmittel', 'transport'];
+                return keywords.some(kw => cellStr.includes(kw));
             })
         );
         
-        if (headerRowIndex === -1) throw new Error("Keine gültigen Kategorie-Header gefunden.");
+        if (headerRowIndex === -1) throw new Error("Es konnte keine gültige Kopfzeile mit Kategorien gefunden werden.");
         
         const headersFromExcel = json[headerRowIndex] as string[];
         
-        const excelHeadersToMap = headersFromExcel
-            .map((header, index) => ({ header, index }))
-            .filter(({ header, index }) => {
-                if (!header || typeof header !== 'string') return false;
-                const nextCell = headersFromExcel[index + 1];
-                const cleanHeader = header.replace(/\s*\d+\s*$/, '').trim().toLowerCase();
-                if (cleanHeader === 'betrag' || cleanHeader.startsWith('einnahmen')) return false;
-                return (nextCell === 'Betrag' || nextCell === null || nextCell === '');
-            })
-            .map(({ header }) => header.replace(/\s*\d+\s*$/, '').trim());
+        const excelHeadersToMap: string[] = [];
+        headersFromExcel.forEach((header, index) => {
+          if (header && typeof header === 'string') {
+            const cleanHeader = header.replace(/\s*\d+\s*$/, '').trim();
+            const nextCell = headersFromExcel[index + 1];
+            const cleanNextCell = String(nextCell || '').trim().toLowerCase();
+
+            // A column is a category if the next column is 'Betrag' or empty/null
+            if (cleanNextCell === 'betrag' || cleanNextCell === '') {
+               if(cleanHeader.toLowerCase() !== 'rechnungsdatum' && cleanHeader.toLowerCase() !== 'einnahmen:') {
+                 excelHeadersToMap.push(cleanHeader);
+               }
+            }
+          }
+        });
 
         const uniqueHeaders = [...new Set(excelHeadersToMap)];
-
+        if (uniqueHeaders.length === 0) {
+          throw new Error("Keine zuzuordnenden Kategorien in der Datei gefunden. Überprüfen Sie das Format.");
+        }
 
         setDetectedHeaders(uniqueHeaders);
         const initialMapping: HeaderMapping = {};
         uniqueHeaders.forEach(header => {
-            const foundCat = appCategoryMap.get(header.toLowerCase());
-            if (foundCat) {
-                initialMapping[header] = foundCat;
-            } else if (header.toLowerCase() === 'haushalt') {
-                initialMapping[header] = appCategoryMap.get('wohnen') || '';
-            }
-             else {
+            const foundCatId = appCategoryMap.get(header.toLowerCase());
+            if (foundCatId) {
+                initialMapping[header] = foundCatId;
+            } else {
                 initialMapping[header] = '';
             }
         });
+
         setHeaderMapping(initialMapping);
         setIsMappingDialogOpen(true);
 
@@ -172,68 +181,56 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
             Array.isArray(row) && row.some(cell => {
                 if (typeof cell !== 'string' || !cell.trim()) return false;
                 const categoryName = cell.replace(/\s*\d+\s*$/, '').trim().toLowerCase();
-                return appCategoryMap.has(categoryName) || ['einnahmen:', 'haushalt', 'betrag'].includes(categoryName);
+                return appCategoryMap.has(categoryName) || ['einnahmen:', 'haushalt', 'betrag', 'rechnungsdatum'].includes(categoryName);
             })
         );
 
-        const headers = json[headerRowIndex].map(h => typeof h === 'string' ? h : '');
+        const headers = json[headerRowIndex].map(h => typeof h === 'string' ? h.replace(/\s*\d+\s*$/, '').trim() : '');
         const dataRows = json.slice(headerRowIndex + 1);
 
         for(let col = 0; col < headers.length; col++) {
           const header = headers[col];
           if (header && typeof header === 'string') {
-            const cleanHeader = header.replace(/\s*\d+\s*$/, '').trim();
-            const categoryId = headerMapping[cleanHeader];
+            const categoryId = headerMapping[header];
             
-            if (cleanHeader.toLowerCase().startsWith('einnahmen')) {
+            if (header.toLowerCase().startsWith('einnahmen')) {
                 continue;
             }
 
             if (categoryId) {
-              const dateCol = col;
+              const dateColIndex = headers.findIndex(h => h.toLowerCase() === 'rechnungsdatum');
               const amountCol = col + 1;
-              let lastValidDate = new Date(currentYear, 0, 15);
+              let lastValidDate: Date | null = null;
               
-              if (headers[amountCol] === 'Betrag' || headers[amountCol] === '' || headers[amountCol] === null) {
+              if ((String(headers[amountCol] || '').toLowerCase() === 'betrag' || headers[amountCol] === '' || headers[amountCol] === null)) {
                 for (const row of dataRows) {
-                   if (row[dateCol] && typeof row[dateCol] === 'string' && row[dateCol].toLowerCase().includes('summe')) break;
+                   if (row[col] && typeof row[col] === 'string' && String(row[col]).toLowerCase().includes('summe')) break;
 
-                   const dateValue = row[dateCol];
+                   const descriptionValue = row[col];
                    const amountValue = row[amountCol];
+                   const dateValue = dateColIndex !== -1 ? row[dateColIndex] : null;
 
-                   if ((dateValue === null || dateValue === '') && (amountValue === null || amountValue === '')) {
-                     continue;
-                   }
-                   
                    if (amountValue && (typeof amountValue === 'number' || (typeof amountValue === 'string' && String(amountValue).trim() !== ''))) {
                       let date: Date | null = null;
-                      let description = categories?.find(c => c.id === categoryId)?.name || 'Importiert';
-
-                      if(dateValue) {
-                        if (typeof dateValue === 'string' && isNaN(Date.parse(dateValue)) && !/^\d{1,2}\.\d{1,2}\.?$/.test(dateValue)) {
-                            description = dateValue;
-                            date = new Date(lastValidDate.getFullYear(), lastValidDate.getMonth(), 15);
-                        } else if (dateValue instanceof Date) {
-                            date = dateValue;
-                        } else if (typeof dateValue === 'number') { 
-                          const d = XLSX.SSF.parse_date_code(dateValue);
-                          date = new Date(currentYear, d.m - 1, d.d);
-                        } else if (typeof dateValue === 'string') {
+                      
+                      if (dateValue instanceof Date) {
+                          date = dateValue;
+                          lastValidDate = date;
+                      } else if (typeof dateValue === 'string') {
                           const parts = dateValue.split('.').map(p => parseInt(p.trim(), 10));
                           if (parts.length >= 2) {
                             date = new Date(currentYear, parts[1] - 1, parts[0] || 1);
+                            lastValidDate = date;
                           }
-                        }
-                      } else {
-                        date = new Date(lastValidDate.getFullYear(), lastValidDate.getMonth(), 15);
+                      } else if (lastValidDate) {
+                        date = lastValidDate;
                       }
-                      
+
                       if(date) {
-                         lastValidDate = date;
                          const amount = typeof amountValue === 'number' ? amountValue : parseFloat(String(amountValue).replace('.', '').replace(',', '.'));
-                         if (!isNaN(amount)) {
+                         if (!isNaN(amount) && amount > 0) {
                              newTransactions.push({
-                                description: description,
+                                description: String(descriptionValue || header),
                                 amount: amount,
                                 date,
                                 categoryId,
