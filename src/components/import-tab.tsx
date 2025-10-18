@@ -38,6 +38,7 @@ interface ImportTabProps {
 
 type RawTransactionData = any[][];
 type HeaderMapping = { [key: string]: string };
+type MappedCategory = { name: string; columnIndex: number };
 
 export function ImportTab({ transactions }: ImportTabProps) {
   const { toast } = useToast();
@@ -124,19 +125,26 @@ export function ImportTab({ transactions }: ImportTabProps) {
         }
 
         const categoryRow = json[dataHeaderRowIndex - 1];
-        const headersToMap: string[] = [];
-        let lastCategory: string | null = null;
-        for(const cell of categoryRow) {
-            const categoryName = cell ? String(cell).trim() : null;
-            if(categoryName) {
-                lastCategory = categoryName;
-                if (!headersToMap.includes(lastCategory)) {
-                    headersToMap.push(lastCategory);
+        const dataHeaderRow = json[dataHeaderRowIndex];
+        const headersToMap: MappedCategory[] = [];
+
+        let lastFoundCategory: string | null = null;
+        for(let i = 0; i < dataHeaderRow.length; i++) {
+            const headerCell = String(dataHeaderRow[i] || '').toLowerCase();
+            const categoryCell = categoryRow[i] ? String(categoryRow[i]).trim() : null;
+
+            if (categoryCell) {
+                lastFoundCategory = categoryCell;
+            }
+
+            if(headerCell === 'datum' && lastFoundCategory) {
+                 if (!headersToMap.some(h => h.name === lastFoundCategory)) {
+                    headersToMap.push({ name: lastFoundCategory, columnIndex: i });
                 }
             }
         }
         
-        const uniqueHeaders = [...new Set(headersToMap)];
+        const uniqueHeaders = headersToMap.map(h => h.name);
 
         if (uniqueHeaders.length === 0) {
           throw new Error("Keine zuzuordnenden Kategorien in der Datei gefunden. Bitte prüfen Sie die Struktur Ihrer Excel-Datei.");
