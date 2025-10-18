@@ -37,7 +37,8 @@ const navItems = [
 ];
 
 type UserProfile = {
-  name?: string;
+  firstName?: string;
+  lastName?: string;
   email?: string;
   budget?: number;
 }
@@ -56,7 +57,8 @@ export default function SettingsPage() {
   );
   const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileQuery);
 
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -66,12 +68,15 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (userProfile) {
-      setName(userProfile.name || user?.displayName || '');
+      setFirstName(userProfile.firstName || '');
+      setLastName(userProfile.lastName || '');
       setEmail(userProfile.email || user?.email || '');
       setBudget(userProfile.budget || 2000);
     } else if (user) {
         // Fallback if profile doesn't exist in Firestore yet
-        setName(user.displayName || '');
+        const nameParts = user.displayName?.split(' ') || ['', ''];
+        setFirstName(nameParts[0]);
+        setLastName(nameParts.slice(1).join(' '));
         setEmail(user.email || '');
     }
   }, [userProfile, user]);
@@ -80,10 +85,11 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!user || !userProfileQuery) return;
     try {
-        if(user.displayName !== name) {
-            await updateProfile(user, { displayName: name });
+        const displayName = `${firstName} ${lastName}`.trim();
+        if(user.displayName !== displayName) {
+            await updateProfile(user, { displayName });
         }
-        await setDoc(userProfileQuery, { name }, { merge: true });
+        await setDoc(userProfileQuery, { firstName, lastName }, { merge: true });
         toast({
             title: 'Profil gespeichert',
             description: 'Ihre Daten wurden erfolgreich aktualisiert.',
@@ -174,9 +180,15 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent>
                 <form className="space-y-4" onSubmit={handleProfileSave}>
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Name</Label>
-                    <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="firstName">Vorname</Label>
+                      <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName">Nachname</Label>
+                      <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">Email</Label>

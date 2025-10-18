@@ -1,145 +1,190 @@
 /**
- * @file Firebase Security Rules for Expense Tracker App
+ * @fileoverview Firestore Security Rules for Expense Tracker.
  *
- * @corePhilosophy This ruleset enforces a strict user-ownership model.  Each user can only access their own data,
- * with the exception of public read access on certain collections (if implemented). All write operations are
- * protected by authorization checks based on the authenticated user's ID. Data structure validation is minimized
- * in this prototyping phase to allow for rapid iteration.
+ * Core Philosophy:
+ * This ruleset enforces a strict user-ownership model. Only the authenticated user can
+ * create, read, update, or delete data associated with their own user ID. This
+ * model prioritizes data privacy and prevents unauthorized access.
  *
- * @dataStructure The data is structured hierarchically under the `/users/{userId}` collection. Each user owns
- * their profile and associated data, including expense categories, subcategories, and transactions.
+ * Data Structure:
+ * All data is nested under `/users/{userId}` to enforce clear ownership. This
+ * hierarchical structure simplifies authorization rules and improves query
+ * performance. Each user "owns" their profile and all data nested under it.
  *
- * @keySecurityDecisions
- *  - Users cannot list all users.
- *  - Users can only access resources they own.
- *
+ * Key Security Decisions:
+ * - User listing is disallowed to protect user privacy and prevent enumeration attacks.
+ * - All write operations are strictly validated against the authenticated user's ID
+ *   to prevent data spoofing or modification by unauthorized users.
+ * - The rules explicitly deny any operation that isn't explicitly allowed, ensuring
+ *   a "deny by default" security posture.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description: Secure user profiles, ensuring only the authenticated user can access their profile data.
-     * @path: /users/{userId}
-     * @allow: (create) User with UID 'user_abc' can create their profile at /users/user_abc.
-     * @deny: (create) User with UID 'user_def' attempts to create a profile at /users/user_abc.
-     * @principle: Enforces document ownership for writes, restricts access to a user's own data tree, and validates relational integrity between documents.
+     * @description Protects the user profiles. Only the authenticated user can read/write their own profile.
+     * @path /users/{userId}
+     * @allow (create) - User with UID 'user_abc' can create their profile document at /users/user_abc if request.auth.uid == 'user_abc'.
+     * @allow (get) - User with UID 'user_abc' can read their profile document at /users/user_abc if request.auth.uid == 'user_abc'.
+     * @allow (update) - User with UID 'user_abc' can update their profile document at /users/user_abc if request.auth.uid == 'user_abc'.
+     * @allow (delete) - User with UID 'user_abc' can delete their profile document at /users/user_abc if request.auth.uid == 'user_abc'.
+     * @deny (create) - User with UID 'user_def' cannot create a profile document at /users/user_abc.
+     * @deny (get) - User with UID 'user_def' cannot read the profile document at /users/user_abc.
+     * @deny (update) - User with UID 'user_def' cannot update the profile document at /users/user_abc.
+     * @deny (delete) - User with UID 'user_def' cannot delete the profile document at /users/user_abc.
+     * @principle Enforces strict user ownership for profile data.
      */
     match /users/{userId} {
-      // Validate that the authenticated user's ID matches the userId in the path.
+      // Helper function to check if the user is signed in and owns the resource.
+      function isSignedIn() {
+        return request.auth != null;
+      }
       function isOwner(userId) {
-        return request.auth != null && request.auth.uid == userId;
+        return request.auth.uid == userId;
       }
 
-      // Ensure the document exists before allowing update or delete operations.
       function isExistingOwner(userId) {
         return isOwner(userId) && resource != null;
       }
 
-      allow get: if isOwner(userId);
-      allow list: if false; // Listing all users is not permitted.
+      // Allow a user to create their own profile if the userId matches their auth.uid.
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == userId;
 
-      // Allow the user to create their own profile if the userId matches their auth UID.
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      // Only the authenticated user can read their own profile.
+      allow get: if isSignedIn() && isOwner(userId);
 
-      // Only the owner can update their profile, and the userId in the document data must remain immutable.
+      // Only the authenticated user can update their own profile, and the userId cannot be changed.
       allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
 
-      // Only the owner can delete their profile.
+      // Only the authenticated user can delete their own profile.
       allow delete: if isExistingOwner(userId);
+
+      // Listing users is not allowed.
+      allow list: if false;
     }
 
     /**
-     * @description: Secure expense categories, ensuring only the owner can manage them.
-     * @path: /users/{userId}/expenseCategories/{expenseCategoryId}
-     * @allow: (create) User with UID 'user_abc' can create a category under /users/user_abc/expenseCategories/category_1.
-     * @deny: (update) User with UID 'user_def' attempts to update a category under /users/user_abc/expenseCategories/category_1.
-     * @principle: Enforces document ownership for writes, restricts access to a user's own data tree.
+     * @description Manages expense categories for a specific user. Only the authenticated user can manage their own categories.
+     * @path /users/{userId}/expenseCategories/{expenseCategoryId}
+     * @allow (create) - User with UID 'user_abc' can create an expense category under /users/user_abc/expenseCategories/category_1 if request.auth.uid == 'user_abc'.
+     * @allow (get) - User with UID 'user_abc' can read the expense category at /users/user_abc/expenseCategories/category_1 if request.auth.uid == 'user_abc'.
+     * @allow (update) - User with UID 'user_abc' can update the expense category at /users/user_abc/expenseCategories/category_1 if request.auth.uid == 'user_abc'.
+     * @allow (delete) - User with UID 'user_abc' can delete the expense category at /users/user_abc/expenseCategories/category_1 if request.auth.uid == 'user_abc'.
+     * @deny (create) - User with UID 'user_def' cannot create an expense category under /users/user_abc/expenseCategories/category_1.
+     * @deny (get) - User with UID 'user_def' cannot read the expense category at /users/user_abc/expenseCategories/category_1.
+     * @deny (update) - User with UID 'user_def' cannot update the expense category at /users/user_abc/expenseCategories/category_1.
+     * @deny (delete) - User with UID 'user_def' cannot delete the expense category at /users/user_abc/expenseCategories/category_1.
+     * @principle Enforces user ownership for expense categories.
      */
     match /users/{userId}/expenseCategories/{expenseCategoryId} {
-      // Validate that the authenticated user's ID matches the userId in the path.
+      function isSignedIn() {
+        return request.auth != null;
+      }
       function isOwner(userId) {
-        return request.auth != null && request.auth.uid == userId;
+        return request.auth.uid == userId;
       }
 
-      // Ensure the document exists before allowing update or delete operations.
       function isExistingOwner(userId) {
         return isOwner(userId) && resource != null;
       }
 
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
+      // Allow creation if the user is signed in and owns the userId.
+      allow create: if isSignedIn() && isOwner(userId);
 
-      // Allow the user to create an expense category in their own user path.
-      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      // Only the owner can read the expense category.
+      allow get: if isSignedIn() && isOwner(userId);
 
-      // Only the owner can update the expense category, and the userId in the document must remain immutable.
-      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+      // Only the owner can update the expense category.
+      allow update: if isExistingOwner(userId);
 
       // Only the owner can delete the expense category.
       allow delete: if isExistingOwner(userId);
+
+      // Only the owner can list the expense categories.
+      allow list: if isSignedIn() && isOwner(userId);
     }
 
     /**
-     * @description: Secure expense subcategories, ensuring only the owner can manage them.
-     * @path: /users/{userId}/expenseCategories/{expenseCategoryId}/expenseSubcategories/{expenseSubcategoryId}
-     * @allow: (create) User with UID 'user_abc' can create a subcategory under /users/user_abc/expenseCategories/category_1/expenseSubcategories/subcategory_1.
-     * @deny: (update) User with UID 'user_def' attempts to update a subcategory under /users/user_abc/expenseCategories/category_1/expenseSubcategories/subcategory_1.
-     * @principle: Enforces document ownership for writes and restricts access to a user's own data tree.
+     * @description Manages expense subcategories within a user's expense categories. Enforces user-based ownership.
+     * @path /users/{userId}/expenseCategories/{expenseCategoryId}/expenseSubcategories/{expenseSubcategoryId}
+     * @allow (create) - User with UID 'user_abc' can create an expense subcategory under their category.
+     * @allow (get) - User with UID 'user_abc' can read their expense subcategory.
+     * @allow (update) - User with UID 'user_abc' can update their expense subcategory.
+     * @allow (delete) - User with UID 'user_abc' can delete their expense subcategory.
+     * @deny (create) - User with UID 'user_def' cannot create an expense subcategory in 'user_abc's categories.
+     * @deny (get) - User with UID 'user_def' cannot read expense subcategories in 'user_abc's categories.
+     * @deny (update) - User with UID 'user_def' cannot update expense subcategories in 'user_abc's categories.
+     * @deny (delete) - User with UID 'user_def' cannot delete expense subcategories in 'user_abc's categories.
+     * @principle Enforces strict user ownership for expense subcategories.
      */
     match /users/{userId}/expenseCategories/{expenseCategoryId}/expenseSubcategories/{expenseSubcategoryId} {
-      // Validate that the authenticated user's ID matches the userId in the path.
+      function isSignedIn() {
+        return request.auth != null;
+      }
       function isOwner(userId) {
-        return request.auth != null && request.auth.uid == userId;
+        return request.auth.uid == userId;
       }
 
-      // Ensure the document exists before allowing update or delete operations.
       function isExistingOwner(userId) {
         return isOwner(userId) && resource != null;
       }
 
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
+      // Allow creation if the user is signed in and owns the userId.
+      allow create: if isSignedIn() && isOwner(userId);
 
-      // Allow the user to create an expense subcategory in their own user path.
-      allow create: if isOwner(userId);
+      // Only the owner can read the expense subcategory.
+      allow get: if isSignedIn() && isOwner(userId);
 
       // Only the owner can update the expense subcategory.
       allow update: if isExistingOwner(userId);
 
       // Only the owner can delete the expense subcategory.
       allow delete: if isExistingOwner(userId);
+
+      // Only the owner can list the expense subcategories.
+      allow list: if isSignedIn() && isOwner(userId);
     }
 
     /**
-     * @description: Secure transactions, ensuring only the owner can manage them.
-     * @path: /users/{userId}/transactions/{transactionId}
-     * @allow: (create) User with UID 'user_abc' can create a transaction under /users/user_abc/transactions/transaction_1.
-     * @deny: (update) User with UID 'user_def' attempts to update a transaction under /users/user_abc/transactions/transaction_1.
-     * @principle: Enforces document ownership for writes and restricts access to a user's own data tree.
+     * @description Manages transactions for a specific user. Enforces user-based ownership.
+     * @path /users/{userId}/transactions/{transactionId}
+     * @allow (create) - User with UID 'user_abc' can create a transaction under their user ID.
+     * @allow (get) - User with UID 'user_abc' can read their transaction.
+     * @allow (update) - User with UID 'user_abc' can update their transaction.
+     * @allow (delete) - User with UID 'user_abc' can delete their transaction.
+     * @deny (create) - User with UID 'user_def' cannot create a transaction under 'user_abc's ID.
+     * @deny (get) - User with UID 'user_def' cannot read transactions under 'user_abc's ID.
+     * @deny (update) - User with UID 'user_def' cannot update transactions under 'user_abc's ID.
+     * @deny (delete) - User with UID 'user_def' cannot delete transactions under 'user_abc's ID.
+     * @principle Enforces strict user ownership for transactions.
      */
     match /users/{userId}/transactions/{transactionId} {
-      // Validate that the authenticated user's ID matches the userId in the path.
+      function isSignedIn() {
+        return request.auth != null;
+      }
       function isOwner(userId) {
-        return request.auth != null && request.auth.uid == userId;
+        return request.auth.uid == userId;
       }
 
-      // Ensure the document exists before allowing update or delete operations.
       function isExistingOwner(userId) {
         return isOwner(userId) && resource != null;
       }
 
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
+      // Allow creation if the user is signed in and owns the userId.
+      allow create: if isSignedIn() && isOwner(userId);
 
-      // Allow the user to create a transaction in their own user path, with matching userId.
-      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      // Only the owner can read the transaction.
+      allow get: if isSignedIn() && isOwner(userId);
 
-      // Only the owner can update the transaction, and the userId in the document must remain immutable.
-      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+      // Only the owner can update the transaction.
+      allow update: if isExistingOwner(userId);
 
       // Only the owner can delete the transaction.
       allow delete: if isExistingOwner(userId);
+
+      // Only the owner can list the transactions.
+      allow list: if isSignedIn() && isOwner(userId);
     }
   }
 }
