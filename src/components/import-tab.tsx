@@ -189,7 +189,7 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                 // Process special items like "Rate Haus"
                 for (let r = 0; r < sheetJson.length; r++) {
                     const rowData = sheetJson[r];
-                    if (rowData && typeof rowData[0] === 'string' && rowData[0].toLowerCase().includes('rate haus')) {
+                    if (rowData && typeof rowData[0] === 'string' && String(rowData[0]).toLowerCase().includes('rate haus')) {
                         const amountCell = sheetJson[r + 1]?.[1];
                         if (amountCell) {
                              const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
@@ -210,7 +210,7 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                 let einnahmenRowIndex = -1;
                 for (let r = 0; r < sheetJson.length; r++) {
                     const rowData = sheetJson[r];
-                    if (rowData && typeof rowData[0] === 'string' && rowData[0].toLowerCase().startsWith('einnahmen')) {
+                    if (rowData && typeof rowData[0] === 'string' && String(rowData[0]).toLowerCase().startsWith('einnahmen')) {
                         einnahmenRowIndex = r;
                         break;
                     }
@@ -228,7 +228,7 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                            continue;
                         }
                         
-                        if (amountCell !== null && String(amountCell).trim() !== '') {
+                        if (amountCell !== null && String(amountCell).trim() !== '' && Number(amountCell) > 0) {
                             const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
                              if (!isNaN(amount) && amount > 0) {
                                  allTransactions.push({

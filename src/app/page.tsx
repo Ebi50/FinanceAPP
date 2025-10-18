@@ -8,7 +8,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, Trash2 } from "lucide-react";
 import { UserNav } from "@/components/user-nav";
 import { DashboardTab } from "@/components/dashboard-tab";
 import { TransactionsTab } from "@/components/transactions-tab";
@@ -18,10 +18,21 @@ import { ImportTab } from "@/components/import-tab";
 import { AddTransactionSheet } from "@/components/add-transaction-sheet";
 import type { Transaction, Category } from '@/lib/types';
 import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase, addDocumentNonBlocking, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { collection, doc, serverTimestamp, writeBatch, getDocs } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 
 export default function Dashboard() {
@@ -109,6 +120,31 @@ export default function Dashboard() {
     deleteDocumentNonBlocking(docRef);
   };
   
+  const handleDeleteAllTransactions = async () => {
+    if (!user || !firestore) return;
+
+    const transactionsCollection = collection(firestore, `users/${user.uid}/transactions`);
+    try {
+      const querySnapshot = await getDocs(transactionsCollection);
+      const batch = writeBatch(firestore);
+      querySnapshot.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+      await batch.commit();
+      toast({
+        title: "Alle Transaktionen gelöscht",
+        description: "Alle Ihre Transaktionsdaten wurden entfernt.",
+      });
+    } catch (error) {
+      console.error("Error deleting all transactions: ", error);
+      toast({
+        variant: "destructive",
+        title: "Löschen fehlgeschlagen",
+        description: "Beim Löschen der Transaktionen ist ein Fehler aufgetreten.",
+      });
+    }
+  };
+
   const sortedTransactions = transactions ? [...transactions].sort((a, b) => {
     const dateA = a.date instanceof Date ? a.date.getTime() : (a.date as any).toMillis();
     const dateB = b.date instanceof Date ? b.date.getTime() : (b.date as any).toMillis();
@@ -138,6 +174,33 @@ export default function Dashboard() {
         <div className="flex items-center justify-between space-y-2">
           <h2 className="text-3xl font-headline font-bold tracking-tight">Übersicht</h2>
           <div className="flex items-center space-x-2">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                  <span className="sr-only">Alle Transaktionen löschen</span>
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    Sind Sie absolut sicher?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Diese Aktion kann nicht rückgängig gemacht werden. Dadurch werden alle Ihre Transaktionen dauerhaft gelöscht.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDeleteAllTransactions}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Alles löschen
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
             <AddTransactionSheet onTransactionAdded={handleAddOrUpdateTransaction}>
               <Button variant="destructive">
                 <PlusCircle className="mr-2 h-4 w-4" />
