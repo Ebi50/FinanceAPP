@@ -163,8 +163,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
             }}
             transaction={editingTransaction}
             onTransactionAdded={handleUpdate}
-          >
-          </AddTransactionSheet>
+          />
         )}
     </>
   );
