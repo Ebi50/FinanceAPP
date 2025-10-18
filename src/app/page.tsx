@@ -70,22 +70,26 @@ export default function Dashboard() {
 
   const handleAddOrUpdateTransaction = (transactionData: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date }) => {
     if (!user || !firestore) return;
-    const coll = collection(firestore, 'users', user.uid, 'transactions');
-    
-    // Prepare the data by converting the JS Date to a Firestore Timestamp.
-    const { id, date, ...data } = transactionData;
+  
+    // Always convert the JS Date from the form to a Firestore Timestamp.
     const dataToSave = {
-        ...data,
-        date: Timestamp.fromDate(date),
+      ...transactionData,
+      date: Timestamp.fromDate(transactionData.date),
     };
-
-    if (id) {
-        // This is an update to an existing document.
-        const docRef = doc(coll, id);
-        setDocumentNonBlocking(docRef, { ...dataToSave, updatedAt: serverTimestamp() }, { merge: true });
+    
+    // Remove the client-side 'id' before saving.
+    delete (dataToSave as any).id;
+  
+    if (transactionData.id) {
+      // This is an update to an existing document.
+      const docRef = doc(firestore, 'users', user.uid, 'transactions', transactionData.id);
+      // Add an 'updatedAt' field for updates.
+      setDocumentNonBlocking(docRef, { ...dataToSave, updatedAt: serverTimestamp() }, { merge: true });
     } else {
-        // This is a new document.
-        addDocumentNonBlocking(coll, { ...dataToSave, createdAt: serverTimestamp() });
+      // This is a new document.
+      const coll = collection(firestore, 'users', user.uid, 'transactions');
+      // Add a 'createdAt' field for new documents.
+      addDocumentNonBlocking(coll, { ...dataToSave, createdAt: serverTimestamp() });
     }
   };
 

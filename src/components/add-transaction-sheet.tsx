@@ -40,7 +40,7 @@ import * as z from 'zod';
 import { suggestExpenseCategory } from '@/ai/flows/suggest-expense-category';
 import type { Transaction, Category } from '@/lib/types';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection } from 'firebase/firestore';
+import { collection, Timestamp } from 'firebase/firestore';
 
 const transactionSchema = z.object({
   id: z.string().optional(),
@@ -94,8 +94,6 @@ export function AddTransactionSheet({
   const open = controlledOpen ?? internalOpen;
   const setOpen = setControlledOpen ?? setInternalOpen;
 
-  const isEditing = !!transaction;
-
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionSchema),
     defaultValues: {
@@ -114,51 +112,49 @@ export function AddTransactionSheet({
   });
 
   useEffect(() => {
+    // This effect now correctly handles resetting the form for both new and editing transactions.
     if (open) {
-      const isEditing = !!transaction;
-      let defaultDate = new Date();
-      let defaultAmounts: { value: number | '' }[] = [{ value: '' }];
+        const isEditing = !!transaction;
 
-      if (isEditing && transaction) {
-        // This is a robust way to convert a Firestore Timestamp or a JS Date to a JS Date.
-        const dateValue = transaction.date;
-        if (dateValue && typeof (dateValue as any).toDate === 'function') {
-          // It's a Firestore Timestamp
-          defaultDate = (dateValue as any).toDate();
-        } else if (dateValue instanceof Date) {
-          defaultDate = dateValue;
-        } else {
-            const parsed = toDate(dateValue);
-            if(isValid(parsed)) {
-                defaultDate = parsed;
+        if (isEditing && transaction) {
+            // When editing, convert the Firestore Timestamp to a JS Date.
+            let jsDate = new Date(); // Default fallback
+            if (transaction.date) {
+                if (transaction.date instanceof Timestamp) {
+                    jsDate = transaction.date.toDate();
+                } else if (transaction.date instanceof Date) {
+                    jsDate = transaction.date;
+                } else if (typeof transaction.date === 'string' || typeof transaction.date === 'number') {
+                    const parsed = toDate(transaction.date);
+                    if (isValid(parsed)) {
+                        jsDate = parsed;
+                    }
+                }
             }
+
+            form.reset({
+                id: transaction.id,
+                description: transaction.description || '',
+                amounts: transaction.amount ? [{ value: transaction.amount }] : [{ value: undefined as any }],
+                categoryId: transaction.categoryId || '',
+                date: jsDate, // Use the safely converted JS Date.
+                isRecurring: (transaction as any).isRecurring || false,
+            });
+        } else {
+            // For a new transaction, reset to clean defaults.
+            form.reset({
+                id: undefined,
+                description: '',
+                amounts: [{ value: undefined as any }],
+                categoryId: '',
+                date: new Date(),
+                isRecurring: false,
+            });
         }
-        
-        defaultAmounts = transaction.amount ? [{ value: transaction.amount }] : [{ value: '' }];
-
-        form.reset({
-          id: transaction.id,
-          description: transaction.description || '',
-          amounts: defaultAmounts,
-          categoryId: transaction.categoryId || '',
-          date: defaultDate,
-          isRecurring: (transaction as any).isRecurring || false,
-        });
-
-      } else {
-        // Reset for new transaction
-        form.reset({
-          id: undefined,
-          description: '',
-          amounts: [{ value: '' }],
-          categoryId: '',
-          date: new Date(),
-          isRecurring: false,
-        });
-      }
-      setSuggestion(null);
+        // Clear any previous AI suggestions.
+        setSuggestion(null);
     }
-  }, [open, transaction, form, categories]);
+  }, [open, transaction, form]);
 
 
   const handleSuggestion = async () => {
@@ -207,9 +203,9 @@ export function AddTransactionSheet({
       {children && <SheetTrigger asChild>{children}</SheetTrigger>}
       <SheetContent className="sm:max-w-lg w-[90vw] flex flex-col">
         <SheetHeader>
-          <SheetTitle className="font-headline">{isEditing ? 'Transaktion bearbeiten' : 'Neue Transaktion'}</SheetTitle>
+          <SheetTitle className="font-headline">{!!transaction ? 'Transaktion bearbeiten' : 'Neue Transaktion'}</SheetTitle>
           <SheetDescription>
-             {isEditing ? 'Aktualisieren Sie die Details dieser Transaktion.' : 'Fügen Sie eine neue Ausgabe hinzu. Klicken Sie auf Speichern, wenn Sie fertig sind.'}
+             {!!transaction ? 'Aktualisieren Sie die Details dieser Transaktion.' : 'Fügen Sie eine neue Ausgabe hinzu. Klicken Sie auf Speichern, wenn Sie fertig sind.'}
           </SheetDescription>
         </SheetHeader>
         <form
@@ -254,7 +250,7 @@ export function AddTransactionSheet({
                   </div>
                 ))}
                  {form.formState.errors.amounts && <p className="text-sm text-destructive mt-1">{form.formState.errors.amounts.root?.message}</p>}
-                 <Button type="button" variant="outline" size="sm" onClick={() => append({ value: '' })}>
+                 <Button type="button" variant="outline" size="sm" onClick={() => append({ value: undefined as any })}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Betrag hinzufügen
                 </Button>
