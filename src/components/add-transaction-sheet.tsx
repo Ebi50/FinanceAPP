@@ -315,8 +315,8 @@ export function AddTransactionSheet({
                           )}
                         >
                           <CalendarIcon className="mr-2 h-4 w-4" />
-                          {field.value && isValid(field.value) ? (
-                            format(field.value, 'PPP', { locale: de })
+                          {field.value && isValid(new Date(field.value)) ? (
+                            format(new Date(field.value), 'PPP', { locale: de })
                           ) : (
                             <span>Datum auswählen</span>
                           )}
@@ -334,11 +334,7 @@ export function AddTransactionSheet({
                     </Popover>
                   )}
                 />
-                {form.formState.errors.date && (
-                  <p className="text-sm text-destructive mt-1">
-                    {form.formState.errors.date.message}
-                  </p>
-                )}
+                 {form.formState.errors.date && <p className="text-sm text-destructive mt-1">{form.formState.errors.date.message}</p>}
               </div>
 
               <div className="flex items-center space-x-2">
