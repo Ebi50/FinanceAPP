@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { Badge } from "./ui/badge";
-import { format, toDate } from "date-fns";
+import { format, toDate, isValid } from "date-fns";
 import { de } from 'date-fns/locale';
 import {
   AlertDialog,
@@ -107,7 +107,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
                 )}
               </TableCell>
               <TableCell>
-                {format(transactionDate, "dd. MMMM yyyy", { locale: de })}
+                 {isValid(transactionDate) ? format(transactionDate, "dd. MMMM yyyy", { locale: de }) : 'Ungültiges Datum'}
               </TableCell>
               <TableCell className={cn("text-right", isIncome ? "text-emerald-500" : "text-destructive")}>
                 {isIncome ? '+' : '-'}{formatCurrency(transaction.amount)}
