@@ -16,17 +16,19 @@ import { CategoriesTab } from "@/components/categories-tab";
 import { ReportsTab } from "@/components/reports-tab";
 import { ImportTab } from "@/components/import-tab";
 import { AddTransactionSheet } from "@/components/add-transaction-sheet";
-import type { Transaction } from '@/lib/types';
-import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc, addDocumentNonBlocking, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, doc, serverTimestamp } from 'firebase/firestore';
+import type { Transaction, Category } from '@/lib/types';
+import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase, addDocumentNonBlocking, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { collection, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { useToast } from '@/hooks/use-toast';
 
 
 export default function Dashboard() {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const router = useRouter();
+  const { toast } = useToast();
   
   useEffect(() => {
     if (!isUserLoading && !user) {
@@ -39,6 +41,12 @@ export default function Dashboard() {
     [firestore, user]
   );
   const { data: transactions, isLoading: transactionsLoading } = useCollection<Transaction>(transactionsQuery);
+
+  const categoriesQuery = useMemoFirebase(() => 
+    user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null,
+    [firestore, user]
+  );
+  const { data: categories } = useCollection<Category>(categoriesQuery);
 
   const userProfileQuery = useMemoFirebase(() =>
     user ? doc(firestore, 'users', user.uid) : null,
@@ -66,6 +74,34 @@ export default function Dashboard() {
       addDocumentNonBlocking(coll, transactionData);
     }
   };
+
+  const handleImportTransactions = async (importedTransactions: Omit<Transaction, 'id' | 'createdAt'>[]) => {
+    if (!user || !firestore) return;
+
+    const batch = writeBatch(firestore);
+    const transactionsCollection = collection(firestore, `users/${user.uid}/transactions`);
+
+    importedTransactions.forEach((transactionData) => {
+      const docRef = doc(transactionsCollection); // Create a new document with a unique ID
+      batch.set(docRef, { ...transactionData, createdAt: serverTimestamp() });
+    });
+
+    try {
+      await batch.commit();
+      toast({
+        title: "Import erfolgreich",
+        description: `${importedTransactions.length} Transaktionen wurden erfolgreich importiert.`,
+      });
+    } catch (error) {
+      console.error("Error importing transactions: ", error);
+      toast({
+        variant: "destructive",
+        title: "Import fehlgeschlagen",
+        description: "Beim Speichern der Transaktionen ist ein Fehler aufgetreten.",
+      });
+    }
+  };
+
 
   const handleDeleteTransaction = (id: string) => {
     if (!user) return;
@@ -103,7 +139,7 @@ export default function Dashboard() {
           <h2 className="text-3xl font-headline font-bold tracking-tight">Übersicht</h2>
           <div className="flex items-center space-x-2">
             <AddTransactionSheet onTransactionAdded={handleAddOrUpdateTransaction}>
-              <Button>
+              <Button variant="destructive">
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Transaktion hinzufügen
               </Button>
@@ -116,13 +152,17 @@ export default function Dashboard() {
             <TabsTrigger value="transactions">Transaktionen</TabsTrigger>
             <TabsTrigger value="categories">Kategorien</TabsTrigger>
             <TabsTrigger value="reports">Berichte</TabsTrigger>
-            <TabsTrigger value="import">Import/Export</TabsTrigger>
+            <TabsTrigger value="import">Importieren</TabsTrigger>
           </TabsList>
           <TabsContent value="reports" className="space-y-4">
             <ReportsTab transactions={sortedTransactions} />
           </TabsContent>
           <TabsContent value="import" className="space-y-4">
-            <ImportTab transactions={sortedTransactions} />
+            <ImportTab 
+              transactions={sortedTransactions} 
+              onImport={handleImportTransactions}
+              categories={categories || []}
+            />
           </TabsContent>
           <TabsContent value="categories" className="space-y-4">
             <CategoriesTab />
