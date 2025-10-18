@@ -130,9 +130,7 @@ const categoryNameMap = useMemo(() => {
                 
                 if (rawJson.length < 1) return;
                 
-                const incomeCategoryId = categoryNameMap.get('einnahmen');
-
-                // Phase 1: Process horizontal blocks (upper part of the sheet, A-K)
+                // Phase 1: Horizontale Blöcke (A-K)
                 const headerRow = rawJson[0] || [];
                 for (let col = 0; col < 11; col += 2) { 
                     const categoryNameCell = headerRow[col];
@@ -140,89 +138,74 @@ const categoryNameMap = useMemo(() => {
                         const categoryName = categoryNameCell.trim();
                         allDetectedCategories.add(categoryName);
                         
-                        let currentRow = 2; // Start from the third row
-                        while (currentRow < 29 && currentRow < rawJson.length) {
-                            const rowData = rawJson[currentRow];
-                            if (!rowData || !rowData[col] && !rowData[col+1] || (typeof rowData[col] === 'string' && String(rowData[col]).toLowerCase().includes('summe'))) {
-                                break;
-                            }
+                        for (let row = 2; row < 29 && row < rawJson.length; row++) {
+                            const rowData = rawJson[row];
+                            if (!rowData) continue;
 
                             const dateOrDescCell = rowData[col];
                             const amountCell = rowData[col + 1];
 
-                            if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '') {
-                                let date: Date | null = null;
-                                let description: string = '';
+                            if (typeof dateOrDescCell === 'string' && dateOrDescCell.toLowerCase().includes('summe')) break;
+                            if (amountCell === null || amountCell === undefined || String(amountCell).trim() === '') continue;
 
-                                if (dateOrDescCell instanceof Date && isValid(dateOrDescCell)) {
-                                    date = new Date(Date.UTC(fileYear, monthIndex, dateOrDescCell.getUTCDate(), 12, 0, 0));
-                                    description = categoryName;
-                                } else if (typeof dateOrDescCell === 'string') {
-                                    const dayMatch = dateOrDescCell.match(/^(\d{1,2})/);
-                                    if (dayMatch) {
-                                       const day = parseInt(dayMatch[1], 10);
-                                       date = new Date(Date.UTC(fileYear, monthIndex, day, 12, 0, 0));
-                                       description = dateOrDescCell.substring(dayMatch[0].length).trim() || categoryName;
-                                    } else {
-                                        description = dateOrDescCell.trim();
-                                        date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
-                                    }
+                            let date: Date | null = null;
+                            let description: string = '';
+
+                            if (dateOrDescCell instanceof Date && isValid(dateOrDescCell)) {
+                                date = new Date(Date.UTC(fileYear, monthIndex, dateOrDescCell.getUTCDate(), 12, 0, 0));
+                                description = categoryName;
+                            } else if (typeof dateOrDescCell === 'string') {
+                                const dayMatch = dateOrDescCell.match(/^(\d{1,2})/);
+                                if (dayMatch) {
+                                   const day = parseInt(dayMatch[1], 10);
+                                   date = new Date(Date.UTC(fileYear, monthIndex, day, 12, 0, 0));
+                                   description = dateOrDescCell.substring(dayMatch[0].length).trim() || categoryName;
                                 } else {
-                                     description = categoryName;
-                                     date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                                    description = dateOrDescCell.trim();
+                                    date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
                                 }
-                                
-                                const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
-                                if (date && isValid(date) && !isNaN(amount) && amount !== 0) {
-                                    if (amount < 0 && incomeCategoryId) {
-                                        allDetectedCategories.add("Einnahmen");
-                                        allTransactions.push({
-                                            description: `${description} Erstattung`,
-                                            amount: Math.abs(amount),
-                                            date,
-                                            categoryId: "Einnahmen"
-                                        });
-                                    } else {
-                                        allTransactions.push({
-                                            description,
-                                            amount: Math.abs(amount),
-                                            date,
-                                            categoryId: categoryName
-                                        });
-                                    }
-                                }
+                            } else {
+                                 description = categoryName;
+                                 date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
                             }
-                             // Special KV Case
+                            
+                            const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
+                            if (date && isValid(date) && !isNaN(amount) && amount !== 0) {
+                                allTransactions.push({
+                                    description,
+                                    amount: Math.abs(amount),
+                                    date,
+                                    categoryId: categoryName
+                                });
+                            }
+                            // Special KV Case for "Timo"
                             if (categoryName.toLowerCase().startsWith('kv') && col + 2 < 11 && rowData[col + 2] !== null) {
                                 const timoAmountCell = rowData[col+2];
                                 const timoAmount = typeof timoAmountCell === 'number' ? timoAmountCell : parseFloat(String(timoAmountCell).replace('.', '').replace(',', '.'));
-                                if (dateOrDescCell && !isNaN(timoAmount) && timoAmount !== 0) {
-                                     const date = dateOrDescCell instanceof Date ? new Date(Date.UTC(fileYear, monthIndex, dateOrDescCell.getUTCDate(), 12, 0, 0)) : new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                                if (!isNaN(timoAmount) && timoAmount !== 0) {
                                      allTransactions.push({
-                                        description: `${String(dateOrDescCell)} (Timo)`,
+                                        description: `${description} (Timo)`,
                                         amount: Math.abs(timoAmount),
                                         date,
                                         categoryId: categoryName
                                     });
                                 }
                             }
-                            currentRow++;
                         }
                     }
                 }
 
-                // Phase 2: Process vertical blocks (lower part, from L)
+                // Phase 2: Vertikale Blöcke (L-N)
                 for (let startRow = 29; startRow < rawJson.length; startRow++) {
                     const categoryNameCell = rawJson[startRow]?.[11]; // Column L
                      if (typeof categoryNameCell === 'string' && categoryNameCell.trim() && !categoryNameCell.toLowerCase().includes('summe') && !categoryNameCell.toLowerCase().includes('einnahmen')) {
                        const categoryName = categoryNameCell.trim();
                        allDetectedCategories.add(categoryName);
 
-                       let currentRow = startRow + 2; // Data starts 2 rows below header
-                       while(currentRow < rawJson.length) {
-                         const rowData = rawJson[currentRow];
+                       for(let row = startRow + 2; row < rawJson.length; row++) {
+                         const rowData = rawJson[row];
                          if (!rowData || !rowData[11] || (typeof rowData[11] === 'string' && String(rowData[11]).toLowerCase().includes('summe'))) {
-                            startRow = currentRow; // Skip processed rows
+                            startRow = row; // Skip processed rows
                             break;
                          }
                          const descCell = rowData[11];
@@ -232,6 +215,8 @@ const categoryNameMap = useMemo(() => {
 
                          if (typeof descCell === 'string' && descCell.trim()) {
                              description = descCell.trim();
+                         } else {
+                            continue; // Skip if description is empty
                          }
                          const date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
 
@@ -241,7 +226,6 @@ const categoryNameMap = useMemo(() => {
                                 allTransactions.push({ description, amount: Math.abs(amount), date, categoryId: categoryName });
                             }
                          }
-                         currentRow++;
                        }
                     }
                 }
@@ -277,7 +261,12 @@ const categoryNameMap = useMemo(() => {
             });
 
             if (allTransactions.length === 0) {
-              throw new Error("Keine gültigen Transaktionen zum Importieren gefunden. Bitte überprüfen Sie die Datei.");
+              toast({
+                  variant: "destructive",
+                  title: "Keine Transaktionen gefunden",
+                  description: "Die Datei konnte nicht verarbeitet werden oder enthält keine gültigen Transaktionen. Bitte überprüfen Sie das Format.",
+              });
+              return;
             }
             
             const uniqueCategories = Array.from(allDetectedCategories);
@@ -320,6 +309,19 @@ const categoryNameMap = useMemo(() => {
           const mappedAppCategoryId = headerMapping[excelCategoryName];
           
           if (!mappedAppCategoryId) return null;
+          
+          // Handle credits (negative values)
+          if(t.amount < 0) {
+            const incomeCatId = categoryNameMap.get('einnahmen');
+            if(incomeCatId) {
+                return { 
+                    ...t, 
+                    amount: Math.abs(t.amount),
+                    categoryId: incomeCatId,
+                    description: `Erstattung: ${t.description}`
+                };
+            }
+          }
 
           return { ...t, categoryId: mappedAppCategoryId };
         })
