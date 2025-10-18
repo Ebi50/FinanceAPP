@@ -155,14 +155,12 @@ export function AddTransactionSheet({
     const totalAmount = data.amounts.reduce((sum, current) => sum + Number(current.value), 0);
     
     // The type from the DB might have a Timestamp, so we create a new object.
-    const newTransaction: Omit<Transaction, 'id'> & { id?: string } = {
+    const newTransaction: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date } = {
       id: data.id,
       description: data.description,
       amount: totalAmount,
       categoryId: data.categoryId,
       date: data.date,
-      // @ts-ignore
-      createdAt: serverTimestamp(),
     };
     onTransactionAdded(newTransaction);
     if (!isEditing) {
