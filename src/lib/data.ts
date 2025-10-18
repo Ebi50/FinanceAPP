@@ -16,6 +16,7 @@ import {
   Train,
   Shirt,
   BookOpen,
+  DollarSign,
 } from 'lucide-react';
 
 export const categories: Category[] = [
@@ -32,6 +33,7 @@ export const categories: Category[] = [
   { id: 'cat-11', name: 'Sparen', icon: PiggyBank },
   { id: 'cat-12', name: 'Kleidung', icon: Shirt },
   { id: 'cat-13', name: 'Haushalt', icon: Home },
+  { id: 'cat-14', name: 'Einnahmen', icon: DollarSign },
 ];
 
 export const transactions: Transaction[] = [];

@@ -1,6 +1,6 @@
 import type { Transaction } from "@/lib/types";
 import { categories } from "@/lib/data";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -77,6 +77,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
       <TableBody>
         {transactions.map((transaction) => {
           const category = categoryMap.get(transaction.categoryId);
+          const isIncome = category?.id === 'cat-14';
           return (
             <TableRow key={transaction.id}>
               <TableCell className="font-medium">
@@ -91,10 +92,10 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
                 )}
               </TableCell>
               <TableCell>
-                {format(transaction.date, "dd. MMMM yyyy", { locale: de })}
+                {format(new Date(transaction.date), "dd. MMMM yyyy", { locale: de })}
               </TableCell>
-              <TableCell className="text-right text-destructive">
-                -{formatCurrency(transaction.amount)}
+              <TableCell className={cn("text-right", isIncome ? "text-emerald-500" : "text-destructive")}>
+                {isIncome ? '+' : '-'}{formatCurrency(transaction.amount)}
               </TableCell>
               <TableCell className="text-right">
                 <DropdownMenu>

@@ -49,7 +49,16 @@ export default function Dashboard() {
   };
   
   const handleImportTransactions = (newTransactions: Transaction[]) => {
-    setTransactions(prev => [...prev, ...newTransactions]);
+    const updatedTransactions = [...transactions];
+    newTransactions.forEach(newT => {
+      const existingIndex = updatedTransactions.findIndex(t => t.id === newT.id);
+      if (existingIndex > -1) {
+        updatedTransactions[existingIndex] = newT;
+      } else {
+        updatedTransactions.push(newT);
+      }
+    });
+    setTransactions(updatedTransactions);
   };
 
   return (
@@ -77,8 +86,8 @@ export default function Dashboard() {
         <Tabs defaultValue="overview" className="space-y-4">
           <TabsList>
             <TabsTrigger value="reports">Berichte</TabsTrigger>
-            <TabsTrigger value="import">Import/Export</TabsTrigger>
             <TabsTrigger value="categories">Kategorien</TabsTrigger>
+            <TabsTrigger value="import">Import/Export</TabsTrigger>
             <TabsTrigger value="transactions">Transaktionen</TabsTrigger>
             <TabsTrigger value="overview">Übersicht</TabsTrigger>
           </TabsList>

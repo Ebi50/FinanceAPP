@@ -9,10 +9,18 @@ interface DashboardTabProps {
 }
 
 export function DashboardTab({ transactions }: DashboardTabProps) {
-  const totalExpenses = transactions.reduce((sum, t) => sum + t.amount, 0);
+  
+  const totalExpenses = transactions
+    .filter(t => t.categoryId !== 'cat-14') // Filter out income
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const totalIncome = transactions
+    .filter(t => t.categoryId === 'cat-14') // Filter for income
+    .reduce((sum, t) => sum + t.amount, 0);
+
   return (
     <>
-      <OverviewStats totalExpenses={totalExpenses} />
+      <OverviewStats totalExpenses={totalExpenses} totalIncome={totalIncome} />
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <Card className="col-span-4">
           <CardHeader>

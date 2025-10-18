@@ -9,6 +9,7 @@ import { categories } from "@/lib/data";
 import { formatCurrency } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import type { Transaction } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 interface RecentTransactionsProps {
   transactions: Transaction[];
@@ -31,6 +32,7 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
           {recent.map((transaction) => {
             const category = categoryMap.get(transaction.categoryId);
             const Icon = category?.icon;
+            const isIncome = category?.id === 'cat-14';
             return (
               <div key={transaction.id} className="flex items-center">
                 <Avatar className="h-9 w-9">
@@ -46,8 +48,11 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
                     {category?.name}
                   </p>
                 </div>
-                <div className="ml-auto font-medium text-destructive">
-                  -{formatCurrency(transaction.amount)}
+                <div className={cn(
+                  "ml-auto font-medium",
+                  isIncome ? "text-emerald-500" : "text-destructive"
+                )}>
+                  {isIncome ? '+' : '-'}{formatCurrency(transaction.amount)}
                 </div>
               </div>
             );
