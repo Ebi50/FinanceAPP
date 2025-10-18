@@ -27,7 +27,7 @@ import { FileUp, FileDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
 import type { Transaction, Category } from "@/lib/types";
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection } from 'firebase/firestore';
@@ -50,12 +50,12 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
   const { data: categories } = useCollection<Category>(categoriesQuery);
 
   
-  const categoryMap = useMemoFirebase(() => {
+  const categoryMap = useMemo(() => {
     if (!categories) return new Map();
     return new Map(categories.map((c) => [c.id, c.name]));
   }, [categories]);
 
-  const appCategoryMap = useMemoFirebase(() => {
+  const appCategoryMap = useMemo(() => {
     if (!categories) return new Map();
     return new Map(categories.map((c) => [c.name.toLowerCase(), c.id]));
   }, [categories]);
@@ -123,6 +123,8 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
             .filter(({ header, index }) => {
                 if (!header || typeof header !== 'string') return false;
                 const nextCell = headersFromExcel[index + 1];
+                const cleanHeader = header.replace(/\s*\d+\s*$/, '').trim().toLowerCase();
+                if (cleanHeader === 'betrag' || cleanHeader.startsWith('einnahmen')) return false;
                 return (nextCell === 'Betrag' || nextCell === null || nextCell === '');
             })
             .map(({ header }) => header.replace(/\s*\d+\s*$/, '').trim());
@@ -327,6 +329,9 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
             <div className="space-y-4 py-4 max-h-96 overflow-y-auto pr-2">
                 {detectedHeaders.map(header => (
                     <div key={header} className="grid grid-cols-[1fr_auto] items-center gap-4">
+                        <Label htmlFor={`mapping-${header}`} className="text-left font-semibold truncate">
+                          {header}
+                        </Label>
                         <Select
                             value={headerMapping[header] || ''}
                             onValueChange={(value) => handleMappingChange(header, value)}
@@ -344,9 +349,6 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
                                 ))}
                             </SelectContent>
                         </Select>
-                        <Label htmlFor={`mapping-${header}`} className="text-left font-semibold truncate">
-                          {header}
-                        </Label>
                     </div>
                 ))}
             </div>
