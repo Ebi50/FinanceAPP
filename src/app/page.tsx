@@ -73,14 +73,6 @@ export default function Dashboard() {
     deleteDocumentNonBlocking(docRef);
   };
   
-  const handleImportTransactions = (newTransactions: (Omit<Transaction, 'id' | 'date'> & { date: Date })[]) => {
-    if (!user) return;
-    const coll = collection(firestore, 'users', user.uid, 'transactions');
-    for (const newT of newTransactions) {
-      addDocumentNonBlocking(coll, newT);
-    }
-  };
-
   const sortedTransactions = transactions ? [...transactions].sort((a, b) => {
     const dateA = a.date instanceof Date ? a.date.getTime() : (a.date as any).toMillis();
     const dateB = b.date instanceof Date ? b.date.getTime() : (b.date as any).toMillis();
@@ -130,7 +122,7 @@ export default function Dashboard() {
             <ReportsTab transactions={sortedTransactions} />
           </TabsContent>
           <TabsContent value="import" className="space-y-4">
-            <ImportTab onImport={handleImportTransactions} transactions={sortedTransactions} />
+            <ImportTab transactions={sortedTransactions} />
           </TabsContent>
           <TabsContent value="categories" className="space-y-4">
             <CategoriesTab />

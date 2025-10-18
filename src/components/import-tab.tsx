@@ -29,18 +29,17 @@ import * as XLSX from "xlsx";
 import type { Transaction, Category } from "@/lib/types";
 import React, { useState, useMemo } from "react";
 import { format } from "date-fns";
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useUser, useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from '@/firebase';
 import { collection } from 'firebase/firestore';
 
 interface ImportTabProps {
-  onImport: (transactions: Omit<Transaction, 'id'>[]) => void;
   transactions: Transaction[];
 }
 
 type RawTransactionData = any[][];
 type HeaderMapping = { [key: string]: string };
 
-export function ImportTab({ onImport, transactions }: ImportTabProps) {
+export function ImportTab({ transactions }: ImportTabProps) {
   const { toast } = useToast();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -123,20 +122,11 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
         
         const categoryRow = json[dataHeaderRowIndex - 1];
         const excelHeadersToMap: string[] = [];
-        let lastCategory: string | null = null;
         
         for (let i = 0; i < categoryRow.length; i++) {
             const categoryName = categoryRow[i];
-            
             if (categoryName && typeof categoryName === 'string' && categoryName.trim() !== '') {
-                lastCategory = categoryName.trim();
-            }
-
-            if (lastCategory && !excelHeadersToMap.includes(lastCategory)) {
-                 const dataHeaderCell = String(json[dataHeaderRowIndex][i] || '').trim().toLowerCase();
-                 if (dataHeaderCell === 'datum') {
-                    excelHeadersToMap.push(lastCategory);
-                 }
+                 excelHeadersToMap.push(categoryName.trim());
             }
         }
         
@@ -175,8 +165,8 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
   };
 
   const processImport = () => {
-    if (!rawTransactionData) return;
-
+    if (!rawTransactionData || !user) return;
+    
     try {
         const newTransactions: Omit<Transaction, 'id'>[] = [];
         const json = rawTransactionData;
@@ -193,7 +183,7 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
         const categoryRow = json[dataHeaderRowIndex - 1];
         const dataHeaderRow = json[dataHeaderRowIndex].map(h => String(h || '').toLowerCase());
         const dataRows = json.slice(dataHeaderRowIndex + 1);
-
+        
         const filledCategoryRow = categoryRow.reduce((acc, cell, i) => {
             if (cell && String(cell).trim() !== '') {
                 acc[i] = String(cell).trim();
@@ -205,10 +195,11 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
             return acc;
         }, [] as (string | null)[]);
 
+
         for (let col = 0; col < dataHeaderRow.length; col++) {
             const dataHeader = dataHeaderRow[col];
             const excelCategoryName = filledCategoryRow[col];
-
+            
             if (excelCategoryName && dataHeader === 'datum') {
                 const appCategoryId = headerMapping[excelCategoryName];
                 
@@ -266,7 +257,11 @@ export function ImportTab({ onImport, transactions }: ImportTabProps) {
           return;
         }
 
-        onImport(newTransactions);
+        const coll = collection(firestore, 'users', user.uid, 'transactions');
+        for (const newT of newTransactions) {
+            addDocumentNonBlocking(coll, newT);
+        }
+
         toast({
           title: "Import erfolgreich",
           description: `${newTransactions.length} Transaktionen wurden importiert.`,
