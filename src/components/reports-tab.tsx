@@ -18,7 +18,7 @@ import { Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
-import { format, isValid, getYear } from "date-fns";
+import { format, isValid, getYear, getMonth } from "date-fns";
 import { de } from "date-fns/locale";
 import type { Transaction, Category } from "@/lib/types";
 import React, { useMemo, useState, useEffect } from "react";
@@ -56,8 +56,14 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
 
   const generatePdf = (period: "monthly" | "yearly", year: number) => {
     const doc = new jsPDF() as AutoTableDoc;
-    const now = new Date();
-    const currentMonth = now.getMonth();
+
+    const allDates = transactions.map(t => t.date.toDate()).filter(isValid);
+    if (allDates.length === 0 && period === "monthly") {
+        toast({ title: "Keine Daten", description: "Keine Transaktionen für die Berichterstellung vorhanden." });
+        return;
+    }
+    const reportMonth = period === "monthly" ? getMonth(allDates[0]) : new Date().getMonth();
+    const reportDate = new Date(year, reportMonth);
     
     const reportTransactions = transactions.filter(t => {
       const transactionDate = t.date.toDate();
@@ -66,7 +72,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
 
       if (period === "monthly") {
         return (
-          transactionDate.getMonth() === currentMonth &&
+          getMonth(transactionDate) === reportMonth &&
           transactionYear === year
         );
       } else {
@@ -90,7 +96,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
     const totalIncome = income.reduce((sum, t) => sum + t.amount, 0);
     const balance = totalIncome - totalExpenses;
 
-    const title = period === "monthly" ? `Monatlicher Bericht (${format(now, 'MMMM yyyy', { locale: de })})` : `Jahresbericht ${year}`;
+    const title = period === "monthly" ? `Monatlicher Bericht (${format(reportDate, 'MMMM yyyy', { locale: de })})` : `Jahresbericht ${year}`;
     doc.text(title, 14, 20);
 
     let lastY = 30;
