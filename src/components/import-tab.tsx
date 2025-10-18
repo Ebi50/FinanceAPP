@@ -57,7 +57,6 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
   const [headerMapping, setHeaderMapping] = useState<HeaderMapping>({});
   const [allParsedTransactions, setAllParsedTransactions] = useState<MappedTransaction[]>([]);
 
-
   const handleImportClick = () => {
     fileInputRef.current?.click();
   };
@@ -93,11 +92,12 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
             const data = new Uint8Array(e.target?.result as ArrayBuffer);
             const workbook = XLSX.read(data, { type: 'array', cellDates: true });
             
-            const yearMatch = file.name.match(/\d{4}/);
-            const fileYear = yearMatch ? parseInt(yearMatch[0], 10) : new Date().getFullYear();
+            const fileYearMatch = file.name.match(/\d{4}/);
+            const fileYear = fileYearMatch ? parseInt(fileYearMatch[0], 10) : new Date().getFullYear();
 
             const monthMap: {[key: string]: number} = { 'jan': 0, 'feb': 1, 'mär': 2, 'apr': 3, 'mai': 4, 'jun': 5, 'jul': 6, 'aug': 7, 'sep': 8, 'okt': 9, 'nov': 10, 'dez': 11 };
-
+            const mainCategories = ['lebensmittel', 'körperpflege', 'kleidung', 'haushalt', 'auto', 'garten', 'zeitschr./bücher', 'freize./geschenke', 'radsport', 'telefon/büro', 'kinder', 'kv'];
+            
             const allTransactions: MappedTransaction[] = [];
             const allDetectedCategories = new Set<string>();
 
@@ -105,117 +105,142 @@ export function ImportTab({ transactions, onImport, categories }: ImportTabProps
                 const monthStr = sheetName.toLowerCase().slice(0, 3);
                 const monthIndex = monthMap[monthStr];
 
-                if (monthIndex === undefined) return; 
+                if (monthIndex === undefined) return;
 
                 const worksheet = workbook.Sheets[sheetName];
-                const sheetJson = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as RawRow[];
+                if (!worksheet) return;
 
+                const sheetJson = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as RawRow[];
                 if (sheetJson.length < 2) return;
                 
+                // Process main expense blocks
                 let startRow = 0;
-                while(startRow < sheetJson.length) {
+                while (startRow < sheetJson.length) {
                     let categoryRowIndex = -1;
-                    let dataHeaderRowIndex = -1;
-
                     for (let i = startRow; i < sheetJson.length; i++) {
-                        const row = sheetJson[i];
-                        if (Array.isArray(row) && row.some(cell => typeof cell === 'string' && (cell.toLowerCase().includes('lebensmittel') || cell.toLowerCase().includes('garten')))) {
+                        if (sheetJson[i].some(cell => typeof cell === 'string' && mainCategories.some(mc => String(cell).toLowerCase().startsWith(mc)))) {
                             categoryRowIndex = i;
-                            if (sheetJson[i + 1] && sheetJson[i+1].some(cell => typeof cell === 'string' && cell.toLowerCase().includes('datum'))) {
-                                dataHeaderRowIndex = i + 1;
-                                break;
-                            }
+                            break;
                         }
                     }
 
-                    if (categoryRowIndex === -1 || dataHeaderRowIndex === -1) {
-                        break; // No more blocks in this sheet
-                    }
+                    if (categoryRowIndex === -1) break; // No more main category blocks
+
+                    const dataHeaderRowIndex = categoryRowIndex + 1;
+                    if (dataHeaderRowIndex >= sheetJson.length) break;
 
                     const categoryRow = sheetJson[categoryRowIndex];
                     const dataHeaderRow = sheetJson[dataHeaderRowIndex];
-
+                    
                     const filledCategories: (string | null)[] = [];
                     let lastCategory: string | null = null;
-                    for(const cell of categoryRow) {
-                        const cellStr = cell ? String(cell).trim() : null;
-                        if(cellStr && isNaN(parseInt(cellStr.slice(-1)))) {
-                            lastCategory = cellStr.trim();
-                        } else if (cellStr) {
-                             lastCategory = cellStr.replace(/\s\d+$/, '').trim();
+                    categoryRow.forEach(cell => {
+                        if (typeof cell === 'string' && cell.trim() !== '') {
+                            lastCategory = cell.trim().replace(/\s+\d+$/, '');
                         }
-                        if(lastCategory) allDetectedCategories.add(lastCategory);
                         filledCategories.push(lastCategory);
-                    }
-                    
-                    const dataColIndices: { [key: number]: { category: string | null, date: number, amount: number, desc: number } } = {};
-                    for(let c = 0; c < dataHeaderRow.length; c++) {
-                        const header = String(dataHeaderRow[c]).toLowerCase();
-                        if(header === 'datum' && filledCategories[c]) {
-                            const categoryName = filledCategories[c]!;
-                             // Find corresponding Betrag column
-                            let betragCol = -1;
-                            for (let k = c + 1; k < dataHeaderRow.length; k++) {
-                                if (String(dataHeaderRow[k]).toLowerCase().includes('betrag')) {
-                                    betragCol = k;
-                                    break;
-                                }
-                                if (String(dataHeaderRow[k]).toLowerCase() === 'datum') break;
-                            }
+                    });
 
-                            if (betragCol !== -1) {
-                                dataColIndices[c] = {
-                                    category: categoryName,
-                                    date: c,
-                                    amount: betragCol,
-                                    desc: c 
-                                };
+                    filledCategories.forEach(cat => { if (cat) allDetectedCategories.add(cat); });
+                    
+                    for (let r = dataHeaderRowIndex + 1; r < sheetJson.length; r++) {
+                        const rowData = sheetJson[r];
+                        if (!rowData || !rowData.some(cell => cell !== null && cell !== '') || String(rowData[0]).toLowerCase().startsWith('summe')) {
+                            startRow = r + 1;
+                            break;
+                        }
+                        
+                        for (let c = 0; c < dataHeaderRow.length; c++) {
+                            const header = String(dataHeaderRow[c]).toLowerCase();
+                            if (header === 'datum') {
+                                const categoryName = filledCategories[c];
+                                const dateCell = rowData[c];
+                                const amountCell = rowData[c + 1]; // Assuming amount is always next to date
+
+                                if (!categoryName || !dateCell || amountCell === null || String(amountCell).trim() === '') continue;
+                                
+                                let date: Date | null = null;
+                                if (dateCell instanceof Date) {
+                                   date = new Date(Date.UTC(fileYear, monthIndex, dateCell.getUTCDate()));
+                                } else {
+                                    const dayMatch = String(dateCell).match(/(\d{1,2})/);
+                                    if(dayMatch) {
+                                       date = new Date(fileYear, monthIndex, parseInt(dayMatch[1], 10));
+                                    }
+                                }
+
+                                if (!date) continue;
+
+                                const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
+                                if (!isNaN(amount) && amount > 0) {
+                                    allTransactions.push({
+                                        description: categoryName,
+                                        amount: Math.abs(amount),
+                                        date,
+                                        categoryId: categoryName
+                                    });
+                                }
                             }
                         }
+                        if (r === sheetJson.length - 1) startRow = sheetJson.length;
                     }
-
-                    let endOfBlockRow = sheetJson.length;
-                    for(let r = dataHeaderRowIndex + 1; r < sheetJson.length; r++) {
-                        const rowData = sheetJson[r];
-                         if(!rowData || !rowData.some(c => c !== null) || String(rowData[0]).toLowerCase().startsWith('summe')) {
-                            endOfBlockRow = r;
-                            break;
-                         };
-
-                        Object.values(dataColIndices).forEach(indices => {
-                            const dateCell = rowData[indices.date];
-                            const amountCell = rowData[indices.amount];
-
-                            if (amountCell === null || String(amountCell).trim() === '') return;
-                            
-                            let date: Date | null = null;
-                            if(dateCell instanceof Date) {
-                               date = dateCell;
-                               date.setFullYear(fileYear);
-                            } else if (dateCell) {
-                               const dayMatch = String(dateCell).match(/(\d{1,2})\.?/);
-                               if(dayMatch) {
-                                   const day = parseInt(dayMatch[1], 10);
-                                   date = new Date(fileYear, monthIndex, day);
-                               }
-                            }
-
-                            if(!date) return;
-                            
-                            const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
-                            const description = rowData[indices.desc] && String(rowData[indices.date]).toLowerCase() !== 'datum' ? String(rowData[indices.desc]) : indices.category;
-                            
-                            if(!isNaN(amount) && amount > 0) {
+                }
+                
+                // Process special items like "Rate Haus"
+                for (let r = 0; r < sheetJson.length; r++) {
+                    const rowData = sheetJson[r];
+                    if (rowData && typeof rowData[0] === 'string' && rowData[0].toLowerCase().includes('rate haus')) {
+                        const amountCell = sheetJson[r + 1]?.[1];
+                        if (amountCell) {
+                             const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
+                             if (!isNaN(amount) && amount > 0) {
                                 allTransactions.push({
-                                    description: description || "Unbekannte Transaktion",
+                                    description: "Rate Haus",
                                     amount: Math.abs(amount),
-                                    date,
-                                    categoryId: indices.category || '' // Temporarily store category name
+                                    date: new Date(fileYear, monthIndex, 15), // Use mid-month as placeholder
+                                    categoryId: "Haushalt"
                                 });
-                            }
-                        });
+                                allDetectedCategories.add("Haushalt");
+                             }
+                        }
                     }
-                    startRow = endOfBlockRow + 1;
+                }
+
+                // Process Einnahmen
+                let einnahmenRowIndex = -1;
+                for (let r = 0; r < sheetJson.length; r++) {
+                    const rowData = sheetJson[r];
+                    if (rowData && typeof rowData[0] === 'string' && rowData[0].toLowerCase().startsWith('einnahmen')) {
+                        einnahmenRowIndex = r;
+                        break;
+                    }
+                }
+
+                if (einnahmenRowIndex !== -1) {
+                    for (let r = einnahmenRowIndex + 1; r < sheetJson.length; r++) {
+                        const rowData = sheetJson[r];
+                        const description = rowData?.[0];
+                        const amountCell = rowData?.[1];
+
+                        if (!description || typeof description !== 'string' || description.toLowerCase().startsWith('sonstige') || description.toLowerCase().startsWith('summe')) {
+                           if (!description || String(description).trim() === '') break;
+                           if (typeof description === 'string' && (description.toLowerCase().startsWith('summe'))) break;
+                           continue;
+                        }
+                        
+                        if (amountCell !== null && String(amountCell).trim() !== '') {
+                            const amount = typeof amountCell === 'number' ? amountCell : parseFloat(String(amountCell).replace('.', '').replace(',', '.'));
+                             if (!isNaN(amount) && amount > 0) {
+                                 allTransactions.push({
+                                     description: description,
+                                     amount: amount,
+                                     date: new Date(fileYear, monthIndex, 15), // Use mid-month
+                                     categoryId: "Einnahmen"
+                                 });
+                                 allDetectedCategories.add("Einnahmen");
+                             }
+                        }
+                    }
                 }
             });
 
