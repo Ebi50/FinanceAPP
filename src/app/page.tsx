@@ -71,18 +71,19 @@ export default function Dashboard() {
     if (!user) return;
     const coll = collection(firestore, 'users', user.uid, 'transactions');
     
-    const transactionData = {
-        ...transaction,
-        createdAt: serverTimestamp(),
-    };
-    delete (transactionData as any).id;
-
+    // Create a mutable copy
+    const transactionData: any = { ...transaction };
 
     if (transaction.id) {
       const docRef = doc(coll, transaction.id);
-      setDocumentNonBlocking(docRef, transactionData, { merge: true });
+      // For updates, we don't want to change the ID field in the document.
+      const id = transactionData.id;
+      delete transactionData.id;
+      setDocumentNonBlocking(docRef, { ...transactionData, updatedAt: serverTimestamp() }, { merge: true });
     } else {
-      addDocumentNonBlocking(coll, transactionData);
+      // For new documents, add createdAt.
+      delete transactionData.id; // ensure no id field is written
+      addDocumentNonBlocking(coll, { ...transactionData, createdAt: serverTimestamp() });
     }
   };
 
@@ -146,9 +147,10 @@ export default function Dashboard() {
   };
 
   const sortedTransactions = transactions ? [...transactions].sort((a, b) => {
-    const dateA = a.date instanceof Date ? a.date.getTime() : (a.date as any).toMillis();
-    const dateB = b.date instanceof Date ? b.date.getTime() : (b.date as any).toMillis();
-    return dateB - dateA;
+    // Ensure we are comparing valid Date objects
+    const dateA = a.date ? (a.date as any).toDate ? (a.date as any).toDate() : new Date(a.date) : new Date(0);
+    const dateB = b.date ? (b.date as any).toDate ? (b.date as any).toDate() : new Date(b.date) : new Date(0);
+    return dateB.getTime() - dateA.getTime();
   }) : [];
 
 
