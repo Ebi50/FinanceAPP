@@ -251,7 +251,6 @@ const categoryNameMap = useMemo(() => {
                            continue;
                         }
 
-                        // Check columns C (index 2) and D (index 3) for the amount
                         const amountCell = rowData?.[1] ?? rowData?.[2];
 
                         if (amountCell !== null && amountCell !== undefined && String(amountCell).trim() !== '' && Number(amountCell) > 0) {
