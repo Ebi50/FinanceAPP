@@ -82,26 +82,27 @@ export default function Dashboard() {
 
   const handleAddOrUpdateTransaction = (transactionData: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date }) => {
     if (!user || !firestore) return;
-  
-    // Always convert the JS Date from the form to a Firestore Timestamp.
-    // This is the single source of truth for the date conversion.
-    const dataToSave = {
-      ...transactionData,
-      date: Timestamp.fromDate(transactionData.date),
-    };
-    
-    const transactionId = dataToSave.id;
+
+    const { id: transactionId, date, ...restOfData } = transactionData;
   
     if (transactionId) {
       // This is an update.
       const docRef = doc(firestore, 'users', user.uid, 'transactions', transactionId);
-      const { id, ...updateData } = dataToSave; // remove the id field before saving
-      setDocumentNonBlocking(docRef, { ...updateData, updatedAt: serverTimestamp() }, { merge: true });
+      const dataToUpdate = {
+        ...restOfData,
+        date: Timestamp.fromDate(date), // Convert JS Date to Firestore Timestamp
+        updatedAt: serverTimestamp(),
+      };
+      setDocumentNonBlocking(docRef, dataToUpdate, { merge: true });
     } else {
       // This is a new document.
       const coll = collection(firestore, 'users', user.uid, 'transactions');
-      const { id, ...createData } = dataToSave; // remove the id field before saving
-      addDocumentNonBlocking(coll, { ...createData, createdAt: serverTimestamp() });
+      const dataToCreate = {
+        ...restOfData,
+        date: Timestamp.fromDate(date), // Convert JS Date to Firestore Timestamp
+        createdAt: serverTimestamp(),
+      };
+      addDocumentNonBlocking(coll, dataToCreate);
     }
   };
 
@@ -288,7 +289,7 @@ export default function Dashboard() {
               </AlertDialogContent>
             </AlertDialog>
             <AddTransactionSheet onTransactionAdded={handleAddOrUpdateTransaction}>
-              <Button variant="destructive">
+              <Button>
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Transaktion hinzufügen
               </Button>
