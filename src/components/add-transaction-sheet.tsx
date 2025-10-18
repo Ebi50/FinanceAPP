@@ -31,7 +31,7 @@ import { Checkbox } from './ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
 import { cn, formatCurrency } from '@/lib/utils';
-import { format, toDate } from 'date-fns';
+import { format, isValid, toDate } from 'date-fns';
 import { de } from 'date-fns/locale';
 import React, { useState, useEffect } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
@@ -115,23 +115,32 @@ export function AddTransactionSheet({
 
   useEffect(() => {
     if (open) {
-      let dateToSet = new Date();
-      if (transaction?.date) {
-        // Firestore timestamps need to be converted
-        if (typeof (transaction.date as any).toDate === 'function') {
-          dateToSet = (transaction.date as any).toDate();
+      let dateToSet: Date;
+      const isEditing = !!transaction;
+  
+      if (isEditing && transaction.date) {
+        // When editing, convert Firestore Timestamp or whatever is there to a JS Date
+        const dateValue = transaction.date;
+        if (typeof (dateValue as any).toDate === 'function') {
+          // It's a Firestore Timestamp
+          dateToSet = (dateValue as any).toDate();
         } else {
-          dateToSet = toDate(transaction.date);
+          // Try to parse it, assuming it might be a string or number
+          const parsedDate = toDate(dateValue);
+          dateToSet = isValid(parsedDate) ? parsedDate : new Date();
         }
+      } else {
+        // When creating a new one, just use the current date
+        dateToSet = new Date();
       }
-      
+  
       form.reset({
         id: transaction?.id || undefined,
         description: transaction?.description || '',
         amounts: transaction ? [{ value: transaction.amount }] : [{ value: 0 }],
         categoryId: transaction?.categoryId || '',
         date: dateToSet,
-        isRecurring: false,
+        isRecurring: transaction ? (transaction as any).isRecurring || false : false,
       });
       setSuggestion(null);
     }
@@ -164,7 +173,6 @@ export function AddTransactionSheet({
   const onSubmit = (data: TransactionFormValues) => {
     const totalAmount = data.amounts.reduce((sum, current) => sum + Number(current.value), 0);
     
-    // The type from the DB might have a Timestamp, so we create a new object.
     const newTransaction: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date } = {
       id: data.id,
       description: data.description,
@@ -305,7 +313,7 @@ export function AddTransactionSheet({
                           )}
                         >
                           <CalendarIcon className="mr-2 h-4 w-4" />
-                          {field.value ? (
+                          {field.value && isValid(field.value) ? (
                             format(field.value, 'PPP', { locale: de })
                           ) : (
                             <span>Datum auswählen</span>
