@@ -68,7 +68,7 @@ function SubmitButton() {
 }
 
 interface AddTransactionSheetProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   onTransactionAdded: (transaction: Omit<Transaction, 'id' | 'createdAt'> & { id?: string }) => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -115,12 +115,22 @@ export function AddTransactionSheet({
 
   useEffect(() => {
     if (open) {
+      let dateToSet = new Date();
+      if (transaction?.date) {
+        // Firestore timestamps need to be converted
+        if (typeof (transaction.date as any).toDate === 'function') {
+          dateToSet = (transaction.date as any).toDate();
+        } else {
+          dateToSet = toDate(transaction.date);
+        }
+      }
+      
       form.reset({
         id: transaction?.id || undefined,
         description: transaction?.description || '',
         amounts: transaction ? [{ value: transaction.amount }] : [{ value: 0 }],
         categoryId: transaction?.categoryId || '',
-        date: transaction?.date ? toDate(transaction.date) : new Date(),
+        date: dateToSet,
         isRecurring: false,
       });
       setSuggestion(null);
@@ -180,7 +190,7 @@ export function AddTransactionSheet({
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>{children}</SheetTrigger>
+      {children && <SheetTrigger asChild>{children}</SheetTrigger>}
       <SheetContent className="sm:max-w-lg w-[90vw] flex flex-col">
         <SheetHeader>
           <SheetTitle className="font-headline">{isEditing ? 'Transaktion bearbeiten' : 'Neue Transaktion'}</SheetTitle>
