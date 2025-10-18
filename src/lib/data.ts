@@ -31,6 +31,7 @@ export const categories: Category[] = [
   { id: 'cat-10', name: 'Arbeit', icon: Briefcase },
   { id: 'cat-11', name: 'Sparen', icon: PiggyBank },
   { id: 'cat-12', name: 'Kleidung', icon: Shirt },
+  { id: 'cat-13', name: 'Haushalt', icon: Home },
 ];
 
 export const transactions: Transaction[] = [
