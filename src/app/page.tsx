@@ -170,15 +170,17 @@ export default function Dashboard() {
 
     const years = new Set<number>();
     allTransactions.forEach(t => {
-      if (t.date) { // Check if date exists
+      if (t.date) {
         const date = toDate(t.date as any);
-        if (isValid(date)) { // Check if date is valid
+        if (isValid(date)) {
             years.add(getYear(date));
         }
       }
     });
     
-    if (years.size === 0) return [new Date().getFullYear()];
+    if (years.size === 0) {
+        years.add(new Date().getFullYear());
+    }
 
     return Array.from(years).sort((a, b) => b - a);
   }, [allTransactions]);
@@ -301,7 +303,12 @@ export default function Dashboard() {
             <TabsTrigger value="import">Importieren</TabsTrigger>
           </TabsList>
           <TabsContent value="reports" className="space-y-4">
-            <ReportsTab transactions={filteredTransactions} />
+            <ReportsTab 
+              transactions={filteredTransactions} 
+              availableYears={availableYears}
+              currentYear={currentYear}
+              setCurrentYear={setCurrentYear}
+            />
           </TabsContent>
           <TabsContent value="import" className="space-y-4">
             <ImportTab 

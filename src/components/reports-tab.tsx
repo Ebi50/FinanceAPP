@@ -29,30 +29,18 @@ import { Label } from "./ui/label";
 
 interface ReportsTabProps {
   transactions: Transaction[];
+  availableYears: number[];
+  currentYear: number;
+  setCurrentYear: (year: number) => void;
 }
 
-export function ReportsTab({ transactions }: ReportsTabProps) {
+export function ReportsTab({ transactions, availableYears, currentYear, setCurrentYear }: ReportsTabProps) {
   const { toast } = useToast();
   const { user } = useUser();
   const firestore = useFirestore();
   const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null, [firestore, user]);
   const { data: categories } = useCollection<Category>(categoriesQuery);
   
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-
-  const availableYears = useMemo(() => {
-    if (!transactions) return [];
-    const years = new Set(
-      transactions
-        .map(t => {
-          const date = toDate(t.date);
-          return isValid(date) ? getYear(date) : null;
-        })
-        .filter((year): year is number => year !== null && !isNaN(year))
-    );
-    return Array.from(years).sort((a, b) => b - a);
-  }, [transactions]);
-
   const categoryMap = useMemo(() => {
     if(!categories) return new Map();
     return new Map(categories.map((c) => [c.id, c.name]));
@@ -64,20 +52,32 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
     const tableRows: (string | number)[][] = [];
 
     const now = new Date();
+    const currentMonth = now.getMonth();
     const filteredTransactions = transactions.filter((t) => {
       const transactionDate = toDate(t.date);
       if (!isValid(transactionDate)) return false;
+      const transactionYear = getYear(transactionDate);
+
       if (period === "monthly") {
         return (
-          transactionDate.getMonth() === now.getMonth() &&
-          getYear(transactionDate) === year
+          transactionDate.getMonth() === currentMonth &&
+          transactionYear === year
         );
       } else {
-        return getYear(transactionDate) === year;
+        return transactionYear === year;
       }
     });
+    
+    // Use all transactions for the selected year for the yearly report
+    const yearlyReportTransactions = period === "yearly" ? 
+      transactions.filter(t => {
+        const d = toDate(t.date);
+        return isValid(d) && getYear(d) === year;
+      })
+      : filteredTransactions;
 
-    if (filteredTransactions.length === 0) {
+
+    if (yearlyReportTransactions.length === 0) {
       toast({
         title: "Keine Daten",
         description: `Für den ausgewählten Zeitraum im Jahr ${year} wurden keine Transaktionen gefunden.`,
@@ -85,7 +85,7 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
       return;
     }
 
-    filteredTransactions.forEach((t) => {
+    yearlyReportTransactions.forEach((t) => {
       const transactionData = [
         format(toDate(t.date), "dd.MM.yyyy", { locale: de }),
         t.description,
@@ -107,10 +107,10 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
   };
   
   useEffect(() => {
-    if (availableYears.length > 0 && !availableYears.includes(selectedYear)) {
-      setSelectedYear(availableYears[0]);
+    if (availableYears.length > 0 && !availableYears.includes(currentYear)) {
+      setCurrentYear(availableYears[0]);
     }
-  }, [availableYears, selectedYear]);
+  }, [availableYears, currentYear, setCurrentYear]);
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -125,8 +125,8 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
             <div className="space-y-2">
                 <Label htmlFor="year-select">Jahr auswählen</Label>
                 <Select
-                    value={String(selectedYear)}
-                    onValueChange={(value) => setSelectedYear(Number(value))}
+                    value={String(currentYear)}
+                    onValueChange={(value) => setCurrentYear(Number(value))}
                     disabled={availableYears.length === 0}
                 >
                     <SelectTrigger id="year-select" className="w-[180px]">
@@ -140,11 +140,11 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
                 </Select>
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
-                <Button variant="secondary" onClick={() => generatePdf("monthly", selectedYear)}>
+                <Button variant="secondary" onClick={() => generatePdf("monthly", currentYear)}>
                     <Download className="mr-2 h-4 w-4" />
                     Monatlicher Bericht (PDF)
                 </Button>
-                <Button variant="secondary" onClick={() => generatePdf("yearly", selectedYear)}>
+                <Button variant="secondary" onClick={() => generatePdf("yearly", currentYear)}>
                     <Download className="mr-2 h-4 w-4" />
                     Jahresbericht (PDF)
                 </Button>
