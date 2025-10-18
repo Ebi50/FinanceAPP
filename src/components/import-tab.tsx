@@ -103,8 +103,8 @@ export function ImportTab({ transactions }: ImportTabProps) {
           defval: null
         }) as RawTransactionData;
         
-        if (!json || json.length < 2) {
-            throw new Error("Die Excel-Datei ist zu klein oder konnte nicht gelesen werden. Bitte stellen Sie sicher, dass sie korrekt formatiert ist.");
+        if (!json || json.length === 0) {
+            throw new Error("Die Excel-Datei ist leer oder konnte nicht gelesen werden.");
         }
 
         let dataHeaderRowIndex = -1;
@@ -119,13 +119,16 @@ export function ImportTab({ transactions }: ImportTabProps) {
           }
         }
         
-        if (dataHeaderRowIndex === -1 || dataHeaderRowIndex === 0) {
-            throw new Error("Es konnte keine gültige Kopfzeile mit 'Datum' und 'Betrag' gefunden werden. Stellen Sie sicher, dass eine Zeile darüber für die Kategorien existiert.");
+        if (dataHeaderRowIndex === -1) {
+            throw new Error("Es konnte keine gültige Kopfzeile mit 'Datum' und 'Betrag' gefunden werden.");
+        }
+        
+        if (dataHeaderRowIndex === 0) {
+             throw new Error("Es konnte keine Kategoriezeile über der Kopfzeile gefunden werden.");
         }
 
         const categoryRow = json[dataHeaderRowIndex - 1];
         
-        // Fill-forward logic for merged cells
         const filledCategoryRow: (string | null)[] = [];
         let lastCategory: string | null = null;
         for (const cell of categoryRow) {
@@ -205,7 +208,6 @@ export function ImportTab({ transactions }: ImportTabProps) {
 
         const categoryRow = json[dataHeaderRowIndex - 1];
         
-        // Fill-forward logic for merged cells
         const filledCategoryRow: (string | null)[] = [];
         let lastCategory: string | null = null;
         for (const cell of categoryRow) {
@@ -393,3 +395,5 @@ export function ImportTab({ transactions }: ImportTabProps) {
     </>
   );
 }
+
+    
