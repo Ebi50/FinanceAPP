@@ -130,13 +130,12 @@ const categoryNameMap = useMemo(() => {
                 
                 if (rawJson.length < 2) return;
                 
-                // Process upper part (rows 1-28 approx), columns A-J
                 const upperPart = rawJson.slice(0, 28).map(row => row.slice(0, 10)); // Use columns A-J
 
                 for (let r = 0; r < upperPart.length; r++) {
                     const firstCell = upperPart[r][0];
-                    if (typeof firstCell === 'string' && firstCell.match(/^[a-zA-ZäöüÄÖÜß\.\/\s]+ \d+$/)) {
-                        const categoryName = firstCell.replace(/\s+\d+$/, '').trim();
+                    if (typeof firstCell === 'string' && firstCell.match(/^[a-zA-ZäöüÄÖÜß\.\/\s]+$/) && !firstCell.toLowerCase().includes('summe') && !firstCell.toLowerCase().includes('einnahmen')) {
+                        const categoryName = firstCell.trim();
                         allDetectedCategories.add(categoryName);
 
                         let currentRow = r + 2; 
@@ -154,20 +153,19 @@ const categoryNameMap = useMemo(() => {
                             let date: Date | null = null;
                             
                             const dayString = String(cell1);
-                            // Matches "1. Dez" or similar date formats
                             if (dayString.match(/^\d{1,2}\.\s[A-Za-z]{3}/)) {
                                 const dayMatch = dayString.match(/^(\d{1,2})/);
                                 if (dayMatch) {
                                     const day = parseInt(dayMatch[1], 10);
                                     date = new Date(Date.UTC(fileYear, monthIndex, day, 12, 0, 0));
                                 }
-                                description = categoryName; // Use category name as description if date is present
+                                description = categoryName; 
                             } else if (cell1 instanceof Date && isValid(cell1)) {
                                 date = new Date(Date.UTC(fileYear, monthIndex, cell1.getUTCDate(), 12, 0, 0));
                                 description = categoryName;
                             } else if (typeof cell1 === 'string' && cell1.trim() !== '') {
                                 description = cell1.trim();
-                                date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0)); // Default to 15th if description is text
+                                date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0)); 
                             }
                             
                             if (date && isValid(date)) {
@@ -208,7 +206,6 @@ const categoryNameMap = useMemo(() => {
 
                 if (einnahmenRowIndex !== -1) {
                     allDetectedCategories.add("Einnahmen");
-                    // Process lower part, columns A-N
                     const lowerPart = rawJson.slice(einnahmenRowIndex).map(row => row.slice(0, 14)); // Use columns A-N
                     
                     for (let r = 1; r < lowerPart.length; r++) { // Start from 1 to skip header
@@ -279,10 +276,9 @@ const categoryNameMap = useMemo(() => {
     try {
       const transactionsWithMappedCategory = allParsedTransactions
         .map(t => {
-          // Here, t.categoryId is still the original category name from Excel (e.g., "Lebensmittel")
           const mappedCatId = headerMapping[t.categoryId]; 
-          if (!mappedCatId) return null; // Skip if category is not mapped
-          return { ...t, categoryId: mappedCatId }; // Replace original name with the mapped ID
+          if (!mappedCatId) return null;
+          return { ...t, categoryId: mappedCatId };
         })
         .filter((t): t is MappedTransaction => t !== null);
   
