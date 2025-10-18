@@ -91,7 +91,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
           const incomeCategory = categories?.find(c => c.name.toLowerCase() === 'einnahmen');
           const isIncome = category?.id === incomeCategory?.id;
           
-          const date = toDate(transaction.date);
+          const transactionDate = toDate(transaction.date);
 
           return (
             <TableRow key={transaction.id}>
@@ -107,7 +107,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
                 )}
               </TableCell>
               <TableCell>
-                {format(date, "dd. MMMM yyyy", { locale: de })}
+                {format(transactionDate, "dd. MMMM yyyy", { locale: de })}
               </TableCell>
               <TableCell className={cn("text-right", isIncome ? "text-emerald-500" : "text-destructive")}>
                 {isIncome ? '+' : '-'}{formatCurrency(transaction.amount)}
