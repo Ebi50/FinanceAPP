@@ -225,16 +225,16 @@ export default function SettingsPage() {
       });
       return;
     }
-
+  
     setIsMigrating(true);
     toast({
       title: 'Datenmigration gestartet',
       description: 'Ihre alten Daten werden jetzt kopiert...',
     });
-
+  
     try {
       const batch = writeBatch(firestore);
-
+  
       // --- Migrate Categories ---
       const oldCategoriesRef = collection(firestore, `users/${user.uid}/expenseCategories`);
       const categoriesSnapshot = await getDocs(oldCategoriesRef);
@@ -245,18 +245,18 @@ export default function SettingsPage() {
         batch.set(newDocRef, docSnapshot.data());
         migratedCategoriesCount++;
       });
-
+  
       // --- Migrate Transactions ---
       const oldTransactionsRef = collection(firestore, `users/${user.uid}/transactions`);
       const transactionsSnapshot = await getDocs(oldTransactionsRef);
-
+  
       let migratedTransactionsCount = 0;
       transactionsSnapshot.forEach(docSnapshot => {
         const newDocRef = doc(firestore, 'transactions', docSnapshot.id);
         batch.set(newDocRef, docSnapshot.data());
         migratedTransactionsCount++;
       });
-
+  
       if (migratedCategoriesCount === 0 && migratedTransactionsCount === 0) {
         toast({
           title: 'Keine Daten gefunden',
@@ -269,7 +269,7 @@ export default function SettingsPage() {
           description: `${migratedCategoriesCount} Kategorien und ${migratedTransactionsCount} Transaktionen wurden erfolgreich verschoben.`,
         });
       }
-
+  
     } catch (error) {
       console.error("Error migrating data:", error);
       toast({
