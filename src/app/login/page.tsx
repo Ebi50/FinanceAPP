@@ -86,7 +86,7 @@ export default function LoginPage() {
       <div className="flex items-center justify-center py-12">
         <Card className="mx-auto max-w-sm border-0 shadow-none lg:border lg:shadow-sm">
           <CardHeader className="text-center">
-            <CardTitle className="text-3xl font-headline">ExpenceTrack</CardTitle>
+            <CardTitle className="text-3xl font-headline">Dashboard</CardTitle>
             <CardDescription>
               Geben Sie Ihre Anmeldeinformationen ein, um auf Ihr Konto zuzugreifen.
             </CardDescription>
