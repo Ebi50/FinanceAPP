@@ -48,7 +48,7 @@ const allNavItems = [
   'Erweitert',
 ];
 
-const ADMIN_EMAIL = 'eberhard.janzen@example.com';
+const ADMIN_EMAIL = 'eberhard.janzen@freenet.de';
 
 type UserProfile = {
   firstName?: string;
@@ -461,7 +461,18 @@ export default function SettingsPage() {
           <nav className="grid gap-4 text-sm text-muted-foreground">
             {navItems.map((item) => {
               if (item === 'Organisation' && !isAdmin) {
-                return null;
+                return (
+                  <button
+                    key={item}
+                    onClick={() => setActiveTab(item)}
+                    className={cn(
+                      'text-left',
+                      activeTab === item && 'font-semibold text-primary'
+                    )}
+                  >
+                    {item}
+                  </button>
+                )
               }
               return (
               <button
