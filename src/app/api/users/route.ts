@@ -19,21 +19,27 @@ async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; re
         const idToken = authorization.split('Bearer ')[1];
         const decodedToken = await admin.auth().verifyIdToken(idToken);
 
+        // First, check if the email is the special admin email.
+        // This grants immediate admin access.
+        if (decodedToken.email === ADMIN_EMAIL) {
+            // If the role is not yet set, set it in the background for future requests.
+            if (decodedToken.role !== 'admin') {
+                await admin.auth().setCustomUserClaims(decodedToken.uid, { role: 'admin' });
+            }
+            return { isAdmin: true, decodedToken };
+        }
+
+        // If not the special admin, check if they have the role.
         if (decodedToken.role === 'admin') {
             return { isAdmin: true, decodedToken };
         }
 
-        if (decodedToken.email === ADMIN_EMAIL) {
-            // User is the special admin, but might not have the claim yet.
-            // Set the custom claim in the background for future requests.
-            await admin.auth().setCustomUserClaims(decodedToken.uid, { role: 'admin' });
-            return { isAdmin: true, decodedToken };
-        }
-
+        // If neither, they are not an admin.
         return { isAdmin: false, response: NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 }) };
 
     } catch (error) {
         console.error("Admin verification failed:", error);
+        // This will catch expired tokens, invalid tokens, etc.
         return { isAdmin: false, response: NextResponse.json({ error: 'Token verification failed.' }, { status: 401 }) };
     }
 }
