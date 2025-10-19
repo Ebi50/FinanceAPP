@@ -237,32 +237,38 @@ export default function SettingsPage() {
 
       // --- Migrate Categories ---
       const oldCategoriesRef = collection(firestore, `users/${user.uid}/expenseCategories`);
-      const newCategoriesRef = collection(firestore, 'expenseCategories');
       const categoriesSnapshot = await getDocs(oldCategoriesRef);
       
       let migratedCategoriesCount = 0;
-      categoriesSnapshot.forEach(doc => {
-        batch.set(doc(newCategoriesRef, doc.id), doc.data());
+      categoriesSnapshot.forEach(docSnapshot => {
+        const newDocRef = doc(firestore, 'expenseCategories', docSnapshot.id);
+        batch.set(newDocRef, docSnapshot.data());
         migratedCategoriesCount++;
       });
 
       // --- Migrate Transactions ---
       const oldTransactionsRef = collection(firestore, `users/${user.uid}/transactions`);
-      const newTransactionsRef = collection(firestore, 'transactions');
       const transactionsSnapshot = await getDocs(oldTransactionsRef);
 
       let migratedTransactionsCount = 0;
-      transactionsSnapshot.forEach(doc => {
-        batch.set(doc(newTransactionsRef, doc.id), doc.data());
+      transactionsSnapshot.forEach(docSnapshot => {
+        const newDocRef = doc(firestore, 'transactions', docSnapshot.id);
+        batch.set(newDocRef, docSnapshot.data());
         migratedTransactionsCount++;
       });
 
-      await batch.commit();
-      
-      toast({
-        title: 'Migration erfolgreich!',
-        description: `${migratedCategoriesCount} Kategorien und ${migratedTransactionsCount} Transaktionen wurden erfolgreich verschoben.`,
-      });
+      if (migratedCategoriesCount === 0 && migratedTransactionsCount === 0) {
+        toast({
+          title: 'Keine Daten gefunden',
+          description: 'Es wurden keine alten Daten zum Migrieren gefunden.',
+        });
+      } else {
+        await batch.commit();
+        toast({
+          title: 'Migration erfolgreich!',
+          description: `${migratedCategoriesCount} Kategorien und ${migratedTransactionsCount} Transaktionen wurden erfolgreich verschoben.`,
+        });
+      }
 
     } catch (error) {
       console.error("Error migrating data:", error);
