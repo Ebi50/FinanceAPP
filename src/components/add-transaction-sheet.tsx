@@ -38,7 +38,7 @@ import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { suggestExpenseCategory } from '@/ai/flows/suggest-expense-category';
-import type { Transaction, Category } from '@/lib/types';
+import type { Transaction, Category, TransactionItem } from '@/lib/types';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, Timestamp } from 'firebase/firestore';
 
@@ -72,7 +72,7 @@ function SubmitButton() {
 
 interface AddTransactionSheetProps {
   children?: React.ReactNode;
-  onTransactionAdded: (transaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date }) => void;
+  onTransactionAdded: (transaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date; items: TransactionItem[] }) => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   transaction?: Transaction | null;
@@ -133,11 +133,16 @@ export function AddTransactionSheet({
       if (transaction) {
           // This ensures that a Firestore Timestamp is converted to a JS Date object
           const transactionDate = transaction.date ? transaction.date.toDate() : new Date();
+          
+          const amounts = transaction.items && transaction.items.length > 0 
+              ? transaction.items 
+              : [{ value: transaction.amount, description: '' }];
+
 
           defaultValues = {
               id: transaction.id,
               description: transaction.description || '',
-              amounts: transaction.amount ? [{ value: transaction.amount, description: '' }] : [{ value: '' as any, description: '' }],
+              amounts: amounts.map(item => ({...item, value: item.value || '' as any})),
               categoryId: transaction.categoryId || '',
               date: isValid(transactionDate) ? transactionDate : new Date(),
               isRecurring: (transaction as any).isRecurring || false,
@@ -181,20 +186,17 @@ export function AddTransactionSheet({
         return;
     }
     
-    // Combine main description with individual amount descriptions
-    const combinedDescription = [
-        data.description || '',
-        ...data.amounts.filter(a => a.description).map(a => `${a.description}: ${formatCurrency(a.value)}`)
-    ].filter(Boolean).join('\n');
+    // Use main description as is, individual item descriptions are saved in items.
+    const mainDescription = data.description || '';
 
-
-    const newTransaction: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date } = {
+    const newTransaction: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date, items: TransactionItem[] } = {
       id: data.id,
-      description: combinedDescription,
+      description: mainDescription,
       amount: totalAmount,
       categoryId: data.categoryId,
       date: data.date,
       isRecurring: data.isRecurring,
+      items: data.amounts.map(a => ({ value: Number(a.value), description: a.description })),
     };
     onTransactionAdded(newTransaction);
     setOpen(false);

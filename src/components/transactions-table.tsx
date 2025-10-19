@@ -1,5 +1,5 @@
 'use client';
-import type { Transaction, Category } from "@/lib/types";
+import type { Transaction, Category, TransactionItem } from "@/lib/types";
 import { formatCurrency, cn } from "@/lib/utils";
 import {
   Table,
@@ -41,7 +41,7 @@ import { collection } from 'firebase/firestore';
 interface TransactionsTableProps {
   transactions: Transaction[];
   onDelete: (id: string) => void;
-  onUpdate: (transaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date; }) => void;
+  onUpdate: (transaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date; items: TransactionItem[] }) => void;
 }
 
 type SortKey = 'description' | 'category' | 'date' | 'amount';
@@ -70,7 +70,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
     setEditingTransaction(transaction);
   }
 
-  const handleUpdate = (updatedTransaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date; }) => {
+  const handleUpdate = (updatedTransaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date; items: TransactionItem[] }) => {
     onUpdate(updatedTransaction);
     setEditingTransaction(null);
   }
@@ -173,6 +173,9 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
               <TableRow key={transaction.id}>
                 <TableCell className="font-medium">
                   {transaction.description}
+                  {transaction.items && transaction.items.length > 1 && (
+                    <span className="text-xs text-muted-foreground ml-2">({transaction.items.length} Posten)</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   {category && (

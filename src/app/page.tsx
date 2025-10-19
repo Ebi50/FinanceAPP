@@ -23,7 +23,7 @@ import { CategoriesTab } from "@/components/categories-tab";
 import { ReportsTab } from "@/components/reports-tab";
 import { ImportTab } from "@/components/import-tab";
 import { AddTransactionSheet } from "@/components/add-transaction-sheet";
-import type { Transaction, Category } from '@/lib/types';
+import type { Transaction, Category, TransactionItem } from '@/lib/types';
 import { useUser, useFirestore, useCollection, useDoc, setDocumentNonBlocking, deleteDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
 import { collection, doc, serverTimestamp, writeBatch, getDocs, Timestamp } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
@@ -81,10 +81,10 @@ export default function Dashboard() {
   const isAdmin = userProfile?.role === 'admin';
 
 
-  const handleAddOrUpdateTransaction = (transactionData: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date }) => {
+  const handleAddOrUpdateTransaction = (transactionData: Omit<Transaction, 'id' | 'date' | 'amount'> & { id?: string, date: Date, amount: number, items: TransactionItem[] }) => {
     if (!user || !firestore) return;
   
-    const { id: transactionId, date, ...restOfData } = transactionData;
+    const { id: transactionId, date, items, ...restOfData } = transactionData;
   
     // Always convert the JS Date from the form to a Firestore Timestamp
     const firestoreTimestamp = Timestamp.fromDate(date);
@@ -95,6 +95,7 @@ export default function Dashboard() {
       const dataToUpdate = {
         ...restOfData,
         date: firestoreTimestamp,
+        items, // save the items
         updatedAt: serverTimestamp(),
       };
       setDocumentNonBlocking(docRef, dataToUpdate, { merge: true });
@@ -104,6 +105,7 @@ export default function Dashboard() {
       const dataToCreate = {
         ...restOfData,
         date: firestoreTimestamp,
+        items, // save the items
         createdAt: serverTimestamp(),
       };
       addDocumentNonBlocking(coll, dataToCreate);

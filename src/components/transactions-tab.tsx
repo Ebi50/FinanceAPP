@@ -8,12 +8,12 @@ import {
   CardTitle,
 } from "./ui/card";
 import { TransactionsTable } from "./transactions-table";
-import type { Transaction } from "@/lib/types";
+import type { Transaction, TransactionItem } from "@/lib/types";
 
 interface TransactionsTabProps {
   transactions: Transaction[];
   onDelete: (id: string) => void;
-  onUpdate: (transaction: Transaction) => void;
+  onUpdate: (transaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date; items: TransactionItem[] }) => void;
 }
 
 export function TransactionsTab({ transactions, onDelete, onUpdate }: TransactionsTabProps) {
