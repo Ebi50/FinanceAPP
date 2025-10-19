@@ -15,11 +15,14 @@ async function verifyAdmin(request: Request): Promise<{adminUid: string | null, 
             const idToken = authorization.split('Bearer ')[1];
             const decodedToken = await adminAuth.verifyIdToken(idToken);
             
-            if (decodedToken.role === 'admin' || decodedToken.email === 'eberhard.janzen@freenet.de') {
+            if (decodedToken.email === 'eberhard.janzen@freenet.de') {
                  if (decodedToken.role !== 'admin') {
                     await adminAuth.setCustomUserClaims(decodedToken.uid, { role: 'admin' });
                  }
                  return { adminUid: decodedToken.uid, adminApp };
+            }
+             if (decodedToken.role === 'admin') {
+                return { adminUid: decodedToken.uid, adminApp };
             }
         }
     } catch (error) {
