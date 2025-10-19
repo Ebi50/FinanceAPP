@@ -34,12 +34,11 @@ import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/page-header';
-import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
-import { doc, setDoc, writeBatch, collection, getDocs, deleteDoc } from 'firebase/firestore';
+import { useUser, useFirestore, useDoc, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
+import { doc, writeBatch, collection, getDocs } from 'firebase/firestore';
 import { updateProfile, updatePassword, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { OrganizationTab } from '@/components/organization-tab';
 
-const allNavItems = [
+const navItems = [
   'Allgemein',
   'Sicherheit',
   'Integrationen',
@@ -55,7 +54,6 @@ type UserProfile = {
   lastName?: string;
   email?: string;
   budget?: number;
-  role?: 'admin' | 'user';
 }
 
 export default function SettingsPage() {
@@ -81,11 +79,6 @@ export default function SettingsPage() {
   const [budget, setBudget] = useState(2000);
 
   const { toast } = useToast();
-  
-  const isAdmin = user?.email === ADMIN_EMAIL || userProfile?.role === 'admin';
-
-  const navItems = allNavItems;
-
 
   useEffect(() => {
     if (userProfile) {
@@ -109,7 +102,14 @@ export default function SettingsPage() {
         if(user.displayName !== displayName) {
             await updateProfile(user, { displayName });
         }
-        await setDoc(userProfileQuery, { firstName, lastName }, { merge: true });
+        
+        const userDocRef = doc(firestore, 'users', user.uid);
+        setDocumentNonBlocking(userDocRef, { 
+          firstName, 
+          lastName,
+          email: user.email // Make sure email is stored
+        }, { merge: true });
+
         toast({
             title: 'Profil gespeichert',
             description: 'Ihre Daten wurden erfolgreich aktualisiert.',
@@ -174,23 +174,14 @@ export default function SettingsPage() {
     }
   };
 
-  const handleBudgetSave = async (e: React.FormEvent) => {
+  const handleBudgetSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !userProfileQuery) return;
-    try {
-        await setDoc(userProfileQuery, { budget }, { merge: true });
-        toast({
-          title: 'Budget gespeichert',
-          description: `Ihr monatliches Budget wurde auf ${budget} € festgelegt.`,
-        });
-    } catch (error) {
-        console.error("Error updating budget: ", error);
-        toast({
-            variant: "destructive",
-            title: "Fehler",
-            description: "Budget konnte nicht gespeichert werden.",
-        });
-    }
+    setDocumentNonBlocking(userProfileQuery, { budget }, { merge: true });
+    toast({
+      title: 'Budget gespeichert',
+      description: `Ihr monatliches Budget wurde auf ${budget} € festgelegt.`,
+    });
   };
 
   const handleDeleteAccount = async () => {
@@ -212,18 +203,25 @@ export default function SettingsPage() {
 
       await batch.commit();
 
+      // This is a destructive action, user might need to re-authenticate
+      // For simplicity, we just try to delete. If it fails, we inform the user.
       await deleteUser(user);
 
       toast({
         title: 'Konto gelöscht',
         description: 'Ihr Konto und alle zugehörigen Daten wurden dauerhaft entfernt.',
       });
-    } catch (error) {
+      // The onAuthStateChanged listener will handle the redirect to /login
+    } catch (error: any) {
       console.error('Error deleting account:', error);
+      let description = 'Beim Löschen Ihres Kontos ist ein Fehler aufgetreten.';
+      if (error.code === 'auth/requires-recent-login') {
+        description = 'Diese Aktion erfordert eine erneute Anmeldung. Bitte melden Sie sich ab, wieder an und versuchen Sie es erneut.';
+      }
       toast({
         variant: 'destructive',
         title: 'Fehler beim Löschen des Kontos',
-        description: 'Bitte melden Sie sich erneut an und versuchen Sie es erneut.',
+        description: description,
       });
     }
   };
@@ -381,21 +379,25 @@ export default function SettingsPage() {
         );
         break;
         case 'Organisation':
-          if (isAdmin) {
-            content = <OrganizationTab />;
-          } else {
-            content = (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Organisation</CardTitle>
-                  <CardDescription>Verwalten Sie die Benutzer Ihrer App.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p>Sie haben keine Berechtigung, auf diesen Bereich zuzugreifen. Diese Funktion ist nur für Administratoren verfügbar.</p>
-                </CardContent>
-              </Card>
-            );
-          }
+          content = (
+            <Card>
+              <CardHeader>
+                <CardTitle>Organisation</CardTitle>
+                <CardDescription>Verwalten Sie die Benutzer Ihrer App.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p>Die Benutzerverwaltung findet nun direkt in der Firebase-Konsole statt.</p>
+                <Button asChild variant="link" className="p-0 h-auto mt-2">
+                    <a href={`https://console.firebase.google.com/project/${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}/authentication/users`} target="_blank" rel="noopener noreferrer">
+                        Zur Firebase-Benutzerverwaltung
+                    </a>
+                </Button>
+                <p className="text-sm text-muted-foreground mt-2">
+                    Dort können Sie neue Benutzer hinzufügen, Passwörter zurücksetzen oder Benutzer löschen.
+                </p>
+              </CardContent>
+            </Card>
+          );
           break;
         case 'Support':
             content = (
@@ -405,7 +407,7 @@ export default function SettingsPage() {
                   <CardDescription>
                     Benötigen Sie Hilfe? Kontaktieren Sie uns.
                   </CardDescription>
-                </CardHeader>
+                </Header>
                 <CardContent>
                     <p>Für Support-Anfragen senden Sie bitte eine E-Mail an: <a href={`mailto:${ADMIN_EMAIL}`} className="text-primary underline">{ADMIN_EMAIL}</a></p>
                 </CardContent>
@@ -450,7 +452,7 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle>{activeTab}</CardTitle>
-            </CardHeader>
+            </Header>
             <CardContent>
               <p>Einstellungen für {activeTab} werden hier angezeigt.</p>
             </CardContent>
@@ -470,22 +472,7 @@ export default function SettingsPage() {
         </div>
         <div className="mx-auto grid w-full max-w-6xl items-start gap-6 md:grid-cols-[180px_1fr] lg:grid-cols-[250px_1fr]">
           <nav className="grid gap-4 text-sm text-muted-foreground">
-            {navItems.map((item) => {
-              if (item === 'Organisation' && !isAdmin) {
-                return (
-                  <button
-                    key={item}
-                    onClick={() => setActiveTab(item)}
-                    className={cn(
-                      'text-left',
-                      activeTab === item && 'font-semibold text-primary'
-                    )}
-                  >
-                    {item}
-                  </button>
-                )
-              }
-              return (
+            {navItems.map((item) => (
               <button
                 key={item}
                 onClick={() => setActiveTab(item)}
@@ -497,7 +484,7 @@ export default function SettingsPage() {
                 {item}
               </button>
               )
-            })}
+            )}
           </nav>
           <div className="grid gap-6">
             {renderContent()}

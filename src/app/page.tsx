@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { PlusCircle, Trash2 } from "lucide-react";
+import { PlusCircle } from "lucide-react";
 import { UserNav } from "@/components/user-nav";
 import { DashboardTab } from "@/components/dashboard-tab";
 import { TransactionsTab } from "@/components/transactions-tab";
@@ -29,17 +29,6 @@ import { collection, doc, serverTimestamp, writeBatch, getDocs, Timestamp } from
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { useMemoFirebase } from '@/firebase/provider';
 import { isValid } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -64,7 +53,7 @@ export default function Dashboard() {
     user ? collection(firestore, 'users', user.uid, 'transactions') : null,
     [firestore, user]
   );
-  const { data: allTransactions, isLoading: transactionsLoading, setData: setAllTransactions } = useCollection<Transaction>(transactionsQuery);
+  const { data: allTransactions, isLoading: transactionsLoading } = useCollection<Transaction>(transactionsQuery);
 
   const categoriesQuery = useMemoFirebase(() => 
     user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null,
@@ -76,9 +65,8 @@ export default function Dashboard() {
     user ? doc(firestore, 'users', user.uid) : null,
     [firestore, user]
   );
-  const { data: userProfile } = useDoc<{budget?: number, role?: 'admin' | 'user'}>(userProfileQuery);
+  const { data: userProfile } = useDoc<{budget?: number}>(userProfileQuery);
   const budget = userProfile?.budget ?? 2000;
-  const isAdmin = userProfile?.role === 'admin';
 
 
   const handleAddOrUpdateTransaction = (transactionData: Omit<Transaction, 'id' | 'date' | 'amount'> & { id?: string, date: Date, amount: number, items: TransactionItem[] }) => {
@@ -86,26 +74,23 @@ export default function Dashboard() {
   
     const { id: transactionId, date, items, ...restOfData } = transactionData;
   
-    // Always convert the JS Date from the form to a Firestore Timestamp
     const firestoreTimestamp = Timestamp.fromDate(date);
   
     if (transactionId) {
-      // This is an update.
       const docRef = doc(firestore, 'users', user.uid, 'transactions', transactionId);
       const dataToUpdate = {
         ...restOfData,
         date: firestoreTimestamp,
-        items, // save the items
+        items, 
         updatedAt: serverTimestamp(),
       };
       setDocumentNonBlocking(docRef, dataToUpdate, { merge: true });
     } else {
-      // This is a new document.
       const coll = collection(firestore, 'users', user.uid, 'transactions');
       const dataToCreate = {
         ...restOfData,
         date: firestoreTimestamp,
-        items, // save the items
+        items,
         createdAt: serverTimestamp(),
       };
       addDocumentNonBlocking(coll, dataToCreate);
@@ -119,7 +104,7 @@ export default function Dashboard() {
     const transactionsCollection = collection(firestore, `users/${user.uid}/transactions`);
 
     importedTransactions.forEach((transactionData) => {
-      const docRef = doc(transactionsCollection); // Create a new document with a unique ID
+      const docRef = doc(transactionsCollection);
       batch.set(docRef, { ...transactionData, createdAt: serverTimestamp() });
     });
 
@@ -146,46 +131,19 @@ export default function Dashboard() {
     deleteDocumentNonBlocking(docRef);
   };
   
-  const handleDeleteAllTransactions = async () => {
-    if (!user || !firestore) return;
-
-    const transactionsCollection = collection(firestore, `users/${user.uid}/transactions`);
-    try {
-      const querySnapshot = await getDocs(transactionsCollection);
-      const batch = writeBatch(firestore);
-      querySnapshot.forEach((doc) => {
-        batch.delete(doc.ref);
-      });
-      await batch.commit();
-      setAllTransactions([]); // Clear local state after successful deletion
-      toast({
-        title: "Alle Transaktionen gelöscht",
-        description: "Alle Ihre Transaktionsdaten wurden entfernt.",
-      });
-    } catch (error) {
-      console.error("Error deleting all transactions: ", error);
-      toast({
-        variant: "destructive",
-        title: "Löschen fehlgeschlagen",
-        description: "Beim Löschen der Transaktionen ist ein Fehler aufgetreten.",
-      });
-    }
-  };
-  
   const availableYears = useMemo(() => {
     if (!allTransactions) return [new Date().getFullYear()];
 
     const years = new Set<number>();
     allTransactions.forEach(t => {
-      if (t.date && t.date.toDate) { // Check if date exists and has toDate method
-        const date = t.date.toDate(); // Convert Firestore Timestamp to JS Date
+      if (t.date && t.date.toDate) { 
+        const date = t.date.toDate();
         if (isValid(date)) {
             years.add(date.getFullYear());
         }
       }
     });
     
-    // Ensure the current year is always an option
     years.add(new Date().getFullYear());
 
     return Array.from(years).sort((a, b) => b - a);
@@ -197,9 +155,6 @@ export default function Dashboard() {
     const filtered = allTransactions.filter(t => {
       if (!t.date || !t.date.toDate) return false;
   
-      // Convert Firestore Timestamp to JS Date. This is timezone-aware
-      // but getMonth() and getFullYear() will use the browser's local timezone.
-      // This is generally the desired behavior.
       const date = t.date.toDate();
       if (!isValid(date)) return false;
       
@@ -216,7 +171,6 @@ export default function Dashboard() {
   }, [allTransactions, currentMonth, currentYear]);
 
   useEffect(() => {
-    // If the currently selected year is not in the list of available years, reset to the most recent available year.
     if (availableYears.length > 0 && !availableYears.includes(currentYear)) {
       setCurrentYear(availableYears[0]);
     }
@@ -271,35 +225,6 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            {isAdmin && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="icon">
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                    <span className="sr-only">Alle Transaktionen löschen</span>
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      Sind Sie absolut sicher?
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Diese Aktion kann nicht rückgängig gemacht werden. Dadurch werden alle Ihre Transaktionen dauerhaft gelöscht.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={handleDeleteAllTransactions}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      Alles löschen
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
             <AddTransactionSheet onTransactionAdded={handleAddOrUpdateTransaction}>
               <Button>
                 <PlusCircle className="mr-2 h-4 w-4" />
