@@ -183,7 +183,7 @@ const categoryNameMap = useMemo(() => {
                             const date = parseDate(descOrDateCell);
                             const description = (typeof descOrDateCell === 'string' && !descOrDateCell.match(/^\d{1,2}\. \w{3}/i)) ? descOrDateCell : categoryName;
                             
-                            allTransactions.push({ description, amount, date, categoryId: categoryName });
+                            allTransactions.push({ description, amount, date, categoryId: categoryName, userId: '' });
 
                             if(categoryName.toLowerCase().includes('kv')) col+=2;
                         }
@@ -209,7 +209,7 @@ const categoryNameMap = useMemo(() => {
                             const date = parseDate(descOrDateCell);
                             const description = (typeof descOrDateCell === 'string' && !descOrDateCell.match(/^\d{1,2}\. \w{3}/i)) ? descOrDateCell : categoryName;
                             
-                            allTransactions.push({ description, amount, date, categoryId: categoryName });
+                            allTransactions.push({ description, amount, date, categoryId: categoryName, userId: '' });
                         }
                     }
                 }
@@ -225,7 +225,7 @@ const categoryNameMap = useMemo(() => {
                     const amount = row[2] as number;
                     if (description && typeof amount === 'number' && amount !== 0) {
                         const date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
-                        allTransactions.push({ description, amount, date, categoryId: sonderausgabenCategory });
+                        allTransactions.push({ description, amount, date, categoryId: sonderausgabenCategory, userId: '' });
                     }
                 }
                 
@@ -245,11 +245,11 @@ const categoryNameMap = useMemo(() => {
                     const date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
 
                     if (typeof valF === 'number' && valF !== 0) {
-                        allTransactions.push({ description: "Sonderwert Spalte F", amount: valF, date, categoryId: sonderwerteFCategory });
+                        allTransactions.push({ description: "Sonderwert Spalte F", amount: valF, date, categoryId: sonderwerteFCategory, userId: '' });
                     }
                     if (typeof valH === 'number' && valH !== 0) {
                         const description = (typeof descF === 'string' && isNaN(parseFloat(descF))) ? descF : "Sonderwert Spalte H";
-                        allTransactions.push({ description, amount: valH, date, categoryId: sonderwerteHCategory });
+                        allTransactions.push({ description, amount: valH, date, categoryId: sonderwerteHCategory, userId: '' });
                     }
                 }
             });
@@ -276,7 +276,7 @@ const categoryNameMap = useMemo(() => {
                 }
             });
             setHeaderMapping(initialMapping);
-            setAllParsedTransactions(allTransactions);
+            setAllParsedTransactions(allTransactions as MappedTransaction[]);
             setIsMappingDialogOpen(true);
 
         } catch (error: any) {

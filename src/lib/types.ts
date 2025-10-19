@@ -13,9 +13,11 @@ export type Transaction = {
   date: Date | Timestamp;
   categoryId: string;
   items?: TransactionItem[];
+  userId: string;
 };
 
 export type Category = {
   id: string;
   name: string;
+  userId: string;
 };

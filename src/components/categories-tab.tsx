@@ -50,7 +50,7 @@ export function CategoriesTab() {
   const firestore = useFirestore();
 
   const categoriesQuery = useMemoFirebase(() => 
-    user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null,
+    user ? collection(firestore, 'expenseCategories') : null,
     [firestore, user]
   );
   const { data: categories, isLoading: categoriesLoading } = useCollection<Category>(categoriesQuery);
@@ -74,7 +74,7 @@ export function CategoriesTab() {
 
   const handleDelete = (categoryId: string) => {
     if (!user) return;
-    const docRef = doc(firestore, 'users', user.uid, 'expenseCategories', categoryId);
+    const docRef = doc(firestore, 'expenseCategories', categoryId);
     deleteDoc(docRef);
     toast({
       title: 'Kategorie gelöscht',
@@ -93,7 +93,7 @@ export function CategoriesTab() {
         return;
     }
     
-    const coll = collection(firestore, 'users', user.uid, 'expenseCategories');
+    const coll = collection(firestore, 'expenseCategories');
 
     if (currentCategory) {
       // Edit
@@ -107,7 +107,7 @@ export function CategoriesTab() {
       // Add
       const newCategory = {
         name: categoryName,
-        // icon property is removed as we are not handling icons for now with firestore
+        userId: user.uid, // Add user ID for tracking
       };
       addDoc(coll, newCategory);
       toast({

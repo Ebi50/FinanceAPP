@@ -50,13 +50,13 @@ export default function Dashboard() {
   }, [user, isUserLoading, router]);
 
   const transactionsQuery = useMemoFirebase(() => 
-    user ? collection(firestore, 'users', user.uid, 'transactions') : null,
+    user ? collection(firestore, 'transactions') : null,
     [firestore, user]
   );
   const { data: allTransactions, isLoading: transactionsLoading } = useCollection<Transaction>(transactionsQuery);
 
   const categoriesQuery = useMemoFirebase(() => 
-    user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null,
+    user ? collection(firestore, 'expenseCategories') : null,
     [firestore, user]
   );
   const { data: categories } = useCollection<Category>(categoriesQuery);
@@ -77,7 +77,7 @@ export default function Dashboard() {
     const firestoreTimestamp = Timestamp.fromDate(date);
   
     if (transactionId) {
-      const docRef = doc(firestore, 'users', user.uid, 'transactions', transactionId);
+      const docRef = doc(firestore, 'transactions', transactionId);
       const dataToUpdate = {
         ...restOfData,
         date: firestoreTimestamp,
@@ -86,11 +86,12 @@ export default function Dashboard() {
       };
       setDocumentNonBlocking(docRef, dataToUpdate, { merge: true });
     } else {
-      const coll = collection(firestore, 'users', user.uid, 'transactions');
+      const coll = collection(firestore, 'transactions');
       const dataToCreate = {
         ...restOfData,
         date: firestoreTimestamp,
         items,
+        userId: user.uid, // Add user ID for tracking
         createdAt: serverTimestamp(),
       };
       addDocumentNonBlocking(coll, dataToCreate);
@@ -101,11 +102,11 @@ export default function Dashboard() {
     if (!user || !firestore) return;
 
     const batch = writeBatch(firestore);
-    const transactionsCollection = collection(firestore, `users/${user.uid}/transactions`);
+    const transactionsCollection = collection(firestore, `transactions`);
 
     importedTransactions.forEach((transactionData) => {
       const docRef = doc(transactionsCollection);
-      batch.set(docRef, { ...transactionData, createdAt: serverTimestamp() });
+      batch.set(docRef, { ...transactionData, userId: user.uid, createdAt: serverTimestamp() });
     });
 
     try {
@@ -127,7 +128,7 @@ export default function Dashboard() {
 
   const handleDeleteTransaction = (id: string) => {
     if (!user) return;
-    const docRef = doc(firestore, 'users', user.uid, 'transactions', id);
+    const docRef = doc(firestore, 'transactions', id);
     deleteDocumentNonBlocking(docRef);
   };
   

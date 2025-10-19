@@ -16,7 +16,7 @@ interface DashboardTabProps {
 export function DashboardTab({ transactions, budget }: DashboardTabProps) {
   const { user } = useUser();
   const firestore = useFirestore();
-  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null, [firestore, user]);
+  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'expenseCategories') : null, [firestore, user]);
   const { data: categories } = useCollection<Category>(categoriesQuery);
   
   const incomeCategory = useMemo(() => categories?.find(c => c.name.toLowerCase() === 'einnahmen'), [categories]);
@@ -50,5 +50,3 @@ export function DashboardTab({ transactions, budget }: DashboardTabProps) {
     </>
   );
 }
-
-    

@@ -50,7 +50,7 @@ type SortDirection = 'asc' | 'desc';
 export function TransactionsTable({ transactions, onDelete, onUpdate }: TransactionsTableProps) {
   const { user } = useUser();
   const firestore = useFirestore();
-  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null, [firestore, user]);
+  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'expenseCategories') : null, [firestore, user]);
   const { data: categories } = useCollection<Category>(categoriesQuery);
 
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);

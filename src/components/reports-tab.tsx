@@ -60,7 +60,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
   const [selectedMonth, setSelectedMonth] = useState<number | null>(new Date().getMonth());
 
 
-  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null, [firestore, user]);
+  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'expenseCategories') : null, [firestore, user]);
   const { data: categories } = useCollection<Category>(categoriesQuery);
   
   const categoryMap = useMemo(() => {
@@ -469,5 +469,3 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
     </>
   );
 }
-
-    

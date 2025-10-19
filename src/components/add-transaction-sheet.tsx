@@ -91,7 +91,7 @@ export function AddTransactionSheet({
   
   const { user } = useUser();
   const firestore = useFirestore();
-  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null, [firestore, user]);
+  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'expenseCategories') : null, [firestore, user]);
   const { data: categories, isLoading: categoriesLoading } = useCollection<Category>(categoriesQuery);
 
   const open = controlledOpen ?? internalOpen;

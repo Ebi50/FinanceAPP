@@ -41,9 +41,7 @@ import { updateProfile, updatePassword, deleteUser, EmailAuthProvider, reauthent
 const navItems = [
   'Allgemein',
   'Sicherheit',
-  'Integrationen',
   'Support',
-  'Organisation',
   'Erweitert',
 ];
 
@@ -189,14 +187,8 @@ export default function SettingsPage() {
     try {
       const batch = writeBatch(firestore);
 
-      const transactionsRef = collection(firestore, `users/${user.uid}/transactions`);
-      const categoriesRef = collection(firestore, `users/${user.uid}/expenseCategories`);
-      
-      const transactionsSnap = await getDocs(transactionsRef);
-      transactionsSnap.forEach(doc => batch.delete(doc.ref));
-
-      const categoriesSnap = await getDocs(categoriesRef);
-      categoriesSnap.forEach(doc => batch.delete(doc.ref));
+      // Note: With shared data, we don't delete transactions/categories when a user is deleted.
+      // If that is desired, logic to query all transactions/categories by that user's ID would be needed.
 
       const userDocRef = doc(firestore, 'users', user.uid);
       batch.delete(userDocRef);
@@ -290,29 +282,6 @@ export default function SettingsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Benachrichtigungen</CardTitle>
-                <CardDescription>
-                  Verwalten Sie Ihre Benachrichtigungseinstellungen.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="email-notifications">
-                    E-Mail-Benachrichtigungen
-                  </Label>
-                  <Switch id="email-notifications" defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="push-notifications">
-                    Push-Benachrichtigungen
-                  </Label>
-                  <Switch id="push-notifications" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
                 <CardTitle>Darstellung</CardTitle>
                 <CardDescription>
                   Passen Sie das Erscheinungsbild der App an.
@@ -378,27 +347,6 @@ export default function SettingsPage() {
           </Card>
         );
         break;
-        case 'Organisation':
-          content = (
-            <Card>
-              <CardHeader>
-                <CardTitle>Organisation</CardTitle>
-                <CardDescription>Verwalten Sie die Benutzer Ihrer App.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p>Die Benutzerverwaltung findet nun direkt in der Firebase-Konsole statt.</p>
-                <Button asChild variant="link" className="p-0 h-auto mt-2">
-                    <a href={`https://console.firebase.google.com/project/${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}/authentication/users`} target="_blank" rel="noopener noreferrer">
-                        Zur Firebase-Benutzerverwaltung
-                    </a>
-                </Button>
-                <p className="text-sm text-muted-foreground mt-2">
-                    Dort können Sie neue Benutzer hinzufügen, Passwörter zurücksetzen oder Benutzer löschen.
-                </p>
-              </CardContent>
-            </Card>
-          );
-          break;
         case 'Support':
             content = (
               <Card>
@@ -432,7 +380,7 @@ export default function SettingsPage() {
                                 <AlertDialogHeader>
                                     <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
                                     <AlertDialogDescription>
-                                        Diese Aktion kann nicht rückgängig gemacht werden. Dadurch werden Ihr Konto und alle Ihre Daten dauerhaft gelöscht, einschliesslich aller Transaktionen und Kategorien.
+                                        Diese Aktion kann nicht rückgängig gemacht werden. Dadurch werden Ihr Konto und alle Ihre Daten dauerhaft gelöscht.
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
