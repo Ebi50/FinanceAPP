@@ -124,16 +124,29 @@ const categoryNameMap = useMemo(() => {
                 const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as RawRow[][];
                 if (!json || json.length === 0) return;
                 
-                const monthIndex = workbook.SheetNames.indexOf(sheetName);
+                const monthNames = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+                const monthIndex = monthNames.indexOf(sheetName);
 
                 const parseDate = (value: string | number | Date | null): Date => {
+                    const monthMap: { [key: string]: number } = {
+                        'jan': 0, 'feb': 1, 'mär': 2, 'apr': 3, 'mai': 4, 'jun': 5,
+                        'jul': 6, 'aug': 7, 'sep': 8, 'okt': 9, 'nov': 10, 'dez': 11
+                    };
+                    
                     if (value instanceof Date && isValid(value)) return value;
+                    
                     if (typeof value === 'string') {
-                        try {
-                            const parsedDate = parse(value, 'dd. MMM', new Date(fileYear, monthIndex, 1));
-                            if (isValid(parsedDate)) return parsedDate;
-                        } catch {}
+                        const parts = value.toLowerCase().replace('.', '').split(' ');
+                        if (parts.length === 2) {
+                            const day = parseInt(parts[0], 10);
+                            const monthAbbr = parts[1].substring(0, 3);
+                            const month = monthMap[monthAbbr];
+                            if (!isNaN(day) && month !== undefined) {
+                                return new Date(Date.UTC(fileYear, month, day, 12, 0, 0));
+                            }
+                        }
                     }
+                    // Fallback for non-date strings or invalid formats
                     return new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
                 };
 
@@ -162,8 +175,8 @@ const categoryNameMap = useMemo(() => {
                             const amount = typeof amountCell === 'number' ? amountCell : 0;
                             if (amount === 0) continue;
                             
-                            const date = (typeof descOrDateCell === 'string' && descOrDateCell.match(/^\d{1,2}\. \w{3}$/)) ? parseDate(descOrDateCell) : new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
-                            const description = (typeof descOrDateCell === 'string' && !descOrDateCell.match(/^\d{1,2}\. \w{3}$/)) ? descOrDateCell : categoryName;
+                            const date = parseDate(descOrDateCell);
+                            const description = (typeof descOrDateCell === 'string' && !descOrDateCell.match(/^\d{1,2}\. \w{3}/i)) ? descOrDateCell : categoryName;
                             
                             allTransactions.push({ description, amount, date, categoryId: categoryName });
 
@@ -188,8 +201,8 @@ const categoryNameMap = useMemo(() => {
 
                             if (amount === 0) continue;
                             
-                            const date = (typeof descOrDateCell === 'string' && descOrDateCell.match(/^\d{1,2}\. \w{3}$/)) ? parseDate(descOrDateCell) : new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
-                            const description = (typeof descOrDateCell === 'string' && !descOrDateCell.match(/^\d{1,2}\. \w{3}$/)) ? descOrDateCell : categoryName;
+                            const date = parseDate(descOrDateCell);
+                            const description = (typeof descOrDateCell === 'string' && !descOrDateCell.match(/^\d{1,2}\. \w{3}/i)) ? descOrDateCell : categoryName;
                             
                             allTransactions.push({ description, amount, date, categoryId: categoryName });
                         }
