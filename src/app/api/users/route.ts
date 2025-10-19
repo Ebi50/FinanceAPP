@@ -1,142 +1,83 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import * as admin from 'firebase-admin';
+import { NextResponse, type NextRequest } from "next/server";
+export const runtime = "nodejs";
+import { adminAuth, adminDb } from "@/lib/firebaseAdmin";
 
-// Load environment variables from .env file
-import dotenv from 'dotenv';
-dotenv.config();
+const ADMIN_EMAIL = "eberhard.janzen@freenet.de";
 
-export const runtime = "nodejs"; // Erzwinge die Node.js-Laufzeitumgebung
-
-// --- Sichere Initialisierung des Admin SDKs ---
-// Diese Funktion stellt sicher, dass die Admin-App nur einmal initialisiert wird.
-function initializeAdminApp() {
-  if (admin.apps.length > 0) {
-    return admin.app();
+async function verifyAdmin(req: NextRequest): Promise<{ ok: boolean; res?: NextResponse; decoded?: any }> {
+  const authz = req.headers.get("authorization") ?? "";
+  if (!authz.startsWith("Bearer ")) {
+    return { ok: false, res: NextResponse.json({ error: "No token" }, { status: 401 }) };
   }
+  const idToken = authz.slice(7);
 
-  // Dieser Block wird ausgeführt, wenn die App in einer Umgebung wie Firebase App Hosting läuft,
-  // wo die Credentials automatisch über Umgebungsvariablen bereitgestellt werden.
   try {
-    return admin.initializeApp();
-  } catch (error) {
-    console.error("Firebase Admin initialization failed with default credentials:", error);
-    // Fallback für lokale Entwicklung, falls die Standard-Initialisierung fehlschlägt
-    const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-    if (serviceAccountString) {
-      try {
-        const serviceAccount = JSON.parse(serviceAccountString);
-        return admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount),
-        });
-      } catch (parseError) {
-        console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY:", parseError);
+    const decoded = await adminAuth.verifyIdToken(idToken);
+
+    // Admin über E-Mail (Sofortzugang)
+    if (decoded.email === ADMIN_EMAIL) {
+      // optional: Claim setzen (wirkt erst nach Token-Refresh)
+      if ((decoded as any).role !== "admin") {
+        await adminAuth.setCustomUserClaims(decoded.uid, { role: "admin" });
       }
+      return { ok: true, decoded };
     }
+
+    // oder über Custom Claim
+    if ((decoded as any).role === "admin") return { ok: true, decoded };
+
+    return { ok: false, res: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+  } catch (e) {
+    console.error("Token verification failed:", e);
+    return { ok: false, res: NextResponse.json({ error: "Invalid token" }, { status: 401 }) };
   }
-
-  // Wenn keine Initialisierungsmethode erfolgreich war, wird null zurückgegeben.
-  // Die API-Routen-Handler müssen dies überprüfen.
-  return null;
 }
 
-
-const ADMIN_EMAIL = 'eberhard.janzen@freenet.de';
-
-async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; response?: NextResponse; decodedToken?: admin.auth.DecodedIdToken }> {
-    const adminApp = initializeAdminApp();
-    if (!adminApp) {
-        return { isAdmin: false, response: NextResponse.json({ error: 'Admin SDK not initialized. Service account key might be missing or invalid.' }, { status: 500 }) };
-    }
-
-    const authorization = request.headers.get('Authorization');
-    if (!authorization?.startsWith('Bearer ')) {
-        return { isAdmin: false, response: NextResponse.json({ error: 'No authorization token provided.' }, { status: 401 }) };
-    }
-    const idToken = authorization.split('Bearer ')[1];
-
+export async function GET(req: NextRequest) {
     try {
-        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        const vr = await verifyAdmin(req);
+        if (!vr.ok) return vr.res!;
 
-        if (decodedToken.email === ADMIN_EMAIL) {
-            if (decodedToken.role !== 'admin') {
-                await admin.auth().setCustomUserClaims(decodedToken.uid, { role: 'admin' });
-            }
-            return { isAdmin: true, decodedToken };
-        }
-
-        if (decodedToken.role === 'admin') {
-            return { isAdmin: true, decodedToken };
-        }
-
-        return { isAdmin: false, response: NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 }) };
-    } catch (error) {
-        console.error("Token verification failed:", error);
-        return { isAdmin: false, response: NextResponse.json({ error: 'Token verification failed. Please sign in again.' }, { status: 401 }) };
-    }
-}
-
-
-export async function GET(request: NextRequest) {
-    try {
-        const { isAdmin, response } = await verifyAdmin(request);
-        if (!isAdmin) {
-            return response || NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 });
-        }
-
-        const adminApp = initializeAdminApp();
-        if (!adminApp) {
-            return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
-        }
-
-        const listUsersResult = await admin.auth().listUsers();
-        const allUsers = listUsersResult.users.map(user => ({
-            id: user.uid,
-            email: user.email,
-            role: user.customClaims?.role || 'user',
+        // Nutzer holen
+        const list = await adminAuth.listUsers();
+        const authUsers = list.users.map(u => ({
+            id: u.uid,
+            email: u.email,
+            role: (u.customClaims as any)?.role ?? "user",
         }));
-        
-        const userProfiles = await admin.firestore().collection('users').get();
-        const profilesMap = new Map(userProfiles.docs.map(doc => [doc.id, doc.data()]));
 
-        const usersWithDetails = allUsers.map(user => {
-            const profile = profilesMap.get(user.id);
-            return {
-                ...user,
-                firstName: profile?.firstName || '',
-                lastName: profile?.lastName || '',
-            };
-        });
+        // Profile joinen
+        const snap = await adminDb.collection("users").get();
+        const profiles = new Map(snap.docs.map(d => [d.id, d.data()]));
+        const out = authUsers.map(u => ({
+            ...u,
+            firstName: (profiles.get(u.id)?.firstName) ?? "",
+            lastName: (profiles.get(u.id)?.lastName) ?? "",
+        }));
+        return NextResponse.json(out);
 
-        return NextResponse.json(usersWithDetails);
     } catch (error: any) {
         console.error("Error in GET /api/users:", error);
         return NextResponse.json({ error: error.message || 'Internal server error while fetching users.' }, { status: 500 });
     }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
     try {
-        const { isAdmin, response } = await verifyAdmin(request);
-        if (!isAdmin) {
-            return response || NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 });
-        }
+        const vr = await verifyAdmin(req);
+        if (!vr.ok) return vr.res!;
 
-        const adminApp = initializeAdminApp();
-        if (!adminApp) {
-        return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
-        }
-
-        const { email, password, firstName, lastName, role } = await request.json();
+        const { email, password, firstName, lastName, role } = await req.json();
 
         if (!password) {
             return NextResponse.json({ error: 'Password is required' }, { status: 400 });
         }
         
-        const userRecord = await admin.auth().createUser({ email, password });
-        await admin.auth().setCustomUserClaims(userRecord.uid, { role });
+        const userRecord = await adminAuth.createUser({ email, password });
+        await adminAuth.setCustomUserClaims(userRecord.uid, { role });
         
         const newUserProfile = { email, firstName, lastName, role, id: userRecord.uid };
-        await admin.firestore().collection('users').doc(userRecord.uid).set(newUserProfile);
+        await adminDb.collection('users').doc(userRecord.uid).set(newUserProfile);
         
         return NextResponse.json(newUserProfile, { status: 201 });
     } catch (error: any) {
@@ -148,19 +89,12 @@ export async function POST(request: NextRequest) {
     }
 }
 
-export async function PUT(request: NextRequest) {
+export async function PUT(req: NextRequest) {
     try {
-        const { isAdmin, response } = await verifyAdmin(request);
-        if (!isAdmin) {
-            return response || NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 });
-        }
-
-        const adminApp = initializeAdminApp();
-        if (!adminApp) {
-            return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
-        }
+        const vr = await verifyAdmin(req);
+        if (!vr.ok) return vr.res!;
         
-        const { id, ...userData } = await request.json();
+        const { id, ...userData } = await req.json();
         if (!id) {
             return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
         }
@@ -170,15 +104,15 @@ export async function PUT(request: NextRequest) {
         if (userData.lastName) updateData.lastName = userData.lastName;
         
         if (Object.keys(updateData).length > 0) {
-            await admin.firestore().collection('users').doc(id).update(updateData);
+            await adminDb.collection('users').doc(id).update(updateData);
         }
 
         if (userData.role) {
-            await admin.auth().setCustomUserClaims(id, { role: userData.role });
+            await adminAuth.setCustomUserClaims(id, { role: userData.role });
         }
         
-        const updatedUserDoc = await admin.firestore().collection('users').doc(id).get();
-        const updatedAuthUser = await admin.auth().getUser(id);
+        const updatedUserDoc = await adminDb.collection('users').doc(id).get();
+        const updatedAuthUser = await adminAuth.getUser(id);
 
         const updatedUser = { 
             id: updatedUserDoc.id, 
@@ -192,25 +126,18 @@ export async function PUT(request: NextRequest) {
     }
 }
 
-export async function DELETE(request: NextRequest) {
+export async function DELETE(req: NextRequest) {
     try {
-        const { isAdmin, response } = await verifyAdmin(request);
-        if (!isAdmin) {
-            return response || NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 });
-        }
+        const vr = await verifyAdmin(req);
+        if (!vr.ok) return vr.res!;
         
-        const adminApp = initializeAdminApp();
-        if (!adminApp) {
-            return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
-        }
-
-        const { id } = await request.json();
+        const { id } = await req.json();
         if (!id) {
             return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
         }
         
-        await admin.auth().deleteUser(id);
-        await admin.firestore().collection('users').doc(id).delete();
+        await adminAuth.deleteUser(id);
+        await adminDb.collection('users').doc(id).delete();
         
         return NextResponse.json({ message: 'User deleted successfully' }, { status: 200 });
     } catch (error: any) {
@@ -219,25 +146,18 @@ export async function DELETE(request: NextRequest) {
     }
 }
 
-export async function PATCH(request: NextRequest) {
+export async function PATCH(req: NextRequest) {
     try {
-        const { isAdmin, response, decodedToken } = await verifyAdmin(request);
-        if (!isAdmin || !decodedToken) {
-            return response || NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const vr = await verifyAdmin(req);
+        if (!vr.ok) return vr.res!;
 
-        const adminApp = initializeAdminApp();
-        if (!adminApp) {
-            return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
-        }
-
-        const { userId, newPassword } = await request.json();
+        const { userId, newPassword } = await req.json();
 
         if (!userId || !newPassword) {
             return NextResponse.json({ error: 'User ID and new password are required.' }, { status: 400 });
         }
         
-        await admin.auth().updateUser(userId, {
+        await adminAuth.updateUser(userId, {
             password: newPassword
         });
 
