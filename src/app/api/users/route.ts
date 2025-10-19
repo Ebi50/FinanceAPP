@@ -15,7 +15,7 @@ async function verifyAdmin(request: Request): Promise<{adminUid: string | null, 
             const idToken = authorization.split('Bearer ')[1];
             const decodedToken = await adminAuth.verifyIdToken(idToken);
             
-            // Check for custom claim first
+            // Check for custom claim 'role'
             if (decodedToken.role === 'admin') {
                  return { adminUid: decodedToken.uid, adminApp };
             }
@@ -23,7 +23,10 @@ async function verifyAdmin(request: Request): Promise<{adminUid: string | null, 
             // Fallback to checking email if no custom claim
             const user = await adminAuth.getUser(decodedToken.uid);
             if (user.email === 'eberhard.janzen@freenet.de') {
-                return { adminUid: decodedToken.uid, adminApp };
+                // If email matches, we can optionally set the custom claim for future requests
+                // This is an optimization and can be done here or in a separate user management function
+                await adminAuth.setCustomUserClaims(user.uid, { role: 'admin' });
+                return { adminUid: user.uid, adminApp };
             }
         }
     } catch (error) {
