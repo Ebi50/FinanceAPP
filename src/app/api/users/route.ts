@@ -78,9 +78,10 @@ async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; re
 
 export async function GET(request: NextRequest) {
     const { isAdmin, response } = await verifyAdmin(request);
-    if (!isAdmin || !response) {
+    if (!isAdmin) {
         // if verifyAdmin returns a response, it means verification failed.
-        return response;
+        // if response is undefined, it means the user is just not an admin, but the token was valid.
+        return response || NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 });
     }
 
     const adminApp = initializeAdminApp();
@@ -120,7 +121,12 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     const { isAdmin, response } = await verifyAdmin(request);
     if (!isAdmin) {
-        return response;
+        return response || NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 });
+    }
+
+    const adminApp = initializeAdminApp();
+    if (!adminApp) {
+       return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
     }
 
     try {
@@ -151,7 +157,12 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
     const { isAdmin, response } = await verifyAdmin(request);
     if (!isAdmin) {
-        return response;
+        return response || NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 });
+    }
+
+    const adminApp = initializeAdminApp();
+    if (!adminApp) {
+        return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
     }
     
     try {
@@ -191,7 +202,12 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
     const { isAdmin, response } = await verifyAdmin(request);
     if (!isAdmin) {
-        return response;
+        return response || NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 });
+    }
+    
+    const adminApp = initializeAdminApp();
+    if (!adminApp) {
+        return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
     }
 
     try {
@@ -218,6 +234,11 @@ export async function PATCH(request: NextRequest) {
     const { isAdmin, response, decodedToken } = await verifyAdmin(request);
     if (!isAdmin || !decodedToken) {
         return response || NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const adminApp = initializeAdminApp();
+    if (!adminApp) {
+        return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
     }
 
     try {
