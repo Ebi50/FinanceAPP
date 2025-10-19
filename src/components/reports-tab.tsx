@@ -36,7 +36,7 @@ import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebas
 import { collection } from 'firebase/firestore';
 import { Label } from "./ui/label";
 import { ExpensesChart } from "./expenses-chart";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import html2canvas from "html2canvas";
 
 interface ReportsTabProps {
@@ -302,6 +302,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
 
   const totalExpenses = useMemo(() => expensesByCategoryForTable.reduce((sum, item) => sum + item.total, 0), [expensesByCategoryForTable]);
   const totalIncome = useMemo(() => incomeByDescriptionForTable.reduce((sum, item) => sum + item.total, 0), [incomeByDescriptionForTable]);
+  const balance = totalIncome - totalExpenses;
 
 
   return (
@@ -456,6 +457,31 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                             </TableRow>
                         </UiTableFooter>
                     </Table>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader>
+                    <CardTitle className="font-headline">Zusammenfassung</CardTitle>
+                    <CardDescription>
+                        Gesamtergebnis für den ausgewählten Zeitraum.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="flex justify-between items-center">
+                        <span className="font-medium">Gesamteinnahmen</span>
+                        <span className="text-emerald-500 font-semibold">{formatCurrency(totalIncome)}</span>
+                    </div>
+                     <div className="flex justify-between items-center">
+                        <span className="font-medium">Gesamtausgaben</span>
+                        <span className="text-destructive font-semibold">{formatCurrency(totalExpenses)}</span>
+                    </div>
+                     <div className={cn(
+                        "flex justify-between items-center border-t pt-4 mt-4",
+                        balance >= 0 ? "text-emerald-600" : "text-destructive"
+                        )}>
+                        <span className="font-bold text-lg">Differenz</span>
+                        <span className="font-bold text-lg">{formatCurrency(balance)}</span>
+                    </div>
                 </CardContent>
             </Card>
         </div>
