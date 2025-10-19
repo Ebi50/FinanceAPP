@@ -22,6 +22,7 @@ function createApp(): App {
         return initializeApp({ credential: cert(sa) });
     } catch (e) {
         console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY:", e);
+        // Fall through to next method
     }
   }
 
