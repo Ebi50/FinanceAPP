@@ -16,16 +16,13 @@ async function verifyAdmin(request: Request): Promise<{adminUid: string | null, 
             const decodedToken = await adminAuth.verifyIdToken(idToken);
             
             // The user is an admin if the custom claim is set OR if their email is the admin email.
-            if (decodedToken.role === 'admin') {
+            if (decodedToken.role === 'admin' || decodedToken.email === 'eberhard.janzen@freenet.de') {
+                 // If the email matches but the claim isn't set, set it for future efficiency.
+                 if (decodedToken.role !== 'admin') {
+                    await adminAuth.setCustomUserClaims(decodedToken.uid, { role: 'admin' });
+                 }
                  return { adminUid: decodedToken.uid, adminApp };
             }
-            if (decodedToken.email === 'eberhard.janzen@freenet.de') {
-                // If the email matches but the claim isn't set, set it for future efficiency.
-                if (decodedToken.role !== 'admin') {
-                   await adminAuth.setCustomUserClaims(decodedToken.uid, { role: 'admin' });
-                }
-                return { adminUid: decodedToken.uid, adminApp };
-           }
         }
     } catch (error) {
         console.error("Error verifying token or admin role:", error);
@@ -64,9 +61,12 @@ export async function POST(request: Request) {
         const adminDb = getFirestore(adminApp);
         const { email, firstName, lastName, role } = await request.json();
         
-        // This just creates the user document. The user must still register via Firebase Auth client.
+        // Create a new document reference with an auto-generated ID
         const newUserRef = adminDb.collection('users').doc();
+        // Use the auto-generated ID in the user profile data
         const newUserProfile = { email, firstName, lastName, role, id: newUserRef.id };
+        
+        // Set the data for the new document
         await newUserRef.set(newUserProfile);
         
         return NextResponse.json(newUserProfile, { status: 201 });
