@@ -16,13 +16,16 @@ async function verifyAdmin(request: Request): Promise<{adminUid: string | null, 
             const decodedToken = await adminAuth.verifyIdToken(idToken);
             
             // The user is an admin if the custom claim is set OR if their email is the admin email.
-            if (decodedToken.role === 'admin' || decodedToken.email === 'eberhard.janzen@freenet.de') {
-                 // If the email matches but the claim isn't set, set it for future efficiency.
-                 if (decodedToken.role !== 'admin') {
-                    await adminAuth.setCustomUserClaims(decodedToken.uid, { role: 'admin' });
-                 }
+            if (decodedToken.role === 'admin') {
                  return { adminUid: decodedToken.uid, adminApp };
             }
+            if (decodedToken.email === 'eberhard.janzen@freenet.de') {
+                // If the email matches but the claim isn't set, set it for future efficiency.
+                if (decodedToken.role !== 'admin') {
+                   await adminAuth.setCustomUserClaims(decodedToken.uid, { role: 'admin' });
+                }
+                return { adminUid: decodedToken.uid, adminApp };
+           }
         }
     } catch (error) {
         console.error("Error verifying token or admin role:", error);
