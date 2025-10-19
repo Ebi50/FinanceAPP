@@ -6,8 +6,9 @@ import { initAdmin } from '@/firebase/admin-config';
 import * as admin from 'firebase-admin';
 
 async function verifyAdmin(request: Request): Promise<{adminUid: string | null, adminApp: admin.app.App | null}> {
+    let adminApp: admin.app.App;
     try {
-        const adminApp = initAdmin();
+        adminApp = initAdmin();
         const adminAuth = getAuth(adminApp);
         
         const authorization = request.headers.get('Authorization');
@@ -15,22 +16,30 @@ async function verifyAdmin(request: Request): Promise<{adminUid: string | null, 
             const idToken = authorization.split('Bearer ')[1];
             const decodedToken = await adminAuth.verifyIdToken(idToken);
             
+            // First check for custom admin claim
+            if (decodedToken.role === 'admin') {
+                return { adminUid: decodedToken.uid, adminApp };
+            }
+            
+            // Fallback for the primary admin email
             if (decodedToken.email === 'eberhard.janzen@freenet.de') {
+                 // Set claim if it's missing for future requests
                  if (decodedToken.role !== 'admin') {
                     await adminAuth.setCustomUserClaims(decodedToken.uid, { role: 'admin' });
                  }
+                 // Immediately return success for the current request
                  return { adminUid: decodedToken.uid, adminApp };
-            }
-             if (decodedToken.role === 'admin') {
-                return { adminUid: decodedToken.uid, adminApp };
             }
         }
     } catch (error) {
         console.error("Error verifying token or admin role:", error);
+        // Ensure app is not returned if there was an error
         return { adminUid: null, adminApp: null };
     }
+    // If no conditions are met, deny access.
     return { adminUid: null, adminApp: null };
 }
+
 
 // GET all users (Admin only)
 export async function GET(request: Request) {
