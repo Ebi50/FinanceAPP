@@ -9,43 +9,40 @@ initAdmin();
 
 const ADMIN_EMAIL = 'eberhard.janzen@freenet.de';
 
-async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; error?: string; status?: number }> {
+async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; response?: NextResponse; decodedToken?: admin.auth.DecodedIdToken }> {
     try {
         const authorization = request.headers.get('Authorization');
         if (!authorization?.startsWith('Bearer ')) {
-            return { isAdmin: false, error: 'No authorization token provided.', status: 401 };
+            return { isAdmin: false, response: NextResponse.json({ error: 'No authorization token provided.' }, { status: 401 }) };
         }
 
         const idToken = authorization.split('Bearer ')[1];
         const decodedToken = await admin.auth().verifyIdToken(idToken);
 
         if (decodedToken.role === 'admin') {
-            return { isAdmin: true };
+            return { isAdmin: true, decodedToken };
         }
 
         if (decodedToken.email === ADMIN_EMAIL) {
             // User is the special admin, but might not have the claim yet.
             // Set the custom claim in the background for future requests.
             await admin.auth().setCustomUserClaims(decodedToken.uid, { role: 'admin' });
-            // CRUCIALLY, allow the current request to proceed as an admin immediately.
-            return { isAdmin: true };
+            return { isAdmin: true, decodedToken };
         }
 
-        return { isAdmin: false, error: 'User is not an administrator.', status: 403 };
+        return { isAdmin: false, response: NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 }) };
 
     } catch (error) {
         console.error("Admin verification failed:", error);
-        // In case of any error (e.g., invalid or expired token), deny access.
-        return { isAdmin: false, error: 'Token verification failed.', status: 401 };
+        return { isAdmin: false, response: NextResponse.json({ error: 'Token verification failed.' }, { status: 401 }) };
     }
 }
 
 
 export async function GET(request: NextRequest) {
-    const { isAdmin, error, status } = await verifyAdmin(request);
+    const { isAdmin, response } = await verifyAdmin(request);
     if (!isAdmin) {
-        // If verification fails, immediately return the error. Do not proceed.
-        return NextResponse.json({ error: error || 'Unauthorized' }, { status: status || 403 });
+        return response;
     }
 
     try {
@@ -59,9 +56,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-    const { isAdmin, error, status } = await verifyAdmin(request);
+    const { isAdmin, response } = await verifyAdmin(request);
     if (!isAdmin) {
-        return NextResponse.json({ error: error || 'Unauthorized' }, { status: status || 403 });
+        return response;
     }
 
     try {
@@ -82,9 +79,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-    const { isAdmin, error, status } = await verifyAdmin(request);
+    const { isAdmin, response } = await verifyAdmin(request);
     if (!isAdmin) {
-        return NextResponse.json({ error: error || 'Unauthorized' }, { status: status || 403 });
+        return response;
     }
     
     try {
@@ -110,9 +107,9 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-    const { isAdmin, error, status } = await verifyAdmin(request);
+    const { isAdmin, response } = await verifyAdmin(request);
     if (!isAdmin) {
-        return NextResponse.json({ error: error || 'Unauthorized' }, { status: status || 403 });
+        return response;
     }
 
     try {
