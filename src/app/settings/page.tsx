@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -48,6 +48,8 @@ const allNavItems = [
   'Erweitert',
 ];
 
+const ADMIN_EMAIL = 'eberhard.janzen@example.com';
+
 type UserProfile = {
   firstName?: string;
   lastName?: string;
@@ -79,7 +81,8 @@ export default function SettingsPage() {
 
   const { toast } = useToast();
   
-  const isAdmin = userProfile?.role === 'admin';
+  // Eberhard Janzen is always admin.
+  const isAdmin = user?.email === ADMIN_EMAIL || userProfile?.role === 'admin';
 
   const navItems = allNavItems;
 
@@ -393,7 +396,7 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <p>Für Support-Anfragen senden Sie bitte eine E-Mail an: <a href={`mailto:${email}`} className="text-primary underline">{email}</a></p>
+                    <p>Für Support-Anfragen senden Sie bitte eine E-Mail an: <a href={`mailto:${ADMIN_EMAIL}`} className="text-primary underline">{ADMIN_EMAIL}</a></p>
                 </CardContent>
               </Card>
             );
@@ -456,7 +459,11 @@ export default function SettingsPage() {
         </div>
         <div className="mx-auto grid w-full max-w-6xl items-start gap-6 md:grid-cols-[180px_1fr] lg:grid-cols-[250px_1fr]">
           <nav className="grid gap-4 text-sm text-muted-foreground">
-            {navItems.map((item) => (
+            {navItems.map((item) => {
+              if (item === 'Organisation' && !isAdmin) {
+                return null;
+              }
+              return (
               <button
                 key={item}
                 onClick={() => setActiveTab(item)}
@@ -467,7 +474,8 @@ export default function SettingsPage() {
               >
                 {item}
               </button>
-            ))}
+              )
+            })}
           </nav>
           <div className="grid gap-6">
             {renderContent()}
