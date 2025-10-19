@@ -14,6 +14,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
@@ -241,47 +249,89 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
     }
   }, [availableYears, currentYear, setCurrentYear]);
 
+  const expensesByCategoryForTable = useMemo(() => {
+    const expenses = transactionsForChart.reduce((acc, transaction) => {
+      const categoryName = categoryMap.get(transaction.categoryId) || 'Sonstiges';
+      if (!acc[categoryName]) {
+        acc[categoryName] = 0;
+      }
+      acc[categoryName] += transaction.amount;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return Object.entries(expenses).map(([name, total]) => ({
+      name,
+      total
+    })).sort((a,b) => b.total - a.total);
+  }, [transactionsForChart, categoryMap]);
+
   return (
     <>
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-headline">Berichte erstellen</CardTitle>
-            <CardDescription>
-              Laden Sie Ihre monatlichen oder jährlichen Ausgabenberichte herunter.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-              <div className="space-y-2">
-                  <Label htmlFor="year-select">Jahr auswählen</Label>
-                  <Select
-                      value={String(currentYear)}
-                      onValueChange={(value) => setCurrentYear(Number(value))}
-                      disabled={availableYears.length === 0}
-                  >
-                      <SelectTrigger id="year-select" className="w-[180px]">
-                          <SelectValue placeholder="Jahr auswählen" />
-                      </SelectTrigger>
-                      <SelectContent>
-                          {availableYears.map(year => (
-                              <SelectItem key={year} value={String(year)}>{year}</SelectItem>
-                          ))}
-                      </SelectContent>
-                  </Select>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-2">
-                  <Button variant="secondary" onClick={() => generatePdf("monthly", currentYear, currentMonth)}>
-                      <Download className="mr-2 h-4 w-4" />
-                      Monatlicher Bericht (PDF)
-                  </Button>
-                  <Button variant="secondary" onClick={() => generatePdf("yearly", currentYear, currentMonth)}>
-                      <Download className="mr-2 h-4 w-4" />
-                      Jahresbericht (PDF)
-                  </Button>
-              </div>
-          </CardContent>
-        </Card>
-        <Card>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <div className="lg:col-span-2 flex flex-col gap-4">
+            <Card>
+            <CardHeader>
+                <CardTitle className="font-headline">Berichte erstellen</CardTitle>
+                <CardDescription>
+                Laden Sie Ihre monatlichen oder jährlichen Ausgabenberichte herunter.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="space-y-2">
+                    <Label htmlFor="year-select">Jahr auswählen</Label>
+                    <Select
+                        value={String(currentYear)}
+                        onValueChange={(value) => setCurrentYear(Number(value))}
+                        disabled={availableYears.length === 0}
+                    >
+                        <SelectTrigger id="year-select" className="w-[180px]">
+                            <SelectValue placeholder="Jahr auswählen" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {availableYears.map(year => (
+                                <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                    <Button variant="secondary" onClick={() => generatePdf("monthly", currentYear, currentMonth)}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Monatlicher Bericht (PDF)
+                    </Button>
+                    <Button variant="secondary" onClick={() => generatePdf("yearly", currentYear, currentMonth)}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Jahresbericht (PDF)
+                    </Button>
+                </div>
+            </CardContent>
+            </Card>
+            <Card>
+                <CardHeader>
+                    <CardTitle className="font-headline">Kategorienübersicht {currentYear}</CardTitle>
+                    <CardDescription>Gesamtausgaben pro Kategorie für das ausgewählte Jahr.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Kategorie</TableHead>
+                                <TableHead className="text-right">Gesamtbetrag</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {expensesByCategoryForTable.map(item => (
+                                <TableRow key={item.name}>
+                                    <TableCell className="font-medium">{item.name}</TableCell>
+                                    <TableCell className="text-right">{formatCurrency(item.total)}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
+        </div>
+        <Card className="lg:col-span-3">
           <CardHeader>
               <CardTitle className="font-headline">Ausgabenverteilung {currentYear}</CardTitle>
               <CardDescription>Visuelle Aufschlüsselung Ihrer Ausgaben nach Kategorien für das ausgewählte Jahr.</CardDescription>
