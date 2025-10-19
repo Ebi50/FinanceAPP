@@ -1,37 +1,41 @@
-'use server';
-
-import { NextResponse, NextRequest } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import * as admin from 'firebase-admin';
 
 // Load environment variables from .env file
 import dotenv from 'dotenv';
 dotenv.config();
 
-const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+export const runtime = "nodejs"; // Erzwinge die Node.js-Laufzeitumgebung
 
-let serviceAccount: admin.ServiceAccount;
-if (serviceAccountString) {
-  try {
-    serviceAccount = JSON.parse(serviceAccountString);
-  } catch (error) {
-    console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY. Make sure it is a valid JSON string.', error);
-    // We don't throw here, to allow the app to run in environments without server-side admin logic.
-    // The functions below will fail gracefully if the admin app is not initialized.
-  }
-} else {
-    console.warn('FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set or empty.');
-}
-
-
+// --- Sichere Initialisierung des Admin SDKs ---
+// Diese Funktion stellt sicher, dass die Admin-App nur einmal initialisiert wird.
 function initializeAdminApp() {
   if (admin.apps.length > 0) {
     return admin.app();
   }
-  if (serviceAccount) {
-     return admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-    });
+
+  // Dieser Block wird ausgeführt, wenn die App in einer Umgebung wie Firebase App Hosting läuft,
+  // wo die Credentials automatisch über Umgebungsvariablen bereitgestellt werden.
+  try {
+    return admin.initializeApp();
+  } catch (error) {
+    console.error("Firebase Admin initialization failed with default credentials:", error);
+    // Fallback für lokale Entwicklung, falls die Standard-Initialisierung fehlschlägt
+    const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+    if (serviceAccountString) {
+      try {
+        const serviceAccount = JSON.parse(serviceAccountString);
+        return admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount),
+        });
+      } catch (parseError) {
+        console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY:", parseError);
+      }
+    }
   }
+
+  // Wenn keine Initialisierungsmethode erfolgreich war, wird null zurückgegeben.
+  // Die API-Routen-Handler müssen dies überprüfen.
   return null;
 }
 
@@ -41,7 +45,7 @@ const ADMIN_EMAIL = 'eberhard.janzen@freenet.de';
 async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; response?: NextResponse; decodedToken?: admin.auth.DecodedIdToken }> {
     const adminApp = initializeAdminApp();
     if (!adminApp) {
-        return { isAdmin: false, response: NextResponse.json({ error: 'Admin SDK not initialized. Service account key might be missing.' }, { status: 500 }) };
+        return { isAdmin: false, response: NextResponse.json({ error: 'Admin SDK not initialized. Service account key might be missing or invalid.' }, { status: 500 }) };
     }
 
     const authorization = request.headers.get('Authorization');
@@ -54,42 +58,36 @@ async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; re
         const decodedToken = await admin.auth().verifyIdToken(idToken);
 
         if (decodedToken.email === ADMIN_EMAIL) {
-            // This is the special admin user. Ensure their custom claim is set for future requests.
             if (decodedToken.role !== 'admin') {
                 await admin.auth().setCustomUserClaims(decodedToken.uid, { role: 'admin' });
             }
             return { isAdmin: true, decodedToken };
         }
 
-        // For any other user, just check if they have the role.
         if (decodedToken.role === 'admin') {
             return { isAdmin: true, decodedToken };
         }
 
-        // If neither condition is met, they are not an admin.
         return { isAdmin: false, response: NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 }) };
     } catch (error) {
         console.error("Token verification failed:", error);
-        // This catch block is crucial. It handles expired tokens, malformed tokens, etc.
         return { isAdmin: false, response: NextResponse.json({ error: 'Token verification failed. Please sign in again.' }, { status: 401 }) };
     }
 }
 
 
 export async function GET(request: NextRequest) {
-    const { isAdmin, response } = await verifyAdmin(request);
-    if (!isAdmin) {
-        // if verifyAdmin returns a response, it means verification failed.
-        // if response is undefined, it means the user is just not an admin, but the token was valid.
-        return response || NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 });
-    }
-
-    const adminApp = initializeAdminApp();
-     if (!adminApp) {
-        return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
-    }
-
     try {
+        const { isAdmin, response } = await verifyAdmin(request);
+        if (!isAdmin) {
+            return response || NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 });
+        }
+
+        const adminApp = initializeAdminApp();
+        if (!adminApp) {
+            return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
+        }
+
         const listUsersResult = await admin.auth().listUsers();
         const allUsers = listUsersResult.users.map(user => ({
             id: user.uid,
@@ -97,7 +95,6 @@ export async function GET(request: NextRequest) {
             role: user.customClaims?.role || 'user',
         }));
         
-        // Fetch profiles from Firestore to get names
         const userProfiles = await admin.firestore().collection('users').get();
         const profilesMap = new Map(userProfiles.docs.map(doc => [doc.id, doc.data()]));
 
@@ -111,29 +108,28 @@ export async function GET(request: NextRequest) {
         });
 
         return NextResponse.json(usersWithDetails);
-
-    } catch (error) {
-        console.error("Error fetching users:", error);
-        return NextResponse.json({ error: 'Internal server error while fetching users.' }, { status: 500 });
+    } catch (error: any) {
+        console.error("Error in GET /api/users:", error);
+        return NextResponse.json({ error: error.message || 'Internal server error while fetching users.' }, { status: 500 });
     }
 }
 
 export async function POST(request: NextRequest) {
-    const { isAdmin, response } = await verifyAdmin(request);
-    if (!isAdmin) {
-        return response || NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 });
-    }
-
-    const adminApp = initializeAdminApp();
-    if (!adminApp) {
-       return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
-    }
-
     try {
+        const { isAdmin, response } = await verifyAdmin(request);
+        if (!isAdmin) {
+            return response || NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 });
+        }
+
+        const adminApp = initializeAdminApp();
+        if (!adminApp) {
+        return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
+        }
+
         const { email, password, firstName, lastName, role } = await request.json();
 
         if (!password) {
-             return NextResponse.json({ error: 'Password is required' }, { status: 400 });
+            return NextResponse.json({ error: 'Password is required' }, { status: 400 });
         }
         
         const userRecord = await admin.auth().createUser({ email, password });
@@ -143,29 +139,27 @@ export async function POST(request: NextRequest) {
         await admin.firestore().collection('users').doc(userRecord.uid).set(newUserProfile);
         
         return NextResponse.json(newUserProfile, { status: 201 });
-
     } catch (error: any) {
         console.error("Error creating user:", error);
-        // Provide more specific error messages
         if (error.code === 'auth/email-already-exists') {
-             return NextResponse.json({ error: 'Diese E-Mail-Adresse wird bereits verwendet.'}, { status: 409 });
+            return NextResponse.json({ error: 'Diese E-Mail-Adresse wird bereits verwendet.'}, { status: 409 });
         }
         return NextResponse.json({ error: error.message || 'Internal server error while creating user.' }, { status: 500 });
     }
 }
 
 export async function PUT(request: NextRequest) {
-    const { isAdmin, response } = await verifyAdmin(request);
-    if (!isAdmin) {
-        return response || NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 });
-    }
-
-    const adminApp = initializeAdminApp();
-    if (!adminApp) {
-        return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
-    }
-    
     try {
+        const { isAdmin, response } = await verifyAdmin(request);
+        if (!isAdmin) {
+            return response || NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 });
+        }
+
+        const adminApp = initializeAdminApp();
+        if (!adminApp) {
+            return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
+        }
+        
         const { id, ...userData } = await request.json();
         if (!id) {
             return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
@@ -192,7 +186,6 @@ export async function PUT(request: NextRequest) {
             role: updatedAuthUser.customClaims?.role || 'user'
         };
         return NextResponse.json(updatedUser);
-
     } catch (error: any) {
         console.error("Error updating user:", error);
         return NextResponse.json({ error: error.message || 'Internal server error while updating user.' }, { status: 500 });
@@ -200,17 +193,17 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-    const { isAdmin, response } = await verifyAdmin(request);
-    if (!isAdmin) {
-        return response || NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 });
-    }
-    
-    const adminApp = initializeAdminApp();
-    if (!adminApp) {
-        return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
-    }
-
     try {
+        const { isAdmin, response } = await verifyAdmin(request);
+        if (!isAdmin) {
+            return response || NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 });
+        }
+        
+        const adminApp = initializeAdminApp();
+        if (!adminApp) {
+            return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
+        }
+
         const { id } = await request.json();
         if (!id) {
             return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
@@ -220,29 +213,24 @@ export async function DELETE(request: NextRequest) {
         await admin.firestore().collection('users').doc(id).delete();
         
         return NextResponse.json({ message: 'User deleted successfully' }, { status: 200 });
-
     } catch (error: any) {
         console.error("Error deleting user:", error);
         return NextResponse.json({ error: error.message || 'Internal server error while deleting user.' }, { status: 500 });
     }
 }
 
-// This endpoint is no longer needed on the backend as password changes are handled securely on the client with re-authentication.
-// However, I'm keeping a PATCH handler here as a placeholder to avoid breaking any assumptions,
-// but it now correctly requires admin privileges to change another user's password if that flow were to be built.
 export async function PATCH(request: NextRequest) {
-    const { isAdmin, response, decodedToken } = await verifyAdmin(request);
-    if (!isAdmin || !decodedToken) {
-        return response || NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const adminApp = initializeAdminApp();
-    if (!adminApp) {
-        return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
-    }
-
     try {
-        // This is a privileged operation. An admin can change a user's password.
+        const { isAdmin, response, decodedToken } = await verifyAdmin(request);
+        if (!isAdmin || !decodedToken) {
+            return response || NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        const adminApp = initializeAdminApp();
+        if (!adminApp) {
+            return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
+        }
+
         const { userId, newPassword } = await request.json();
 
         if (!userId || !newPassword) {
@@ -254,7 +242,6 @@ export async function PATCH(request: NextRequest) {
         });
 
         return NextResponse.json({ message: "Password updated successfully for user " + userId });
-        
     } catch (error: any) {
          console.error("Error updating password by admin:", error);
          return NextResponse.json({ error: 'Failed to update password.' }, { status: 500 });
