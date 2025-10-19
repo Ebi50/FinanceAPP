@@ -119,7 +119,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
       
       const expenseBody = [];
       for (const categoryName in expensesByCategory) {
-        expenseBody.push([{ content: categoryName, colSpan: 4, styles: { fontStyle: 'bold', fillColor: '#f0f0f0' } }]);
+        expenseBody.push([{ content: categoryName, colSpan: 3, styles: { fontStyle: 'bold', fillColor: '#f0f0f0' } }]);
         expensesByCategory[categoryName].transactions.forEach(t => {
           expenseBody.push([
             format(t.date.toDate(), "dd.MM.yyyy"),
@@ -134,7 +134,12 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
         startY: lastY + 5,
         head: [['Datum', 'Beschreibung', 'Betrag']],
         body: expenseBody,
-        theme: 'striped'
+        theme: 'striped',
+        didParseCell: (data) => {
+            if (typeof data.cell.raw === 'object' && data.cell.raw !== null && 'colSpan' in data.cell.raw) {
+                data.cell.styles.halign = 'left';
+            }
+        }
       });
       lastY = doc.autoTable.previous.finalY;
     }
@@ -165,6 +170,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
         [{ content: 'Ergebnis:', styles: { fontStyle: 'bold', fillColor: balance >= 0 ? [200, 255, 200] : [255, 200, 200] } }, { content: formatCurrency(balance), styles: { halign: 'right', fontStyle: 'bold', fillColor: balance >= 0 ? [200, 255, 200] : [255, 200, 200] } }],
       ],
       theme: 'grid',
+      columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 'auto' } }
     });
     lastY = doc.autoTable.previous.finalY;
 
