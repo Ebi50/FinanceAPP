@@ -2,14 +2,48 @@
 
 import { NextResponse, NextRequest } from 'next/server';
 import * as admin from 'firebase-admin';
-import { initAdmin } from '@/firebase/admin-config';
 
-// Initialize Firebase Admin SDK right away at the module level.
-initAdmin();
+// Load environment variables from .env file
+import dotenv from 'dotenv';
+dotenv.config();
+
+const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+
+let serviceAccount: admin.ServiceAccount;
+if (serviceAccountString) {
+  try {
+    serviceAccount = JSON.parse(serviceAccountString);
+  } catch (error) {
+    console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY. Make sure it is a valid JSON string.', error);
+    // We don't throw here, to allow the app to run in environments without server-side admin logic.
+    // The functions below will fail gracefully if the admin app is not initialized.
+  }
+} else {
+    console.warn('FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set or empty.');
+}
+
+
+function initializeAdminApp() {
+  if (admin.apps.length > 0) {
+    return admin.app();
+  }
+  if (serviceAccount) {
+     return admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+    });
+  }
+  return null;
+}
+
 
 const ADMIN_EMAIL = 'eberhard.janzen@freenet.de';
 
 async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; response?: NextResponse; decodedToken?: admin.auth.DecodedIdToken }> {
+    const adminApp = initializeAdminApp();
+    if (!adminApp) {
+        return { isAdmin: false, response: NextResponse.json({ error: 'Admin SDK not initialized. Service account key might be missing.' }, { status: 500 }) };
+    }
+
     const authorization = request.headers.get('Authorization');
     if (!authorization?.startsWith('Bearer ')) {
         return { isAdmin: false, response: NextResponse.json({ error: 'No authorization token provided.' }, { status: 401 }) };
@@ -20,19 +54,23 @@ async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; re
         const decodedToken = await admin.auth().verifyIdToken(idToken);
 
         if (decodedToken.email === ADMIN_EMAIL) {
+            // This is the special admin user. Ensure their custom claim is set for future requests.
             if (decodedToken.role !== 'admin') {
                 await admin.auth().setCustomUserClaims(decodedToken.uid, { role: 'admin' });
             }
             return { isAdmin: true, decodedToken };
         }
 
+        // For any other user, just check if they have the role.
         if (decodedToken.role === 'admin') {
             return { isAdmin: true, decodedToken };
         }
 
+        // If neither condition is met, they are not an admin.
         return { isAdmin: false, response: NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 }) };
     } catch (error) {
         console.error("Token verification failed:", error);
+        // This catch block is crucial. It handles expired tokens, malformed tokens, etc.
         return { isAdmin: false, response: NextResponse.json({ error: 'Token verification failed. Please sign in again.' }, { status: 401 }) };
     }
 }
@@ -40,8 +78,14 @@ async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; re
 
 export async function GET(request: NextRequest) {
     const { isAdmin, response } = await verifyAdmin(request);
-    if (!isAdmin) {
+    if (!isAdmin || !response) {
+        // if verifyAdmin returns a response, it means verification failed.
         return response;
+    }
+
+    const adminApp = initializeAdminApp();
+     if (!adminApp) {
+        return NextResponse.json({ error: 'Admin SDK not initialized.' }, { status: 500 });
     }
 
     try {
@@ -167,36 +211,31 @@ export async function DELETE(request: NextRequest) {
     }
 }
 
-// New endpoint to handle secure password changes
+// This endpoint is no longer needed on the backend as password changes are handled securely on the client with re-authentication.
+// However, I'm keeping a PATCH handler here as a placeholder to avoid breaking any assumptions,
+// but it now correctly requires admin privileges to change another user's password if that flow were to be built.
 export async function PATCH(request: NextRequest) {
-    const authorization = request.headers.get('Authorization');
-    if (!authorization?.startsWith('Bearer ')) {
-        return NextResponse.json({ error: 'No authorization token provided.' }, { status: 401 });
+    const { isAdmin, response, decodedToken } = await verifyAdmin(request);
+    if (!isAdmin || !decodedToken) {
+        return response || NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const idToken = authorization.split('Bearer ')[1];
 
     try {
-        const { oldPassword, newPassword } = await request.json();
+        // This is a privileged operation. An admin can change a user's password.
+        const { userId, newPassword } = await request.json();
 
-        if (!oldPassword || !newPassword) {
-            return NextResponse.json({ error: 'Old and new passwords are required.' }, { status: 400 });
+        if (!userId || !newPassword) {
+            return NextResponse.json({ error: 'User ID and new password are required.' }, { status: 400 });
         }
-
-        const decodedToken = await admin.auth().verifyIdToken(idToken);
         
-        // This is a client-side operation, so we can't directly verify the old password here.
-        // The proper flow is for the client to re-authenticate and then call the update password function.
-        // This endpoint will just update the password for the given user ID.
-        // For enhanced security, the client should handle the re-authentication.
-        
-        await admin.auth().updateUser(decodedToken.uid, {
+        await admin.auth().updateUser(userId, {
             password: newPassword
         });
 
-        return NextResponse.json({ message: "Password updated successfully" });
+        return NextResponse.json({ message: "Password updated successfully for user " + userId });
         
     } catch (error: any) {
-         console.error("Error updating password:", error);
-         return NextResponse.json({ error: 'Failed to update password. Please try again.' }, { status: 500 });
+         console.error("Error updating password by admin:", error);
+         return NextResponse.json({ error: 'Failed to update password.' }, { status: 500 });
     }
 }
