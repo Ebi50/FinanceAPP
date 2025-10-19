@@ -1,39 +1,41 @@
-
 // lib/firebaseAdmin.ts
 import { getApps, initializeApp, cert, App } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
 function createAdminApp(): App {
+  // Wenn bereits eine App initialisiert ist, geben wir sie zurück.
   if (getApps().length > 0) {
     return getApps()[0];
   }
 
-  // Best Practice: Use a single environment variable with the full JSON content.
+  // Prüfen, ob die Service-Account-Daten als Umgebungsvariable vorhanden sind.
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
 
   if (serviceAccountJson) {
     try {
-      // This is the most robust way to parse the service account key,
-      // handling cases where it might be wrapped in quotes or have escaped characters.
+      // Direkter Versuch, das JSON zu parsen.
       const serviceAccount = JSON.parse(serviceAccountJson);
       
+      // Korrektur für das private_key Format, falls nötig.
+      // Dies ist der robusteste Teil, der Probleme mit \n löst.
+      if (serviceAccount.private_key && typeof serviceAccount.private_key === 'string') {
+        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+      }
+
+      // Initialisieren mit den geparsten Credentials.
       return initializeApp({
         credential: cert(serviceAccount),
       });
-    } catch (error: any) {
-      console.error("Error parsing FIREBASE_SERVICE_ACCOUNT_KEY:", error.message);
-      // Add a more descriptive error message to help debugging.
-      throw new Error(
-        "Failed to initialize Firebase Admin SDK. The FIREBASE_SERVICE_ACCOUNT_KEY is not a valid JSON string. " +
-        "Please ensure you copy the entire content of the service account JSON file into the .env variable without any extra wrapping quotes."
-      );
+    } catch (e: any) {
+        console.error("Error parsing FIREBASE_SERVICE_ACCOUNT_KEY:", e.message);
+        // Wenn das Parsen fehlschlägt, versuchen wir den Fallback.
     }
   }
-  
-  // This fallback should ideally not be reached in a production environment
-  // where the service account key is properly set.
-  console.warn("FIREBASE_SERVICE_ACCOUNT_KEY not found. Initializing Firebase Admin SDK with Application Default Credentials. This is not recommended for production outside of Google Cloud environments.");
+
+  // Fallback für Umgebungen, die ADC (Application Default Credentials) unterstützen (z.B. Google Cloud Run).
+  // In der Firebase App Hosting Umgebung sollte dies der Standardweg sein, wenn keine Variable gesetzt ist.
+  console.log("Initializing Firebase Admin SDK with Application Default Credentials.");
   return initializeApp();
 }
 
