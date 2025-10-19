@@ -79,6 +79,8 @@ export function OrganizationTab() {
       };
       setUsersLoading(true);
       try {
+        // Force a token refresh to get latest custom claims
+        await currentUserAuth.getIdToken(true);
         const listUsers = httpsCallable(functions, 'listUsers');
         const response: any = await listUsers();
         setUsers(response.data as UserProfile[]);
