@@ -27,8 +27,8 @@ async function verifyAdmin(req: NextRequest): Promise<{ ok: boolean; res?: NextR
     if ((decoded as any).role === "admin") return { ok: true, decoded };
 
     return { ok: false, res: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
-  } catch (e) {
-    console.error("Token verification failed:", e);
+  } catch (e: any) {
+    console.error("Token verification failed:", e.message);
     return { ok: false, res: NextResponse.json({ error: "Invalid token" }, { status: 401 }) };
   }
 }
@@ -100,8 +100,8 @@ export async function PUT(req: NextRequest) {
         }
 
         const updateData: { [key: string]: any } = {};
-        if (userData.firstName) updateData.firstName = userData.firstName;
-        if (userData.lastName) updateData.lastName = userData.lastName;
+        if (userData.firstName !== undefined) updateData.firstName = userData.firstName;
+        if (userData.lastName !== undefined) updateData.lastName = userData.lastName;
         
         if (Object.keys(updateData).length > 0) {
             await adminDb.collection('users').doc(id).update(updateData);
@@ -111,13 +111,13 @@ export async function PUT(req: NextRequest) {
             await adminAuth.setCustomUserClaims(id, { role: userData.role });
         }
         
-        const updatedUserDoc = await adminDb.collection('users').doc(id).get();
-        const updatedAuthUser = await adminAuth.getUser(id);
+        const userDocAfterUpdate = await adminDb.collection('users').doc(id).get();
+        const authUserAfterUpdate = await adminAuth.getUser(id);
 
         const updatedUser = { 
-            id: updatedUserDoc.id, 
-            ...updatedUserDoc.data(),
-            role: updatedAuthUser.customClaims?.role || 'user'
+            id: userDocAfterUpdate.id, 
+            ...userDocAfterUpdate.data(),
+            role: authUserAfterUpdate.customClaims?.role || 'user'
         };
         return NextResponse.json(updatedUser);
     } catch (error: any) {
