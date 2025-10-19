@@ -6,6 +6,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter,
 } from "./ui/card";
 import {
   Select,
@@ -21,6 +22,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableFooter as UiTableFooter,
 } from "@/components/ui/table";
 import { Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -55,6 +57,8 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
   const { user } = useUser();
   const firestore = useFirestore();
   const chartRef = useRef<HTMLDivElement>(null);
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(new Date().getMonth());
+
 
   const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null, [firestore, user]);
   const { data: categories } = useCollection<Category>(categoriesQuery);
@@ -247,8 +251,21 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
     }
   }, [availableYears, currentYear, setCurrentYear]);
 
+  const filteredTableTransactions = useMemo(() => {
+    if (selectedMonth === null) {
+      return yearlyTransactions;
+    }
+    return yearlyTransactions.filter(t => {
+      const transactionDate = t.date.toDate();
+      return isValid(transactionDate) && getMonth(transactionDate) === selectedMonth;
+    });
+  }, [yearlyTransactions, selectedMonth]);
+
+
   const expensesByCategoryForTable = useMemo(() => {
-    const expenses = transactionsForChart.reduce((acc, transaction) => {
+    const expenses = filteredTableTransactions
+      .filter(t => t.categoryId !== incomeCategory?.id)
+      .reduce((acc, transaction) => {
       const categoryName = categoryMap.get(transaction.categoryId) || 'Sonstiges';
       if (!acc[categoryName]) {
         acc[categoryName] = 0;
@@ -261,12 +278,12 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
       name,
       total
     })).sort((a,b) => b.total - a.total);
-  }, [transactionsForChart, categoryMap]);
+  }, [filteredTableTransactions, categoryMap, incomeCategory]);
   
   const incomeByDescriptionForTable = useMemo(() => {
     if (!incomeCategory) return [];
     
-    const incomes = yearlyTransactions
+    const incomes = filteredTableTransactions
       .filter(t => t.categoryId === incomeCategory.id)
       .reduce((acc, transaction) => {
         const description = transaction.description || 'Unbekannte Einnahme';
@@ -281,29 +298,16 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
       name,
       total
     })).sort((a,b) => b.total - a.total);
-  }, [yearlyTransactions, incomeCategory]);
+  }, [filteredTableTransactions, incomeCategory]);
+
+  const totalExpenses = useMemo(() => expensesByCategoryForTable.reduce((sum, item) => sum + item.total, 0), [expensesByCategoryForTable]);
+  const totalIncome = useMemo(() => incomeByDescriptionForTable.reduce((sum, item) => sum + item.total, 0), [incomeByDescriptionForTable]);
+
 
   return (
     <>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
-          <CardHeader>
-              <CardTitle className="font-headline">Ausgabenverteilung {currentYear}</CardTitle>
-              <CardDescription>Visuelle Aufschlüsselung Ihrer Ausgaben nach Kategorien für das ausgewählte Jahr.</CardDescription>
-          </CardHeader>
-          <CardContent>
-             {transactionsForChart.length > 0 ? (
-                <div ref={chartRef}>
-                   <ExpensesChart transactions={transactionsForChart} />
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-[350px] text-muted-foreground">
-                    Keine Ausgabendaten für das ausgewählte Jahr vorhanden.
-                </div>
-              )}
-          </CardContent>
-        </Card>
-        <div className="lg:col-span-2 flex flex-col gap-4">
+        <div className="lg:col-span-3 flex flex-col gap-4">
             <Card>
             <CardHeader>
                 <CardTitle className="font-headline">Berichte erstellen</CardTitle>
@@ -342,9 +346,53 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
             </CardContent>
             </Card>
             <Card>
+            <CardHeader>
+                <CardTitle className="font-headline">Ausgabenverteilung {currentYear}</CardTitle>
+                <CardDescription>Visuelle Aufschlüsselung Ihrer Ausgaben nach Kategorien für das ausgewählte Jahr.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                {transactionsForChart.length > 0 ? (
+                <div ref={chartRef}>
+                    <ExpensesChart transactions={transactionsForChart} />
+                </div>
+                ) : (
+                <div className="flex items-center justify-center h-[350px] text-muted-foreground">
+                    Keine Ausgabendaten für das ausgewählte Jahr vorhanden.
+                </div>
+                )}
+            </CardContent>
+            </Card>
+        </div>
+        <div className="lg:col-span-2 flex flex-col gap-4">
+             <div className="space-y-2">
+                <Label htmlFor="month-select-reports">Monat für Tabellenansicht auswählen</Label>
+                <Select
+                    value={selectedMonth === null ? 'all' : String(selectedMonth)}
+                    onValueChange={(value) => {
+                        if (value === 'all') {
+                            setSelectedMonth(null);
+                        } else {
+                            setSelectedMonth(Number(value));
+                        }
+                    }}
+                >
+                    <SelectTrigger id="month-select-reports" className="w-[180px]">
+                        <SelectValue placeholder="Monat auswählen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Alle Monate</SelectItem>
+                        {Array.from({ length: 12 }, (_, i) => (
+                            <SelectItem key={i} value={String(i)}>
+                            {de.localize?.month(i)}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+            <Card>
                 <CardHeader>
-                    <CardTitle className="font-headline">Kategorienübersicht {currentYear}</CardTitle>
-                    <CardDescription>Gesamtausgaben pro Kategorie für das ausgewählte Jahr.</CardDescription>
+                    <CardTitle className="font-headline">Kategorienübersicht {currentYear} {selectedMonth !== null ? `(${de.localize?.month(selectedMonth)})` : ''}</CardTitle>
+                    <CardDescription>Gesamtausgaben pro Kategorie für den ausgewählten Zeitraum.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Table>
@@ -361,14 +409,25 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                                     <TableCell className="text-right">{formatCurrency(item.total)}</TableCell>
                                 </TableRow>
                             ))}
+                             {expensesByCategoryForTable.length === 0 && (
+                                <TableRow>
+                                    <TableCell colSpan={2} className="text-center text-muted-foreground">Keine Ausgaben in diesem Zeitraum.</TableCell>
+                                </TableRow>
+                            )}
                         </TableBody>
+                        <UiTableFooter>
+                            <TableRow>
+                                <TableCell className="font-bold">Gesamtsumme</TableCell>
+                                <TableCell className="text-right font-bold">{formatCurrency(totalExpenses)}</TableCell>
+                            </TableRow>
+                        </UiTableFooter>
                     </Table>
                 </CardContent>
             </Card>
              <Card>
                 <CardHeader>
-                    <CardTitle className="font-headline">Einnahmenübersicht {currentYear}</CardTitle>
-                    <CardDescription>Gesamteinnahmen für das ausgewählte Jahr.</CardDescription>
+                    <CardTitle className="font-headline">Einnahmenübersicht {currentYear} {selectedMonth !== null ? `(${de.localize?.month(selectedMonth)})` : ''}</CardTitle>
+                    <CardDescription>Gesamteinnahmen für den ausgewählten Zeitraum.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Table>
@@ -386,10 +445,16 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                                 </TableRow>
                             )) : (
                                 <TableRow>
-                                    <TableCell colSpan={2} className="text-center text-muted-foreground">Keine Einnahmen in diesem Jahr erfasst.</TableCell>
+                                    <TableCell colSpan={2} className="text-center text-muted-foreground">Keine Einnahmen in diesem Zeitraum erfasst.</TableCell>
                                 </TableRow>
                             )}
                         </TableBody>
+                         <UiTableFooter>
+                            <TableRow>
+                                <TableCell className="font-bold">Gesamtsumme</TableCell>
+                                <TableCell className="text-right font-bold">{formatCurrency(totalIncome)}</TableCell>
+                            </TableRow>
+                        </UiTableFooter>
                     </Table>
                 </CardContent>
             </Card>
@@ -404,3 +469,5 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
     </>
   );
 }
+
+    
