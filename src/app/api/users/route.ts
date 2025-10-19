@@ -15,7 +15,9 @@ async function verifyAdmin(req: NextRequest) {
   try {
     const decoded = await adminAuth.verifyIdToken(idToken);
 
+    // Sofortzugang via E-Mail
     if (decoded.email === ADMIN_EMAIL) {
+      // Optional: Claim setzen; Token-Refresh im Client nötig
       if ((decoded as any).role !== "admin") {
         // This is an async operation, but we don't need to wait for it.
         // The claim will be available on the next token refresh.

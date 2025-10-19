@@ -247,9 +247,11 @@ export function OrganizationTab() {
 
       setOpen(false);
       // Force a token refresh for the current user if their role might have changed
-      if (isEditing && currentUser?.id === currentUserAuth.uid) {
+      if (currentUserAuth && (isEditing && currentUser?.id === currentUserAuth.uid)) {
         await currentUserAuth.getIdToken(true);
       }
+      // refetch users after save
+      fetchUsers();
     } catch (error: any) {
       toast({
         variant: 'destructive',
