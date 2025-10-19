@@ -9,21 +9,25 @@ function createAdminApp(): App {
   if (getApps().length) return getApps()[0];
 
   if (!saJson) {
-    // GCP-Umgebung (Cloud Functions/Run) könnte ohne SA-JSON laufen
+    // In einer Umgebung ohne explizite Credentials (z.B. GCP-Dienste wie Cloud Run/Functions)
+    // versucht das Admin SDK, sich über Application Default Credentials zu authentifizieren.
+    // Lokal oder in anderen Umgebungen wird dies fehlschlagen, wenn saJson nicht gesetzt ist.
     console.log("Initializing Firebase Admin SDK with Application Default Credentials.");
     return initializeApp();
   }
 
-  // SA-JSON aus ENV parsen + evtl. \n reparieren
+  // SA-JSON aus der Umgebungsvariable parsen
   try {
     const parsed = JSON.parse(saJson);
+    // Das private_key Feld enthält oft \n als String-Literale, die in echte Zeilenumbrüche umgewandelt werden müssen.
     if (typeof parsed.private_key === "string") {
       parsed.private_key = parsed.private_key.replace(/\\n/g, "\n");
     }
     return initializeApp({ credential: cert(parsed) });
   } catch (e: any) {
-    console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY. Initializing with default credentials.", e);
-    return initializeApp();
+      console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY. Check if the environment variable is set correctly and is a valid JSON.", e);
+      // Fallback, der wahrscheinlich fehlschlagen wird, aber einen Absturz verhindert.
+      return initializeApp();
   }
 }
 

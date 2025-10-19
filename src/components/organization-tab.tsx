@@ -78,7 +78,7 @@ export function OrganizationTab() {
     }
     setUsersLoading(true);
     try {
-      // Force refresh the token to get latest claims.
+      // Erzwingt einen Refresh des Tokens, um die neuesten Claims (z.B. die Admin-Rolle) zu erhalten.
       const idToken = await currentUserAuth.getIdToken(true);
       const response = await fetch('/api/users', {
         headers: {
@@ -138,7 +138,7 @@ export function OrganizationTab() {
     setFirstName(user.firstName || '');
     setLastName(user.lastName || '');
     setRole(user.role || 'user');
-    setPassword(''); // Clear password for editing
+    setPassword(''); // Passwortfeld beim Bearbeiten leeren
     setOpen(true);
   };
 
@@ -205,7 +205,7 @@ export function OrganizationTab() {
       const userData = {
         id: currentUser?.id,
         email,
-        password: password || undefined, // Send password only if it's set
+        password: password || undefined, // Passwort nur senden, wenn es gesetzt ist
         firstName,
         lastName,
         role,
@@ -226,32 +226,15 @@ export function OrganizationTab() {
           errorData.error || `Request failed with status ${response.status}`
         );
       }
-
-      const savedUser = await response.json();
-
-      if (isEditing) {
-        setUsers(prevUsers =>
-          prevUsers.map(u => (u.id === savedUser.id ? savedUser : u))
-        );
-        toast({
-          title: 'Benutzer aktualisiert',
-          description: 'Die Benutzerdaten wurden erfolgreich gespeichert.',
-        });
-      } else {
-        setUsers(prevUsers => [...prevUsers, savedUser]);
-        toast({
-          title: 'Benutzer hinzugefügt',
-          description: `Das Profil für ${email} wurde erstellt.`,
-        });
-      }
-
+      
       setOpen(false);
-      // Force a token refresh for the current user if their role might have changed
-      if (currentUserAuth && (isEditing && currentUser?.id === currentUserAuth.uid)) {
-        await currentUserAuth.getIdToken(true);
-      }
-      // refetch users after save
-      fetchUsers();
+      // Benutzerliste neu laden, um die Änderungen anzuzeigen
+      await fetchUsers();
+      toast({
+        title: isEditing ? 'Benutzer aktualisiert' : 'Benutzer hinzugefügt',
+        description: `Die Daten für ${email} wurden erfolgreich gespeichert.`,
+      });
+
     } catch (error: any) {
       toast({
         variant: 'destructive',

@@ -15,23 +15,25 @@ async function verifyAdmin(req: NextRequest) {
   try {
     const decoded = await adminAuth.verifyIdToken(idToken);
 
-    // Sofortzugang via E-Mail
+    // Sofortzugang via E-Mail für den Super-Admin
     if (decoded.email === ADMIN_EMAIL) {
-      // Optional: Claim setzen; Token-Refresh im Client nötig
+      // Optional: Claim setzen, falls noch nicht geschehen. Token-Refresh im Client ist danach nötig.
       if ((decoded as any).role !== "admin") {
-        // This is an async operation, but we don't need to wait for it.
-        // The claim will be available on the next token refresh.
+        // Dies ist eine asynchrone Operation, aber wir müssen nicht darauf warten.
+        // Der Claim wird beim nächsten Token-Refresh verfügbar sein.
         adminAuth.setCustomUserClaims(decoded.uid, { role: "admin" }).catch(e => console.error("Error setting custom claim:", e));
       }
       return { ok: true, decoded };
     }
 
+    // Reguläre Prüfung des Admin-Claims
     if ((decoded as any).role === "admin") return { ok: true, decoded };
 
+    // Wenn keine der Bedingungen zutrifft, ist der Zugriff verboten.
     return { ok: false, res: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
   } catch(e: any) {
     console.error("Token verification failed:", e.message);
-    // Log the error but return a generic message to the client.
+    // Logge den Fehler, aber gib eine generische Nachricht an den Client zurück.
     return { ok: false, res: NextResponse.json({ error: "Invalid token" }, { status: 401 }) };
   }
 }
@@ -88,7 +90,7 @@ export async function POST(req: NextRequest) {
             lastName,
             email,
             role,
-        }, { merge: true });
+        });
 
         const finalUser = {
             id: userRecord.uid,
