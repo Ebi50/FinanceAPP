@@ -64,7 +64,7 @@ export default function Dashboard() {
     user ? collection(firestore, 'users', user.uid, 'transactions') : null,
     [firestore, user]
   );
-  const { data: allTransactions, isLoading: transactionsLoading } = useCollection<Transaction>(transactionsQuery);
+  const { data: allTransactions, isLoading: transactionsLoading, setData: setAllTransactions } = useCollection<Transaction>(transactionsQuery);
 
   const categoriesQuery = useMemoFirebase(() => 
     user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null,
@@ -154,6 +154,7 @@ export default function Dashboard() {
         batch.delete(doc.ref);
       });
       await batch.commit();
+      setAllTransactions([]); // Clear local state after successful deletion
       toast({
         title: "Alle Transaktionen gelöscht",
         description: "Alle Ihre Transaktionsdaten wurden entfernt.",
@@ -344,5 +345,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-    
