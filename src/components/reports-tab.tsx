@@ -463,7 +463,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
             </Card>
             <Card>
                 <CardHeader>
-                    <CardTitle className="font-headline">Zusammenfassung</CardTitle>
+                    <CardTitle className="font-headline">Zusammenfassung {currentYear} {periodTitle}</CardTitle>
                     <CardDescription>
                         Gesamtergebnis für den ausgewählten Zeitraum.
                     </CardDescription>
