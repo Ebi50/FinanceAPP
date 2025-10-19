@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "./ui/table";
 import { Button } from "./ui/button";
-import { MoreHorizontal, Trash2, Edit } from "lucide-react";
+import { MoreHorizontal, Trash2, Edit, ArrowUpDown } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,18 +44,23 @@ interface TransactionsTableProps {
   onUpdate: (transaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date; }) => void;
 }
 
+type SortKey = 'description' | 'category' | 'date' | 'amount';
+type SortDirection = 'asc' | 'desc';
+
 export function TransactionsTable({ transactions, onDelete, onUpdate }: TransactionsTableProps) {
   const { user } = useUser();
   const firestore = useFirestore();
   const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null, [firestore, user]);
   const { data: categories } = useCollection<Category>(categoriesQuery);
 
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>('date');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
   const categoryMap = useMemo(() => {
     if (!categories) return new Map();
     return new Map(categories.map((c) => [c.id, c]));
   }, [categories]);
-
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
   const handleDelete = (id: string) => {
     onDelete(id);
@@ -70,22 +75,93 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
     setEditingTransaction(null);
   }
 
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDirection('asc');
+    }
+  };
+  
+  const sortedTransactions = useMemo(() => {
+    if (!transactions) return [];
+    
+    return [...transactions].sort((a, b) => {
+      let valA: any;
+      let valB: any;
+
+      switch(sortKey) {
+        case 'category':
+          valA = categoryMap.get(a.categoryId)?.name || '';
+          valB = categoryMap.get(b.categoryId)?.name || '';
+          break;
+        case 'date':
+           // Convert Firestore Timestamp to JS Date for comparison
+          valA = a.date.toDate();
+          valB = b.date.toDate();
+          break;
+        case 'amount':
+          valA = a.amount;
+          valB = b.amount;
+          break;
+        default: // description
+          valA = a.description?.toLowerCase() || '';
+          valB = b.description?.toLowerCase() || '';
+          break;
+      }
+      
+      if (valA < valB) {
+        return sortDirection === 'asc' ? -1 : 1;
+      }
+      if (valA > valB) {
+        return sortDirection === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+  }, [transactions, sortKey, sortDirection, categoryMap]);
+
+  const renderSortArrow = (key: SortKey) => {
+    if (sortKey !== key) return null;
+    return sortDirection === 'asc' ? ' 🔼' : ' 🔽';
+  };
+
   return (
     <>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Beschreibung</TableHead>
-            <TableHead>Kategorie</TableHead>
-            <TableHead>Datum</TableHead>
-            <TableHead className="text-right">Betrag</TableHead>
+            <TableHead>
+              <Button variant="ghost" onClick={() => handleSort('description')}>
+                Beschreibung
+                <ArrowUpDown className="ml-2 h-4 w-4" />
+              </Button>
+            </TableHead>
+            <TableHead>
+              <Button variant="ghost" onClick={() => handleSort('category')}>
+                Kategorie
+                <ArrowUpDown className="ml-2 h-4 w-4" />
+              </Button>
+            </TableHead>
+            <TableHead>
+              <Button variant="ghost" onClick={() => handleSort('date')}>
+                Datum
+                <ArrowUpDown className="ml-2 h-4 w-4" />
+              </Button>
+            </TableHead>
+            <TableHead className="text-right">
+              <Button variant="ghost" onClick={() => handleSort('amount')}>
+                Betrag
+                <ArrowUpDown className="ml-2 h-4 w-4" />
+              </Button>
+            </TableHead>
             <TableHead>
               <span className="sr-only">Aktionen</span>
             </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {transactions.map((transaction) => {
+          {sortedTransactions.map((transaction) => {
             const category = categoryMap.get(transaction.categoryId);
             const incomeCategory = categories?.find(c => c.name.toLowerCase() === 'einnahmen');
             const isIncome = category?.id === incomeCategory?.id;
@@ -169,5 +245,3 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
     </>
   );
 }
-
-    
