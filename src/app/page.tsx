@@ -215,11 +215,11 @@ export default function Dashboard() {
         </div>
         <Tabs defaultValue="overview" className="space-y-4" onValueChange={setActiveTab}>
           <TabsList>
-            <TabsTrigger value="overview" className="data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=inactive]:bg-gray-200">Übersicht</TabsTrigger>
-            <TabsTrigger value="transactions" className="data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=inactive]:bg-gray-200">Transaktionen</TabsTrigger>
-            <TabsTrigger value="categories" className="data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=inactive]:bg-gray-200">Kategorien</TabsTrigger>
-            <TabsTrigger value="reports" className="data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=inactive]:bg-gray-200">Berichte</TabsTrigger>
-            <TabsTrigger value="import" className="data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=inactive]:bg-gray-200">Importieren</TabsTrigger>
+            <TabsTrigger value="overview">Übersicht</TabsTrigger>
+            <TabsTrigger value="transactions">Transaktionen</TabsTrigger>
+            <TabsTrigger value="categories">Kategorien</TabsTrigger>
+            <TabsTrigger value="reports">Berichte</TabsTrigger>
+            <TabsTrigger value="import">Importieren</TabsTrigger>
           </TabsList>
            {activeTab === 'transactions' && (
               <div className="flex items-center gap-2 pt-4">
@@ -237,7 +237,7 @@ export default function Dashboard() {
                       <SelectItem value="all">Alle Monate</SelectItem>
                       {Array.from({ length: 12 }, (_, i) => (
                         <SelectItem key={i} value={String(i)}>
-                          {de.localize?.month(i)}
+                          {de.localize?.month(i, { width: 'long' })}
                         </SelectItem>
                       ))}
                     </SelectContent>

@@ -44,7 +44,6 @@ interface ReportsTabProps {
   availableYears: number[];
   currentYear: number;
   setCurrentYear: (year: number) => void;
-  currentMonth: number;
 }
 
 interface AutoTableDoc extends jsPDF {
@@ -52,7 +51,7 @@ interface AutoTableDoc extends jsPDF {
 }
 
 
-export function ReportsTab({ transactions, availableYears, currentYear, setCurrentYear, currentMonth }: ReportsTabProps) {
+export function ReportsTab({ transactions, availableYears, currentYear, setCurrentYear }: ReportsTabProps) {
   const { toast } = useToast();
   const { user } = useUser();
   const firestore = useFirestore();
@@ -73,25 +72,22 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
   const [transactionsForChart, setTransactionsForChart] = useState<Transaction[]>([]);
   const [yearlyTransactions, setYearlyTransactions] = useState<Transaction[]>([]);
 
-  const generatePdf = async (period: "monthly" | "yearly", year: number, month: number) => {
+  const generatePdf = async (period: "monthly" | "yearly", year: number, month: number | null) => {
     const doc = new jsPDF() as AutoTableDoc;
     
-    const reportDate = new Date(year, month);
-    
-    const reportTransactions = transactions.filter(t => {
-      const transactionDate = t.date.toDate();
-      if (!isValid(transactionDate)) return false;
-      const transactionYear = getYear(transactionDate);
-
-      if (period === "monthly") {
-        return (
-          getMonth(transactionDate) === month &&
-          transactionYear === year
-        );
-      } else { // yearly
-        return transactionYear === year;
-      }
+    let reportTransactions = transactions.filter(t => {
+        const transactionDate = t.date.toDate();
+        return isValid(transactionDate) && getYear(transactionDate) === year;
     });
+
+    let title;
+    if (period === "monthly" && month !== null) {
+        reportTransactions = reportTransactions.filter(t => getMonth(t.date.toDate()) === month);
+        title = `Monatlicher Bericht (${format(new Date(year, month), 'MMMM yyyy', { locale: de })})`;
+    } else {
+        title = `Jahresbericht ${year}`;
+    }
+    
 
     // Update state for the chart to render with the correct data
     setTransactionsForChart(reportTransactions.filter(t => t.categoryId !== incomeCategory?.id));
@@ -115,7 +111,6 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
     const totalIncome = income.reduce((sum, t) => sum + t.amount, 0);
     const balance = totalIncome - totalExpenses;
 
-    const title = period === "monthly" ? `Monatlicher Bericht (${format(reportDate, 'MMMM yyyy', { locale: de })})` : `Jahresbericht ${year}`;
     doc.text(title, 14, 20);
 
     let lastY = 30;
@@ -304,7 +299,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
   const totalIncome = useMemo(() => incomeByDescriptionForTable.reduce((sum, item) => sum + item.total, 0), [incomeByDescriptionForTable]);
   const balance = totalIncome - totalExpenses;
   
-  const periodTitle = selectedMonth !== null ? `(${de.localize?.month(selectedMonth)})` : '';
+  const periodTitle = selectedMonth !== null ? `${de.localize?.month(selectedMonth, { width: 'long' })} ${currentYear}` : `Gesamtjahr ${currentYear}`;
 
 
   return (
@@ -346,7 +341,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                   <SelectItem value="all">Alle Monate</SelectItem>
                   {Array.from({ length: 12 }, (_, i) => (
                       <SelectItem key={i} value={String(i)}>
-                      {de.localize?.month(i)}
+                      {de.localize?.month(i, { width: 'long' })}
                       </SelectItem>
                   ))}
               </SelectContent>
@@ -363,11 +358,11 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                 </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col sm:flex-row gap-2">
-                <Button variant="secondary" onClick={() => generatePdf("monthly", currentYear, currentMonth)}>
+                <Button variant="secondary" onClick={() => generatePdf("monthly", currentYear, selectedMonth)} disabled={selectedMonth === null}>
                     <Download className="mr-2 h-4 w-4" />
                     Monatlicher Bericht (PDF)
                 </Button>
-                <Button variant="secondary" onClick={() => generatePdf("yearly", currentYear, 0)}>
+                <Button variant="secondary" onClick={() => generatePdf("yearly", currentYear, null)}>
                     <Download className="mr-2 h-4 w-4" />
                     Jahresbericht (PDF)
                 </Button>
@@ -390,9 +385,9 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                 )}
             </CardContent>
             </Card>
-            <Card>
+             <Card>
                 <CardHeader>
-                    <CardTitle className="font-headline">Einnahmenübersicht {currentYear} {periodTitle}</CardTitle>
+                    <CardTitle className="font-headline">Einnahmenübersicht {periodTitle}</CardTitle>
                     <CardDescription>Gesamteinnahmen für den ausgewählten Zeitraum.</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -428,7 +423,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
         <div className="lg:col-span-2 flex flex-col gap-4">
             <Card>
                 <CardHeader>
-                    <CardTitle className="font-headline">Kategorienübersicht {currentYear} {periodTitle}</CardTitle>
+                    <CardTitle className="font-headline">Kategorienübersicht {periodTitle}</CardTitle>
                     <CardDescription>Gesamtausgaben pro Kategorie für den ausgewählten Zeitraum.</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -463,7 +458,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
             </Card>
             <Card>
                 <CardHeader>
-                    <CardTitle className="font-headline">Zusammenfassung {currentYear} {periodTitle}</CardTitle>
+                    <CardTitle className="font-headline">Zusammenfassung {periodTitle}</CardTitle>
                     <CardDescription>
                         Gesamtergebnis für den ausgewählten Zeitraum.
                     </CardDescription>
