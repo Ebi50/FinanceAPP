@@ -81,7 +81,7 @@ export default function SettingsPage() {
   
   const isAdmin = userProfile?.role === 'admin';
 
-  const navItems = isAdmin ? allNavItems : allNavItems.filter(item => item !== 'Organisation');
+  const navItems = allNavItems;
 
 
   useEffect(() => {
@@ -367,7 +367,21 @@ export default function SettingsPage() {
         );
         break;
         case 'Organisation':
-          content = isAdmin ? <OrganizationTab /> : <p>Sie haben keine Berechtigung, auf diesen Bereich zuzugreifen.</p>;
+          if (isAdmin) {
+            content = <OrganizationTab />;
+          } else {
+            content = (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Organisation</CardTitle>
+                  <CardDescription>Verwalten Sie die Benutzer Ihrer App.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p>Sie haben keine Berechtigung, auf diesen Bereich zuzugreifen. Diese Funktion ist nur für Administratoren verfügbar.</p>
+                </CardContent>
+              </Card>
+            );
+          }
           break;
         case 'Support':
             content = (
