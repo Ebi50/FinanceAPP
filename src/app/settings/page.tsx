@@ -214,57 +214,6 @@ export default function SettingsPage() {
       });
     }
   };
-
-  const handleDataMigration = async () => {
-    if (!user || !firestore) {
-      toast({ variant: 'destructive', title: 'Fehler', description: 'Benutzer oder Datenbank nicht verfügbar.' });
-      return;
-    }
-
-    toast({ title: 'Datenmigration gestartet', description: 'Bitte warten Sie...' });
-
-    try {
-      const batch = writeBatch(firestore);
-
-      // --- Kategorien migrieren ---
-      const oldCategoriesCol = collection(firestore, `users/${user.uid}/expenseCategories`);
-      const newCategoriesCol = collection(firestore, `expenseCategories`);
-      const oldCategoriesSnap = await getDocs(oldCategoriesCol);
-      let migratedCategoriesCount = 0;
-
-      oldCategoriesSnap.forEach(oldDoc => {
-        const newDocRef = doc(newCategoriesCol, oldDoc.id);
-        batch.set(newDocRef, oldDoc.data());
-        migratedCategoriesCount++;
-      });
-
-      // --- Transaktionen migrieren ---
-      const oldTransactionsCol = collection(firestore, `users/${user.uid}/transactions`);
-      const newTransactionsCol = collection(firestore, `transactions`);
-      const oldTransactionsSnap = await getDocs(oldTransactionsCol);
-      let migratedTransactionsCount = 0;
-
-      oldTransactionsSnap.forEach(oldDoc => {
-        const newDocRef = doc(newTransactionsCol, oldDoc.id);
-        batch.set(newDocRef, oldDoc.data());
-        migratedTransactionsCount++;
-      });
-
-      await batch.commit();
-
-      toast({
-        title: 'Migration erfolgreich',
-        description: `${migratedCategoriesCount} Kategorien und ${migratedTransactionsCount} Transaktionen wurden in die neue gemeinsame Datenstruktur verschoben.`,
-      });
-    } catch (error: any) {
-      console.error('Fehler bei der Datenmigration:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Migrationsfehler',
-        description: error.message || 'Ein unbekannter Fehler ist aufgetreten.',
-      });
-    }
-  };
   
   const renderContent = () => {
     if (isProfileLoading) {
@@ -439,29 +388,6 @@ export default function SettingsPage() {
                                 </AlertDialogFooter>
                             </AlertDialogContent>
                         </AlertDialog>
-                        <div>
-                          <h3 className="text-lg font-semibold mb-2">Datenmigration</h3>
-                          <p className="text-sm text-muted-foreground mb-3">Verschieben Sie Ihre alten, privat gespeicherten Daten in die neue, gemeinsame Datenstruktur. Dies ist nur einmal notwendig.</p>
-                           <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button variant="outline">Alte Daten umziehen</Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Datenmigration bestätigen</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Diese Aktion kopiert Ihre alten Transaktionen und Kategorien in die neue globale Sammlung. Bestehende Daten werden nicht überschrieben. Dies sollte nur einmal ausgeführt werden. Sind Sie sicher?
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                                    <AlertDialogAction onClick={handleDataMigration}>
-                                        Ja, Daten umziehen
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                        </div>
                     </CardContent>
                 </Card>
             );
