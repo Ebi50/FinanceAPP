@@ -45,7 +45,7 @@ import { collection, Timestamp } from 'firebase/firestore';
 const transactionSchema = z.object({
   id: z.string().optional(),
   description: z.string().optional(),
-  amounts: z.array(z.object({ value: z.coerce.number({invalid_type_error: 'Ungültiger Betrag'}).positive('Betrag muss positiv sein.') })).min(1, 'Mindestens ein Betrag ist erforderlich.'),
+  amounts: z.array(z.object({ value: z.coerce.number({invalid_type_error: 'Ungültiger Betrag'}).refine(val => val !== 0, { message: 'Betrag darf nicht Null sein.' }) })).min(1, 'Mindestens ein Betrag ist erforderlich.'),
   categoryId: z.string().min(1, 'Kategorie ist erforderlich.'),
   date: z.date({ required_error: 'Datum ist erforderlich.' }),
   isRecurring: z.boolean().default(false),
