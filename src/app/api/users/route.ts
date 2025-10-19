@@ -15,9 +15,7 @@ async function verifyAdmin(request: Request): Promise<{adminUid: string | null, 
             const idToken = authorization.split('Bearer ')[1];
             const decodedToken = await adminAuth.verifyIdToken(idToken);
             
-            // The user is an admin if the custom claim is set OR if their email is the admin email.
             if (decodedToken.role === 'admin' || decodedToken.email === 'eberhard.janzen@freenet.de') {
-                 // If the email matches but the claim isn't set, set it for future efficiency.
                  if (decodedToken.role !== 'admin') {
                     await adminAuth.setCustomUserClaims(decodedToken.uid, { role: 'admin' });
                  }
@@ -28,7 +26,6 @@ async function verifyAdmin(request: Request): Promise<{adminUid: string | null, 
         console.error("Error verifying token or admin role:", error);
         return { adminUid: null, adminApp: null };
     }
-    // If we get here, verification failed.
     return { adminUid: null, adminApp: null };
 }
 
@@ -61,12 +58,9 @@ export async function POST(request: Request) {
         const adminDb = getFirestore(adminApp);
         const { email, firstName, lastName, role } = await request.json();
         
-        // Create a new document reference with an auto-generated ID
         const newUserRef = adminDb.collection('users').doc();
-        // Use the auto-generated ID in the user profile data
         const newUserProfile = { email, firstName, lastName, role, id: newUserRef.id };
         
-        // Set the data for the new document
         await newUserRef.set(newUserProfile);
         
         return NextResponse.json(newUserProfile, { status: 201 });
@@ -115,7 +109,6 @@ export async function DELETE(request: Request) {
             return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
         }
         await adminDb.collection('users').doc(id).delete();
-        // Note: This does not delete the user from Firebase Auth. A more complex setup is needed for that.
         return NextResponse.json({ message: 'User deleted successfully' }, { status: 200 });
     } catch (error) {
         console.error("Error deleting user:", error);
