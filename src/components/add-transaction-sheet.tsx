@@ -45,7 +45,10 @@ import { collection, Timestamp } from 'firebase/firestore';
 const transactionSchema = z.object({
   id: z.string().optional(),
   description: z.string().optional(),
-  amounts: z.array(z.object({ value: z.coerce.number({invalid_type_error: 'Ungültiger Betrag'}).refine(val => val !== 0, { message: 'Betrag darf nicht Null sein.' }) })).min(1, 'Mindestens ein Betrag ist erforderlich.'),
+  amounts: z.array(z.object({ 
+      value: z.coerce.number({invalid_type_error: 'Ungültiger Betrag'}).refine(val => val !== 0, { message: 'Betrag darf nicht Null sein.' }),
+      description: z.string().optional(),
+    })).min(1, 'Mindestens ein Betrag ist erforderlich.'),
   categoryId: z.string().min(1, 'Kategorie ist erforderlich.'),
   date: z.date({ required_error: 'Datum ist erforderlich.' }),
   isRecurring: z.boolean().default(false),
@@ -99,7 +102,7 @@ export function AddTransactionSheet({
     defaultValues: {
       id: undefined,
       description: '',
-      amounts: [{ value: '' as any }],
+      amounts: [{ value: '' as any, description: '' }],
       categoryId: '',
       date: new Date(),
       isRecurring: false,
@@ -121,7 +124,7 @@ export function AddTransactionSheet({
       let defaultValues: Partial<TransactionFormValues> = {
           id: undefined,
           description: '',
-          amounts: [{ value: '' as any }],
+          amounts: [{ value: '' as any, description: '' }],
           categoryId: '',
           date: new Date(),
           isRecurring: false,
@@ -134,7 +137,7 @@ export function AddTransactionSheet({
           defaultValues = {
               id: transaction.id,
               description: transaction.description || '',
-              amounts: transaction.amount ? [{ value: transaction.amount }] : [{ value: '' as any }],
+              amounts: transaction.amount ? [{ value: transaction.amount, description: '' }] : [{ value: '' as any, description: '' }],
               categoryId: transaction.categoryId || '',
               date: isValid(transactionDate) ? transactionDate : new Date(),
               isRecurring: (transaction as any).isRecurring || false,
@@ -177,10 +180,17 @@ export function AddTransactionSheet({
         form.setError('date', { type: 'manual', message: 'Ungültiges Datum.' });
         return;
     }
+    
+    // Combine main description with individual amount descriptions
+    const combinedDescription = [
+        data.description || '',
+        ...data.amounts.filter(a => a.description).map(a => `${a.description}: ${formatCurrency(a.value)}`)
+    ].filter(Boolean).join('\n');
+
 
     const newTransaction: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date } = {
       id: data.id,
-      description: data.description || '',
+      description: combinedDescription,
       amount: totalAmount,
       categoryId: data.categoryId,
       date: data.date,
@@ -211,7 +221,7 @@ export function AddTransactionSheet({
             <div className="grid gap-4 py-4">
               
               <div className="space-y-2">
-                <Label htmlFor="description">Beschreibung</Label>
+                <Label htmlFor="description">Beschreibung (Gesamt)</Label>
                 <Textarea
                   id="description"
                   placeholder="z.B. Wocheneinkauf"
@@ -223,31 +233,46 @@ export function AddTransactionSheet({
               <div className="space-y-2">
                 <Label>Beträge</Label>
                 {fields.map((field, index) => (
-                  <div key={field.id} className="flex items-center gap-2">
-                    <Controller
-                        control={form.control}
-                        name={`amounts.${index}.value`}
-                        render={({ field }) => (
-                            <Input
-                                {...field}
-                                type="number"
-                                step="0.01"
-                                placeholder="0,00"
-                                className="text-right text-base"
-                                value={field.value === 0 ? '' : field.value || ''}
-                                onChange={e => field.onChange(e.target.valueAsNumber || '')}
-                            />
-                        )}
-                    />
-                    <Button type="button" variant="outline" size="icon" onClick={() => remove(index)} disabled={fields.length <= 1}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                  <div key={field.id} className="grid gap-2 border-l-2 pl-4 ml-[-2px]">
+                     <div className="flex items-center gap-2">
+                        <Controller
+                            control={form.control}
+                            name={`amounts.${index}.value`}
+                            render={({ field }) => (
+                                <Input
+                                    {...field}
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="0,00"
+                                    className="text-right text-base w-1/2"
+                                    value={field.value === 0 ? '' : field.value || ''}
+                                    onChange={e => field.onChange(e.target.valueAsNumber || '')}
+                                />
+                            )}
+                        />
+                        <Controller
+                            control={form.control}
+                            name={`amounts.${index}.description`}
+                            render={({ field }) => (
+                                <Input
+                                    {...field}
+                                    type="text"
+                                    placeholder="Beschreibung (optional)"
+                                    className="text-base"
+                                />
+                            )}
+                        />
+                        <Button type="button" variant="outline" size="icon" onClick={() => remove(index)} disabled={fields.length <= 1}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {form.formState.errors.amounts?.[index]?.value && <p className="text-sm text-destructive mt-1">{form.formState.errors.amounts[index]?.value?.message}</p>}
                   </div>
                 ))}
-                 {form.formState.errors.amounts && <p className="text-sm text-destructive mt-1">{form.formState.errors.amounts.root?.message || (form.formState.errors.amounts as any)[0]?.value.message}</p>}
-                 <Button type="button" variant="outline" size="sm" onClick={() => append({ value: '' as any })}>
+                 {form.formState.errors.amounts?.root && <p className="text-sm text-destructive mt-1">{form.formState.errors.amounts.root.message}</p>}
+                 <Button type="button" variant="outline" size="sm" onClick={() => append({ value: '' as any, description: '' })}>
                   <PlusCircle className="mr-2 h-4 w-4" />
-                  Betrag hinzufügen
+                  Position hinzufügen
                 </Button>
               </div>
 
@@ -373,5 +398,3 @@ export function AddTransactionSheet({
     </Sheet>
   );
 }
-
-    
