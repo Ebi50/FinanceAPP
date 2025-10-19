@@ -303,6 +303,8 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
   const totalExpenses = useMemo(() => expensesByCategoryForTable.reduce((sum, item) => sum + item.total, 0), [expensesByCategoryForTable]);
   const totalIncome = useMemo(() => incomeByDescriptionForTable.reduce((sum, item) => sum + item.total, 0), [incomeByDescriptionForTable]);
   const balance = totalIncome - totalExpenses;
+  
+  const periodTitle = selectedMonth !== null ? `(${de.localize?.month(selectedMonth)})` : '';
 
 
   return (
@@ -365,7 +367,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
             </Card>
              <Card>
                 <CardHeader>
-                    <CardTitle className="font-headline">Einnahmenübersicht {currentYear} {selectedMonth !== null ? `(${de.localize?.month(selectedMonth)})` : ''}</CardTitle>
+                    <CardTitle className="font-headline">Einnahmenübersicht {currentYear} {periodTitle}</CardTitle>
                     <CardDescription>Gesamteinnahmen für den ausgewählten Zeitraum.</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -426,7 +428,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
             </div>
             <Card>
                 <CardHeader>
-                    <CardTitle className="font-headline">Kategorienübersicht {currentYear} {selectedMonth !== null ? `(${de.localize?.month(selectedMonth)})` : ''}</CardTitle>
+                    <CardTitle className="font-headline">Kategorienübersicht {currentYear} {periodTitle}</CardTitle>
                     <CardDescription>Gesamtausgaben pro Kategorie für den ausgewählten Zeitraum.</CardDescription>
                 </CardHeader>
                 <CardContent>
