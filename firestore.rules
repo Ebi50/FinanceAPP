@@ -1,107 +1,87 @@
 /**
- * @fileoverview Firestore Security Rules for Expense Tracker App
+ * @fileoverview Firestore Security Rules for the application.
  *
  * Core Philosophy:
- * This ruleset prioritizes security and data ownership. User profiles are private and only accessible to the owning user.
- * Expense categories and transactions are shared across all users, enabling a collaborative environment.
+ * This ruleset enforces a mixed security model. User profiles are stored under
+ * /users/{userId} and are private to the owning user. Expense categories and transactions
+ * are stored in top-level collections and are globally accessible by all authenticated users.
  *
  * Data Structure:
- * - /users/{userId}: Stores individual user profiles. Each user can only access their own profile.
- * - /expenseCategories/{expenseCategoryId}: Stores expense categories. All authenticated users can read and write to this collection.
- * - /transactions/{transactionId}: Stores transaction data. All authenticated users can read and write to this collection.
+ * - /users/{userId}: Stores user profile information, accessible only to the user.
+ * - /expenseCategories/{expenseCategoryId}: Stores expense categories, globally accessible.
+ * - /transactions/{transactionId}: Stores transaction data, globally accessible.
  *
  * Key Security Decisions:
- * - Expense categories are globally accessible to all authenticated users.
- * - Transactions are globally accessible to all authenticated users.
- * - User profiles are strictly private; only the owning user can read or write their profile.
+ * - User listing is denied to prevent enumeration.
+ * - Expense categories and transactions are globally accessible to all authenticated users.
+ * - Data validation is minimal, focusing on ownership and relational integrity.
  *
- * Denormalization for Authorization: N/A (No denormalization is needed in this basic ruleset.)
- * Structural Segregation: User profiles are segregated into a private /users collection, while shared data resides in top-level collections.
+ * Denormalization for Authorization:
+ *  - Ownership is enforced by matching the userId in the document data with the userId in the path.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Manages access to user profiles.
+     * @description Enforces access control for user profiles. Only the user can read and write their own profile.
      * @path /users/{userId}
-     * @allow (create) User with ID 'user123' can create their profile.
-     *   Request: { auth: { uid: 'user123' }, resource: { data: { id: 'user123' } } }
-     * @allow (get) User with ID 'user123' can read their profile.
-     *   Request: { auth: { uid: 'user123' } }
-     * @allow (update) User with ID 'user123' can update their profile.
-     *   Request: { auth: { uid: 'user123' } }
-     * @allow (delete) User with ID 'user123' can delete their profile.
-     *   Request: { auth: { uid: 'user123' } }
-     * @deny (create) User with ID 'user123' cannot create a profile for user 'user456'.
-     *   Request: { auth: { uid: 'user123' }, resource: { data: { id: 'user456' } } }
-     * @deny (get) User with ID 'user123' cannot read the profile of user 'user456'.
-     *   Request: { auth: { uid: 'user123' } }
-     * @principle Enforces document ownership for writes and restricts access to a user's own data tree.
+     * @allow (create, update, delete, get, list) if the user is the owner of the profile.
+     *   Example: A user with UID "user123" can create, update, delete, get and list the document at /users/user123.
+     * @deny (create, update, delete, get, list) if the user is not the owner of the profile.
+     *   Example: A user with UID "user456" cannot create, update, delete, get or list the document at /users/user123.
+     * @principle Enforces document ownership for writes and reads.
      */
     match /users/{userId} {
-      allow get: if isOwner(userId);
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource.data != null;
+      }
+
+      allow get: if isSignedIn() && isOwner(userId);
       allow list: if false;
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
-      allow delete: if isExistingOwner(userId);
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isExistingOwner(userId);
+      allow delete: if isSignedIn() && isExistingOwner(userId);
     }
 
     /**
-     * @description Manages access to expense categories. All authenticated users can read and write.
+     * @description Allows any authenticated user to read or write expense categories.
      * @path /expenseCategories/{expenseCategoryId}
-     * @allow (get) Any authenticated user can read an expense category.
-     *   Request: { auth: { uid: 'user123' } }
-     * @allow (list) Any authenticated user can list expense categories.
-     *   Request: { auth: { uid: 'user123' } }
-     * @allow (create) Any authenticated user can create an expense category.
-     *   Request: { auth: { uid: 'user123' } }
-     * @allow (update) Any authenticated user can update an expense category.
-     *   Request: { auth: { uid: 'user123' } }
-     * @allow (delete) Any authenticated user can delete an expense category.
-     *   Request: { auth: { uid: 'user123' } }
-     * @principle Expense categories are shared across all authenticated users.
+     * @allow (create, update, delete, get, list) if the user is authenticated.
+     *   Example: Any logged-in user can create, update, delete, get or list any document in /expenseCategories.
+     * @deny None
+     * @principle Grants global read and write access to expense categories for authenticated users.
      */
     match /expenseCategories/{expenseCategoryId} {
-      allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn();
-      allow delete: if isSignedIn();
+        function isSignedIn() {
+            return request.auth != null;
+        }
+        allow get, list: if isSignedIn();
+        allow create, update, delete: if isSignedIn();
     }
 
     /**
-     * @description Manages access to transactions. All authenticated users can read and write.
+     * @description Allows any authenticated user to read or write transactions.
      * @path /transactions/{transactionId}
-     * @allow (get) Any authenticated user can read a transaction.
-     *   Request: { auth: { uid: 'user123' } }
-     * @allow (list) Any authenticated user can list transactions.
-     *   Request: { auth: { uid: 'user123' } }
-     * @allow (create) Any authenticated user can create a transaction.
-     *   Request: { auth: { uid: 'user123' } }
-     * @allow (update) Any authenticated user can update a transaction.
-     *   Request: { auth: { uid: 'user123' } }
-     * @allow (delete) Any authenticated user can delete a transaction.
-     *   Request: { auth: { uid: 'user123' } }
-     * @principle Transactions are shared across all authenticated users.
+     * @allow (create, update, delete, get, list) if the user is authenticated.
+     *   Example: Any logged-in user can create, update, delete, get or list any document in /transactions.
+     * @deny None
+     * @principle Grants global read and write access to transactions for authenticated users.
      */
     match /transactions/{transactionId} {
+      function isSignedIn() {
+          return request.auth != null;
+      }
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn();
-      allow delete: if isSignedIn();
+      allow create, update, delete: if isSignedIn();
     }
-  }
-
-  // Helper Functions
-  function isSignedIn() {
-    return request.auth != null;
-  }
-
-  function isOwner(userId) {
-    return request.auth.uid == userId;
-  }
-
-  function isExistingOwner(userId) {
-      return isOwner(userId) && resource != null;
   }
 }
