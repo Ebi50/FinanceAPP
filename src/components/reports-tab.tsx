@@ -25,7 +25,7 @@ import React, { useMemo, useState, useEffect, useRef } from "react";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection } from 'firebase/firestore';
 import { Label } from "./ui/label";
-import { ExpensesPieChart } from "./expenses-pie-chart";
+import { ExpensesChart } from "./expenses-chart";
 import { formatCurrency } from "@/lib/utils";
 import html2canvas from "html2canvas";
 
@@ -58,6 +58,8 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
   
   const incomeCategory = useMemo(() => categories?.find(c => c.name.toLowerCase() === 'einnahmen'), [categories]);
 
+  const [transactionsForChart, setTransactionsForChart] = useState<Transaction[]>([]);
+
   const generatePdf = async (period: "monthly" | "yearly", year: number, month: number) => {
     const doc = new jsPDF() as AutoTableDoc;
 
@@ -82,6 +84,12 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
         return transactionYear === year;
       }
     });
+
+    // Update state for the chart to render with the correct data
+    setTransactionsForChart(reportTransactions.filter(t => t.categoryId !== incomeCategory?.id));
+    
+    // Wait for the chart to re-render with new data
+    await new Promise(resolve => setTimeout(resolve, 500));
 
 
     if (reportTransactions.length === 0) {
@@ -196,7 +204,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
             const imgProps = doc.getImageProperties(imgData);
             const pdfWidth = doc.internal.pageSize.getWidth();
             const pdfHeight = doc.internal.pageSize.getHeight();
-            const imgWidth = pdfWidth * 0.7; // Use 70% of page width
+            const imgWidth = pdfWidth * 0.9; // Use 90% of page width
             const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
 
             lastY += 10;
@@ -213,18 +221,18 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
 
 
     doc.save(`${title.toLowerCase().replace(/\s/g, "-")}.pdf`);
+    setTransactionsForChart([]); // Reset chart data
   };
   
-  const transactionsForYear = useMemo(() => {
-    return transactions.filter(t => {
-        const transactionDate = t.date.toDate();
-        return isValid(transactionDate) && getYear(transactionDate) === currentYear;
+  useEffect(() => {
+    // Initially render the chart for the current year
+    const yearlyTransactions = transactions.filter(t => {
+      const transactionDate = t.date.toDate();
+      return isValid(transactionDate) && getYear(transactionDate) === currentYear;
     });
-  }, [transactions, currentYear]);
-
-  const expensesForYear = useMemo(() => {
-    return transactionsForYear.filter(t => t.categoryId !== incomeCategory?.id);
-  }, [transactionsForYear, incomeCategory]);
+    const yearlyExpenses = yearlyTransactions.filter(t => t.categoryId !== incomeCategory?.id);
+    setTransactionsForChart(yearlyExpenses);
+  }, [transactions, currentYear, incomeCategory]);
 
 
   useEffect(() => {
@@ -234,55 +242,69 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
   }, [availableYears, currentYear, setCurrentYear]);
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-headline">Berichte erstellen</CardTitle>
-          <CardDescription>
-            Laden Sie Ihre monatlichen oder jährlichen Ausgabenberichte herunter.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-            <div className="space-y-2">
-                <Label htmlFor="year-select">Jahr auswählen</Label>
-                <Select
-                    value={String(currentYear)}
-                    onValueChange={(value) => setCurrentYear(Number(value))}
-                    disabled={availableYears.length === 0}
-                >
-                    <SelectTrigger id="year-select" className="w-[180px]">
-                        <SelectValue placeholder="Jahr auswählen" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {availableYears.map(year => (
-                            <SelectItem key={year} value={String(year)}>{year}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-                <Button variant="secondary" onClick={() => generatePdf("monthly", currentYear, currentMonth)}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Monatlicher Bericht (PDF)
-                </Button>
-                <Button variant="secondary" onClick={() => generatePdf("yearly", currentYear, currentMonth)}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Jahresbericht (PDF)
-                </Button>
-            </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-            <CardTitle className="font-headline">Ausgabenverteilung {currentYear}</CardTitle>
-            <CardDescription>Visuelle Aufschlüsselung Ihrer Ausgaben nach Kategorien für das ausgewählte Jahr.</CardDescription>
-        </CardHeader>
-        <CardContent>
-            <div ref={chartRef}>
-              <ExpensesPieChart transactions={expensesForYear} />
-            </div>
-        </CardContent>
-      </Card>
-    </div>
+    <>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-headline">Berichte erstellen</CardTitle>
+            <CardDescription>
+              Laden Sie Ihre monatlichen oder jährlichen Ausgabenberichte herunter.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+              <div className="space-y-2">
+                  <Label htmlFor="year-select">Jahr auswählen</Label>
+                  <Select
+                      value={String(currentYear)}
+                      onValueChange={(value) => setCurrentYear(Number(value))}
+                      disabled={availableYears.length === 0}
+                  >
+                      <SelectTrigger id="year-select" className="w-[180px]">
+                          <SelectValue placeholder="Jahr auswählen" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          {availableYears.map(year => (
+                              <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                          ))}
+                      </SelectContent>
+                  </Select>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                  <Button variant="secondary" onClick={() => generatePdf("monthly", currentYear, currentMonth)}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Monatlicher Bericht (PDF)
+                  </Button>
+                  <Button variant="secondary" onClick={() => generatePdf("yearly", currentYear, currentMonth)}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Jahresbericht (PDF)
+                  </Button>
+              </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+              <CardTitle className="font-headline">Ausgabenverteilung {currentYear}</CardTitle>
+              <CardDescription>Visuelle Aufschlüsselung Ihrer Ausgaben nach Kategorien für das ausgewählte Jahr.</CardDescription>
+          </CardHeader>
+          <CardContent>
+             {transactionsForChart.length > 0 ? (
+                <div ref={chartRef}>
+                   <ExpensesChart transactions={transactionsForChart} />
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-[350px] text-muted-foreground">
+                    Keine Ausgabendaten für das ausgewählte Jahr vorhanden.
+                </div>
+              )}
+          </CardContent>
+        </Card>
+      </div>
+      {/* Hidden container for rendering chart for PDF */}
+      <div className="absolute -z-10 -left-[9999px] top-0" style={{width: '800px', height: 'auto'}}>
+          <div ref={chartRef}>
+              {transactionsForChart.length > 0 && <ExpensesChart transactions={transactionsForChart} />}
+          </div>
+      </div>
+    </>
   );
 }
