@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "./ui/button";
 import {
   Card,
@@ -43,8 +43,7 @@ import {
     SelectValue,
   } from '@/components/ui/select';
 import { useToast } from "@/hooks/use-toast";
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, doc, setDoc, deleteDoc, addDoc } from 'firebase/firestore';
+import { useUser } from '@/firebase';
 
 type UserProfile = {
   id: string;
@@ -55,9 +54,9 @@ type UserProfile = {
 };
 
 export function OrganizationTab() {
-  const firestore = useFirestore();
-  const usersQuery = useMemoFirebase(() => collection(firestore, 'users'), [firestore]);
-  const { data: users, isLoading: usersLoading } = useCollection<UserProfile>(usersQuery);
+  const { user: currentUserAuth } = useUser();
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
 
   const [open, setOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -68,6 +67,39 @@ export function OrganizationTab() {
   const [role, setRole] = useState<'admin' | 'user'>('user');
   
   const { toast } = useToast();
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      if (!currentUserAuth) return;
+      setUsersLoading(true);
+      try {
+        const idToken = await currentUserAuth.getIdToken();
+        const response = await fetch('/api/users', {
+          headers: {
+            'Authorization': `Bearer ${idToken}`
+          }
+        });
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to fetch users.');
+        }
+        const data = await response.json();
+        setUsers(data);
+      } catch (error: any) {
+        console.error("Error fetching users:", error);
+        toast({
+          variant: "destructive",
+          title: "Fehler beim Laden der Benutzer",
+          description: error.message,
+        });
+      } finally {
+        setUsersLoading(false);
+      }
+    };
+
+    fetchUsers();
+  }, [currentUserAuth, toast]);
+
 
   const sortedUsers = useMemo(() => {
     if (!users) return [];
@@ -94,20 +126,38 @@ export function OrganizationTab() {
     setOpen(true);
   };
 
-  const handleDelete = (userId: string) => {
-    // Note: This only deletes the user from Firestore.
-    // The actual Firebase Auth user is not deleted here.
-    // A cloud function would be required to do that securely.
-    const docRef = doc(firestore, 'users', userId);
-    deleteDoc(docRef);
-    toast({
-      title: 'Benutzer gelöscht',
-      description: 'Der Benutzer wurde erfolgreich aus der Datenbank entfernt.',
-    });
+  const handleDelete = async (userId: string) => {
+    if (!currentUserAuth) return;
+    try {
+        const idToken = await currentUserAuth.getIdToken();
+        const response = await fetch(`/api/users`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({ id: userId })
+        });
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to delete user.');
+        }
+        setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
+        toast({
+            title: 'Benutzer gelöscht',
+            description: 'Der Benutzer wurde erfolgreich entfernt.',
+        });
+    } catch(error: any) {
+        toast({
+            variant: "destructive",
+            title: 'Fehler beim Löschen',
+            description: error.message,
+        });
+    }
   };
 
   const handleSave = async () => {
-    if (!email.trim() || !firstName.trim() || !lastName.trim()) {
+    if (!email.trim() || !firstName.trim() || !lastName.trim() || !currentUserAuth) {
         toast({
             variant: "destructive",
             title: "Fehler",
@@ -115,28 +165,57 @@ export function OrganizationTab() {
         });
         return;
     }
+    
+    try {
+        const idToken = await currentUserAuth.getIdToken();
+        const method = isEditing ? 'PUT' : 'POST';
+        const body = JSON.stringify({ 
+            id: currentUser?.id, 
+            email, 
+            firstName, 
+            lastName, 
+            role 
+        });
 
-    if (isEditing && currentUser?.id) {
-      // Edit existing user
-      const docRef = doc(firestore, 'users', currentUser.id);
-      await setDoc(docRef, { email, firstName, lastName, role }, { merge: true });
-      toast({
-        title: 'Benutzer aktualisiert',
-        description: 'Die Benutzerdaten wurden erfolgreich gespeichert.',
-      });
-    } else {
-      // Add new user
-      // Note: This creates a user document in Firestore.
-      // The user still needs to be created in Firebase Auth.
-      // This is a simplified approach.
-      const coll = collection(firestore, 'users');
-      await addDoc(coll, { email, firstName, lastName, role, id: '' });
-      toast({
-        title: 'Benutzer hinzugefügt',
-        description: `Das Profil für ${email} wurde erstellt. Der Benutzer muss noch in Firebase Auth angelegt werden, damit er sich anmelden kann.`,
-      });
+        const response = await fetch('/api/users', {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`
+            },
+body,
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to save user.');
+        }
+
+        const savedUser = await response.json();
+        
+        if (isEditing) {
+            setUsers(prevUsers => prevUsers.map(u => u.id === savedUser.id ? savedUser : u));
+            toast({
+                title: 'Benutzer aktualisiert',
+                description: 'Die Benutzerdaten wurden erfolgreich gespeichert.',
+            });
+        } else {
+            setUsers(prevUsers => [...prevUsers, savedUser]);
+            toast({
+                title: 'Benutzer hinzugefügt',
+                description: `Das Profil für ${email} wurde erstellt. Der Benutzer muss sich noch mit dieser E-Mail registrieren.`,
+            });
+        }
+
+        setOpen(false);
+
+    } catch (error: any) {
+        toast({
+            variant: "destructive",
+            title: isEditing ? 'Fehler beim Aktualisieren' : 'Fehler beim Hinzufügen',
+            description: error.message,
+        });
     }
-    setOpen(false);
   };
 
   return (
