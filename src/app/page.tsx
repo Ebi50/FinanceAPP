@@ -306,7 +306,7 @@ export default function Dashboard() {
         <Tabs defaultValue="overview" className="space-y-4">
           <TabsList>
             <TabsTrigger value="overview">Übersicht</TabsTrigger>
-            <TabsTrigger value="transactions">Transaktionen</TabsTrigger>
+            <TabsTrigger value="transactions" className="data-[state=inactive]:bg-red-200">Transaktionen</TabsTrigger>
             <TabsTrigger value="categories">Kategorien</TabsTrigger>
             <TabsTrigger value="reports">Berichte</TabsTrigger>
             <TabsTrigger value="import">Importieren</TabsTrigger>
