@@ -286,6 +286,23 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
   return (
     <>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <Card className="lg:col-span-3">
+          <CardHeader>
+              <CardTitle className="font-headline">Ausgabenverteilung {currentYear}</CardTitle>
+              <CardDescription>Visuelle Aufschlüsselung Ihrer Ausgaben nach Kategorien für das ausgewählte Jahr.</CardDescription>
+          </CardHeader>
+          <CardContent>
+             {transactionsForChart.length > 0 ? (
+                <div ref={chartRef}>
+                   <ExpensesChart transactions={transactionsForChart} />
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-[350px] text-muted-foreground">
+                    Keine Ausgabendaten für das ausgewählte Jahr vorhanden.
+                </div>
+              )}
+          </CardContent>
+        </Card>
         <div className="lg:col-span-2 flex flex-col gap-4">
             <Card>
             <CardHeader>
@@ -377,23 +394,6 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                 </CardContent>
             </Card>
         </div>
-        <Card className="lg:col-span-3">
-          <CardHeader>
-              <CardTitle className="font-headline">Ausgabenverteilung {currentYear}</CardTitle>
-              <CardDescription>Visuelle Aufschlüsselung Ihrer Ausgaben nach Kategorien für das ausgewählte Jahr.</CardDescription>
-          </CardHeader>
-          <CardContent>
-             {transactionsForChart.length > 0 ? (
-                <div ref={chartRef}>
-                   <ExpensesChart transactions={transactionsForChart} />
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-[350px] text-muted-foreground">
-                    Keine Ausgabendaten für das ausgewählte Jahr vorhanden.
-                </div>
-              )}
-          </CardContent>
-        </Card>
       </div>
       {/* Hidden container for rendering chart for PDF */}
       <div className="absolute -z-10 -left-[9999px] top-0" style={{width: '800px', height: 'auto'}}>
