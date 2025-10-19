@@ -2,7 +2,6 @@ import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 
 admin.initializeApp();
-const db = admin.firestore();
 
 // A white-listed admin email that can be used for the first admin user.
 const ADMIN_EMAIL = 'eberhard.janzen@freenet.de';
@@ -36,6 +35,7 @@ async function verifyAdmin(context: any) {
 export const listUsers = onCall(async (request) => {
   await verifyAdmin(request);
   try {
+    const db = admin.firestore();
     const usersSnapshot = await db.collection('users').get();
     const users = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     return users;
@@ -48,6 +48,7 @@ export const listUsers = onCall(async (request) => {
 export const createUser = onCall(async (request) => {
   await verifyAdmin(request);
   try {
+    const db = admin.firestore();
     const { email, firstName, lastName, role } = request.data;
     const newUserRef = db.collection('users').doc();
     const newUserProfile = { email, firstName, lastName, role, id: newUserRef.id };
@@ -62,6 +63,7 @@ export const createUser = onCall(async (request) => {
 export const updateUser = onCall(async (request) => {
   await verifyAdmin(request);
   try {
+    const db = admin.firestore();
     const { id, ...userData } = request.data;
     if (!id) {
       throw new HttpsError('invalid-argument', 'User ID is required');
@@ -79,6 +81,7 @@ export const updateUser = onCall(async (request) => {
 export const deleteUser = onCall(async (request) => {
   await verifyAdmin(request);
   try {
+    const db = admin.firestore();
     const { id } = request.data;
     if (!id) {
       throw new HttpsError('invalid-argument', 'User ID is required');
