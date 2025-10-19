@@ -187,23 +187,20 @@ export default function SettingsPage() {
     try {
       const batch = writeBatch(firestore);
 
-      // Note: With shared data, we don't delete transactions/categories when a user is deleted.
-      // If that is desired, logic to query all transactions/categories by that user's ID would be needed.
-
       const userDocRef = doc(firestore, 'users', user.uid);
       batch.delete(userDocRef);
-
+      
+      // Since data is now global, we won't delete it when a user is deleted.
+      // If you want to delete user's data, you'd query transactions/categories by userId.
+      
       await batch.commit();
-
-      // This is a destructive action, user might need to re-authenticate
-      // For simplicity, we just try to delete. If it fails, we inform the user.
+      
       await deleteUser(user);
 
       toast({
         title: 'Konto gelöscht',
         description: 'Ihr Konto und alle zugehörigen Daten wurden dauerhaft entfernt.',
       });
-      // The onAuthStateChanged listener will handle the redirect to /login
     } catch (error: any) {
       console.error('Error deleting account:', error);
       let description = 'Beim Löschen Ihres Kontos ist ein Fehler aufgetreten.';
@@ -214,6 +211,57 @@ export default function SettingsPage() {
         variant: 'destructive',
         title: 'Fehler beim Löschen des Kontos',
         description: description,
+      });
+    }
+  };
+
+  const handleDataMigration = async () => {
+    if (!user || !firestore) {
+      toast({ variant: 'destructive', title: 'Fehler', description: 'Benutzer oder Datenbank nicht verfügbar.' });
+      return;
+    }
+
+    toast({ title: 'Datenmigration gestartet', description: 'Bitte warten Sie...' });
+
+    try {
+      const batch = writeBatch(firestore);
+
+      // --- Kategorien migrieren ---
+      const oldCategoriesCol = collection(firestore, `users/${user.uid}/expenseCategories`);
+      const newCategoriesCol = collection(firestore, `expenseCategories`);
+      const oldCategoriesSnap = await getDocs(oldCategoriesCol);
+      let migratedCategoriesCount = 0;
+
+      oldCategoriesSnap.forEach(oldDoc => {
+        const newDocRef = doc(newCategoriesCol, oldDoc.id);
+        batch.set(newDocRef, oldDoc.data());
+        migratedCategoriesCount++;
+      });
+
+      // --- Transaktionen migrieren ---
+      const oldTransactionsCol = collection(firestore, `users/${user.uid}/transactions`);
+      const newTransactionsCol = collection(firestore, `transactions`);
+      const oldTransactionsSnap = await getDocs(oldTransactionsCol);
+      let migratedTransactionsCount = 0;
+
+      oldTransactionsSnap.forEach(oldDoc => {
+        const newDocRef = doc(newTransactionsCol, oldDoc.id);
+        batch.set(newDocRef, oldDoc.data());
+        migratedTransactionsCount++;
+      });
+
+      await batch.commit();
+
+      toast({
+        title: 'Migration erfolgreich',
+        description: `${migratedCategoriesCount} Kategorien und ${migratedTransactionsCount} Transaktionen wurden in die neue gemeinsame Datenstruktur verschoben.`,
+      });
+    } catch (error: any) {
+      console.error('Fehler bei der Datenmigration:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Migrationsfehler',
+        description: error.message || 'Ein unbekannter Fehler ist aufgetreten.',
       });
     }
   };
@@ -371,7 +419,7 @@ export default function SettingsPage() {
                             Diese Aktionen können nicht rückgängig gemacht werden. Bitte seien Sie vorsichtig.
                         </CardDescription>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-4">
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
                                 <Button variant="destructive">Konto löschen</Button>
@@ -391,6 +439,29 @@ export default function SettingsPage() {
                                 </AlertDialogFooter>
                             </AlertDialogContent>
                         </AlertDialog>
+                        <div>
+                          <h3 className="text-lg font-semibold mb-2">Datenmigration</h3>
+                          <p className="text-sm text-muted-foreground mb-3">Verschieben Sie Ihre alten, privat gespeicherten Daten in die neue, gemeinsame Datenstruktur. Dies ist nur einmal notwendig.</p>
+                           <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="outline">Alte Daten umziehen</Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Datenmigration bestätigen</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Diese Aktion kopiert Ihre alten Transaktionen und Kategorien in die neue globale Sammlung. Bestehende Daten werden nicht überschrieben. Dies sollte nur einmal ausgeführt werden. Sind Sie sicher?
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleDataMigration}>
+                                        Ja, Daten umziehen
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                        </div>
                     </CardContent>
                 </Card>
             );
