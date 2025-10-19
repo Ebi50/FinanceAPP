@@ -76,8 +76,9 @@ export default function Dashboard() {
     user ? doc(firestore, 'users', user.uid) : null,
     [firestore, user]
   );
-  const { data: userProfile } = useDoc<{budget?: number}>(userProfileQuery);
+  const { data: userProfile } = useDoc<{budget?: number, role?: 'admin' | 'user'}>(userProfileQuery);
   const budget = userProfile?.budget ?? 2000;
+  const isAdmin = userProfile?.role === 'admin';
 
 
   const handleAddOrUpdateTransaction = (transactionData: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date }) => {
@@ -268,33 +269,35 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="icon">
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                  <span className="sr-only">Alle Transaktionen löschen</span>
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    Sind Sie absolut sicher?
-                  </AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Diese Aktion kann nicht rückgängig gemacht werden. Dadurch werden alle Ihre Transaktionen dauerhaft gelöscht.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={handleDeleteAllTransactions}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  >
-                    Alles löschen
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            {isAdmin && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="icon">
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                    <span className="sr-only">Alle Transaktionen löschen</span>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      Sind Sie absolut sicher?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Diese Aktion kann nicht rückgängig gemacht werden. Dadurch werden alle Ihre Transaktionen dauerhaft gelöscht.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDeleteAllTransactions}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      Alles löschen
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
             <AddTransactionSheet onTransactionAdded={handleAddOrUpdateTransaction}>
               <Button>
                 <PlusCircle className="mr-2 h-4 w-4" />

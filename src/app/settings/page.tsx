@@ -37,8 +37,9 @@ import { PageHeader } from '@/components/page-header';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, setDoc, writeBatch, collection, getDocs, deleteDoc } from 'firebase/firestore';
 import { updateProfile, updatePassword, deleteUser } from 'firebase/auth';
+import { OrganizationTab } from '@/components/organization-tab';
 
-const navItems = [
+const allNavItems = [
   'Allgemein',
   'Sicherheit',
   'Integrationen',
@@ -52,6 +53,7 @@ type UserProfile = {
   lastName?: string;
   email?: string;
   budget?: number;
+  role?: 'admin' | 'user';
 }
 
 export default function SettingsPage() {
@@ -76,6 +78,16 @@ export default function SettingsPage() {
   const [budget, setBudget] = useState(2000);
 
   const { toast } = useToast();
+  
+  const isAdmin = userProfile?.role === 'admin';
+
+  const navItems = useMemo(() => {
+    if (isAdmin) {
+      return allNavItems;
+    }
+    return allNavItems.filter(item => item !== 'Organisation');
+  }, [isAdmin]);
+
 
   useEffect(() => {
     if (userProfile) {
@@ -359,6 +371,9 @@ export default function SettingsPage() {
           </Card>
         );
         break;
+        case 'Organisation':
+          content = isAdmin ? <OrganizationTab /> : <p>Sie haben keine Berechtigung, auf diesen Bereich zuzugreifen.</p>;
+          break;
         case 'Support':
             content = (
               <Card>

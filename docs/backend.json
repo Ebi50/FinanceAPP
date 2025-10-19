@@ -22,13 +22,22 @@
         "lastName": {
           "type": "string",
           "description": "Last name of the user."
+        },
+        "role": {
+          "type": "string",
+          "description": "The role of the user.",
+          "enum": [
+            "admin",
+            "user"
+          ]
         }
       },
       "required": [
         "id",
         "email",
         "firstName",
-        "lastName"
+        "lastName",
+        "role"
       ]
     },
     "ExpenseCategory": {
