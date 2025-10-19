@@ -75,6 +75,7 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [budget, setBudget] = useState(2000);
+  const [isMigrating, setIsMigrating] = useState(false);
 
   const { toast } = useToast();
 
@@ -212,6 +213,66 @@ export default function SettingsPage() {
         title: 'Fehler beim Löschen des Kontos',
         description: description,
       });
+    }
+  };
+
+  const handleDataMigration = async () => {
+    if (!user || !firestore) {
+      toast({
+        variant: 'destructive',
+        title: 'Fehler',
+        description: 'Benutzer nicht angemeldet oder Datenbank nicht verfügbar.',
+      });
+      return;
+    }
+
+    setIsMigrating(true);
+    toast({
+      title: 'Datenmigration gestartet',
+      description: 'Ihre alten Daten werden jetzt kopiert...',
+    });
+
+    try {
+      const batch = writeBatch(firestore);
+
+      // --- Migrate Categories ---
+      const oldCategoriesRef = collection(firestore, `users/${user.uid}/expenseCategories`);
+      const newCategoriesRef = collection(firestore, 'expenseCategories');
+      const categoriesSnapshot = await getDocs(oldCategoriesRef);
+      
+      let migratedCategoriesCount = 0;
+      categoriesSnapshot.forEach(doc => {
+        batch.set(doc(newCategoriesRef, doc.id), doc.data());
+        migratedCategoriesCount++;
+      });
+
+      // --- Migrate Transactions ---
+      const oldTransactionsRef = collection(firestore, `users/${user.uid}/transactions`);
+      const newTransactionsRef = collection(firestore, 'transactions');
+      const transactionsSnapshot = await getDocs(oldTransactionsRef);
+
+      let migratedTransactionsCount = 0;
+      transactionsSnapshot.forEach(doc => {
+        batch.set(doc(newTransactionsRef, doc.id), doc.data());
+        migratedTransactionsCount++;
+      });
+
+      await batch.commit();
+      
+      toast({
+        title: 'Migration erfolgreich!',
+        description: `${migratedCategoriesCount} Kategorien und ${migratedTransactionsCount} Transaktionen wurden erfolgreich verschoben.`,
+      });
+
+    } catch (error) {
+      console.error("Error migrating data:", error);
+      toast({
+        variant: 'destructive',
+        title: 'Migration fehlgeschlagen',
+        description: 'Beim Verschieben Ihrer Daten ist ein Fehler aufgetreten. Prüfen Sie die Konsole für Details.',
+      });
+    } finally {
+      setIsMigrating(false);
     }
   };
   
@@ -361,6 +422,20 @@ export default function SettingsPage() {
             break;
         case 'Erweitert':
             content = (
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Datenmigration</CardTitle>
+                    <CardDescription>
+                      Verschieben Sie alte, privat gespeicherte Daten in die neue, gemeinsame Datenstruktur. Dieser Vorgang ist nur einmal notwendig.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button onClick={handleDataMigration} disabled={isMigrating}>
+                      {isMigrating ? 'Daten werden migriert...' : 'Alte Daten migrieren'}
+                    </Button>
+                  </CardContent>
+                </Card>
                 <Card className="border-destructive">
                     <CardHeader>
                         <CardTitle className="text-destructive">Gefahrenzone</CardTitle>
@@ -390,6 +465,7 @@ export default function SettingsPage() {
                         </AlertDialog>
                     </CardContent>
                 </Card>
+              </>
             );
             break;
       default:
