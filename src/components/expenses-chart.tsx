@@ -1,7 +1,7 @@
 // Note: This component uses Recharts, which is already included in the project's dependencies.
 "use client"
 
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts"
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Cell } from "recharts"
 import { formatCurrency } from "@/lib/utils"
 import type { Transaction, Category } from "@/lib/types";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
@@ -11,6 +11,9 @@ import { useMemo } from "react";
 interface ExpensesChartProps {
   transactions: Transaction[];
 }
+
+const COLORS = ['#A7D1AB', '#FFDA63', '#FF8042', '#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#fd6b6b', '#a0d2db'];
+
 
 export function ExpensesChart({ transactions }: ExpensesChartProps) {
   const { user } = useUser();
@@ -24,20 +27,23 @@ export function ExpensesChart({ transactions }: ExpensesChartProps) {
   }, [categories]);
 
   const expensesByCategory = useMemo(() => {
-    const expenses = transactions.reduce((acc, transaction) => {
-      const categoryName = categoryMap.get(transaction.categoryId) || 'Sonstiges';
-      if (!acc[categoryName]) {
-        acc[categoryName] = 0;
-      }
-      acc[categoryName] += transaction.amount;
-      return acc;
-    }, {} as Record<string, number>);
+    const incomeCategory = categories?.find(c => c.name.toLowerCase() === 'einnahmen');
+    const expenses = transactions
+      .filter(t => t.categoryId !== incomeCategory?.id)
+      .reduce((acc, transaction) => {
+        const categoryName = categoryMap.get(transaction.categoryId) || 'Sonstiges';
+        if (!acc[categoryName]) {
+          acc[categoryName] = 0;
+        }
+        acc[categoryName] += transaction.amount;
+        return acc;
+      }, {} as Record<string, number>);
 
     return Object.entries(expenses).map(([name, total]) => ({
       name,
       total
     }));
-  }, [transactions, categoryMap]);
+  }, [transactions, categoryMap, categories]);
 
 
   return (
@@ -49,6 +55,10 @@ export function ExpensesChart({ transactions }: ExpensesChartProps) {
           fontSize={12}
           tickLine={false}
           axisLine={false}
+          interval={0}
+          angle={-45}
+          textAnchor="end"
+          height={70}
         />
         <YAxis
           stroke="hsl(var(--muted-foreground))"
@@ -64,11 +74,14 @@ export function ExpensesChart({ transactions }: ExpensesChartProps) {
                 borderRadius: "var(--radius)",
             }}
             cursor={{ fill: 'hsl(var(--secondary))' }}
+            formatter={(value: number) => formatCurrency(value)}
         />
-        <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="total" radius={[4, 4, 0, 0]} >
+          {expensesByCategory.map((entry, index) => (
+            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+          ))}
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   )
 }
-
-    
