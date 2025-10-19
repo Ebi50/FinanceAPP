@@ -299,7 +299,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
   const totalIncome = useMemo(() => incomeByDescriptionForTable.reduce((sum, item) => sum + item.total, 0), [incomeByDescriptionForTable]);
   const balance = totalIncome - totalExpenses;
   
-  const periodTitle = selectedMonth !== null ? `${de.localize?.month(selectedMonth)} ${currentYear}` : currentYear;
+  const periodTitle = selectedMonth !== null ? `${de.localize?.month(selectedMonth)} ${currentYear}` : `Gesamtjahr ${currentYear}`;
 
 
   return (
@@ -358,7 +358,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                 </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col sm:flex-row gap-2">
-                <Button variant="secondary" onClick={() => generatePdf("monthly", currentYear, selectedMonth)}>
+                <Button variant="secondary" onClick={() => generatePdf("monthly", currentYear, selectedMonth)} disabled={selectedMonth === null}>
                     <Download className="mr-2 h-4 w-4" />
                     Monatlicher Bericht (PDF)
                 </Button>
@@ -462,7 +462,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                     <CardDescription>
                         Gesamtergebnis für den ausgewählten Zeitraum.
                     </CardDescription>
-                </CardHeader>
+                </Header>
                 <CardContent className="space-y-4">
                     <div className="flex justify-between items-center">
                         <span className="font-medium">Gesamteinnahmen</span>

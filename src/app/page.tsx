@@ -40,7 +40,7 @@ export default function Dashboard() {
   const router = useRouter();
   const { toast } = useToast();
   
-  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
+  const [currentMonth, setCurrentMonth] = useState<number | null>(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -154,16 +154,20 @@ export default function Dashboard() {
   const filteredTransactions = useMemo(() => {
     if (!allTransactions) return [];
   
-    const filtered = allTransactions.filter(t => {
-      if (!t.date || !t.date.toDate) return false;
-  
-      const date = t.date.toDate();
-      if (!isValid(date)) return false;
-      
-      return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+    const filteredByYear = allTransactions.filter(t => {
+        if (!t.date || !t.date.toDate) return false;
+        const date = t.date.toDate();
+        return isValid(date) && date.getFullYear() === currentYear;
     });
-  
-    return filtered.sort((a, b) => {
+
+    const filteredByMonth = currentMonth === null 
+        ? filteredByYear 
+        : filteredByYear.filter(t => {
+            const date = t.date.toDate();
+            return isValid(date) && date.getMonth() === currentMonth;
+        });
+
+    return filteredByMonth.sort((a, b) => {
         const dateA = a.date.toDate();
         const dateB = b.date.toDate();
         if (!isValid(dateA) || !isValid(dateB)) return 0;
@@ -219,11 +223,18 @@ export default function Dashboard() {
           </TabsList>
            {activeTab === 'transactions' && (
               <div className="flex items-center gap-2 pt-4">
-                  <Select value={String(currentMonth)} onValueChange={(value) => setCurrentMonth(Number(value))}>
+                  <Select value={currentMonth === null ? 'all' : String(currentMonth)} onValueChange={(value) => {
+                      if (value === 'all') {
+                          setCurrentMonth(null);
+                      } else {
+                          setCurrentMonth(Number(value));
+                      }
+                  }}>
                     <SelectTrigger className="w-[180px]">
                       <SelectValue placeholder="Monat auswählen" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="all">Alle Monate</SelectItem>
                       {Array.from({ length: 12 }, (_, i) => (
                         <SelectItem key={i} value={String(i)}>
                           {de.localize?.month(i)}
