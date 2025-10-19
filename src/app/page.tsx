@@ -42,6 +42,7 @@ export default function Dashboard() {
   
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
     if (!isUserLoading && !user) {
@@ -198,33 +199,7 @@ export default function Dashboard() {
       </div>
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
         <div className="flex items-center justify-between space-y-2">
-          <div className='flex items-center gap-4'>
-            <h2 className="text-3xl font-headline font-bold tracking-tight">Übersicht</h2>
-            <div className="flex items-center gap-2">
-              <Select value={String(currentMonth)} onValueChange={(value) => setCurrentMonth(Number(value))}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Monat auswählen" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 12 }, (_, i) => (
-                    <SelectItem key={i} value={String(i)}>
-                      {de.localize?.month(i)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={String(currentYear)} onValueChange={(value) => setCurrentYear(Number(value))}>
-                <SelectTrigger className="w-[120px]">
-                  <SelectValue placeholder="Jahr auswählen" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableYears.map(year => (
-                    <SelectItem key={year} value={String(year)}>{year}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          <h2 className="text-3xl font-headline font-bold tracking-tight">Übersicht</h2>
           <div className="flex items-center space-x-2">
             <AddTransactionSheet onTransactionAdded={handleAddOrUpdateTransaction}>
               <Button>
@@ -234,7 +209,7 @@ export default function Dashboard() {
             </AddTransactionSheet>
           </div>
         </div>
-        <Tabs defaultValue="overview" className="space-y-4">
+        <Tabs defaultValue="overview" className="space-y-4" onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="overview" className="data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=inactive]:bg-gray-200">Übersicht</TabsTrigger>
             <TabsTrigger value="transactions" className="data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=inactive]:bg-gray-200">Transaktionen</TabsTrigger>
@@ -242,13 +217,38 @@ export default function Dashboard() {
             <TabsTrigger value="reports" className="data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=inactive]:bg-gray-200">Berichte</TabsTrigger>
             <TabsTrigger value="import" className="data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=inactive]:bg-gray-200">Importieren</TabsTrigger>
           </TabsList>
+           {activeTab === 'transactions' && (
+              <div className="flex items-center gap-2 pt-4">
+                  <Select value={String(currentMonth)} onValueChange={(value) => setCurrentMonth(Number(value))}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Monat auswählen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 12 }, (_, i) => (
+                        <SelectItem key={i} value={String(i)}>
+                          {de.localize?.month(i)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={String(currentYear)} onValueChange={(value) => setCurrentYear(Number(value))}>
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue placeholder="Jahr auswählen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableYears.map(year => (
+                        <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+              </div>
+            )}
           <TabsContent value="reports" className="space-y-4">
             <ReportsTab 
               transactions={allTransactions || []}
               availableYears={availableYears}
               currentYear={currentYear}
               setCurrentYear={setCurrentYear}
-              currentMonth={currentMonth}
             />
           </TabsContent>
           <TabsContent value="import" className="space-y-4">
