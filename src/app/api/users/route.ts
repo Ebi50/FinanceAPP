@@ -1,3 +1,5 @@
+'use server';
+
 import { NextResponse, NextRequest } from 'next/server';
 import * as admin from 'firebase-admin';
 import { initAdmin } from '@/firebase/admin-config';
@@ -7,46 +9,43 @@ initAdmin();
 
 const ADMIN_EMAIL = 'eberhard.janzen@freenet.de';
 
-async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean, error?: string }> {
+async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; error?: string; status?: number }> {
     try {
         const authorization = request.headers.get('Authorization');
         if (!authorization?.startsWith('Bearer ')) {
-            return { isAdmin: false, error: 'No authorization token provided.' };
+            return { isAdmin: false, error: 'No authorization token provided.', status: 401 };
         }
 
         const idToken = authorization.split('Bearer ')[1];
         const decodedToken = await admin.auth().verifyIdToken(idToken);
 
-        // First, check for the 'admin' role directly on the token.
         if (decodedToken.role === 'admin') {
             return { isAdmin: true };
         }
 
-        // If the role isn't present, check if it's the special admin user.
         if (decodedToken.email === ADMIN_EMAIL) {
-            // The user is the special admin. Set the custom claim for future requests.
-            // This is done in the background and won't block the current request.
-            admin.auth().setCustomUserClaims(decodedToken.uid, { role: 'admin' }).catch(console.error);
+            // User is the special admin, but might not have the claim yet.
+            // Set the custom claim in the background for future requests.
+            await admin.auth().setCustomUserClaims(decodedToken.uid, { role: 'admin' });
             // CRUCIALLY, allow the current request to proceed as an admin immediately.
             return { isAdmin: true };
         }
 
-        // If neither condition is met, the user is not an admin.
-        return { isAdmin: false, error: 'User is not an administrator.' };
+        return { isAdmin: false, error: 'User is not an administrator.', status: 403 };
 
     } catch (error) {
         console.error("Admin verification failed:", error);
-        // In case of any error (e.g., invalid token), deny access.
-        return { isAdmin: false, error: 'Token verification failed.' };
+        // In case of any error (e.g., invalid or expired token), deny access.
+        return { isAdmin: false, error: 'Token verification failed.', status: 401 };
     }
 }
 
 
 export async function GET(request: NextRequest) {
-    const { isAdmin, error } = await verifyAdmin(request);
+    const { isAdmin, error, status } = await verifyAdmin(request);
     if (!isAdmin) {
-        // Provide the specific reason for failure
-        return NextResponse.json({ error: error || 'Unauthorized' }, { status: 403 });
+        // If verification fails, immediately return the error. Do not proceed.
+        return NextResponse.json({ error: error || 'Unauthorized' }, { status: status || 403 });
     }
 
     try {
@@ -60,21 +59,17 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-    const { isAdmin, error } = await verifyAdmin(request);
+    const { isAdmin, error, status } = await verifyAdmin(request);
     if (!isAdmin) {
-        return NextResponse.json({ error: error || 'Unauthorized' }, { status: 403 });
+        return NextResponse.json({ error: error || 'Unauthorized' }, { status: status || 403 });
     }
 
     try {
         const { email, firstName, lastName, role } = await request.json();
         
-        // Create user in Firebase Auth
         const userRecord = await admin.auth().createUser({ email });
-
-        // Set custom claims (like role)
         await admin.auth().setCustomUserClaims(userRecord.uid, { role });
         
-        // Create user profile in Firestore
         const newUserProfile = { email, firstName, lastName, role, id: userRecord.uid };
         await admin.firestore().collection('users').doc(userRecord.uid).set(newUserProfile);
         
@@ -87,9 +82,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-    const { isAdmin, error } = await verifyAdmin(request);
+    const { isAdmin, error, status } = await verifyAdmin(request);
     if (!isAdmin) {
-        return NextResponse.json({ error: error || 'Unauthorized' }, { status: 403 });
+        return NextResponse.json({ error: error || 'Unauthorized' }, { status: status || 403 });
     }
     
     try {
@@ -98,12 +93,10 @@ export async function PUT(request: NextRequest) {
             return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
         }
 
-        // Update custom claims if role is changed
         if (userData.role) {
             await admin.auth().setCustomUserClaims(id, { role: userData.role });
         }
 
-        // Update Firestore document
         await admin.firestore().collection('users').doc(id).update(userData);
         
         const updatedUserDoc = await admin.firestore().collection('users').doc(id).get();
@@ -117,9 +110,9 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-    const { isAdmin, error } = await verifyAdmin(request);
+    const { isAdmin, error, status } = await verifyAdmin(request);
     if (!isAdmin) {
-        return NextResponse.json({ error: error || 'Unauthorized' }, { status: 403 });
+        return NextResponse.json({ error: error || 'Unauthorized' }, { status: status || 403 });
     }
 
     try {
@@ -128,10 +121,7 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
         }
         
-        // Delete from Auth first
         await admin.auth().deleteUser(id);
-        
-        // Then delete from Firestore
         await admin.firestore().collection('users').doc(id).delete();
         
         return NextResponse.json({ message: 'User deleted successfully' }, { status: 200 });
