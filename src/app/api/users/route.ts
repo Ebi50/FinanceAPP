@@ -27,7 +27,8 @@ async function verifyAdmin(req: NextRequest) {
     if ((decoded as any).role === "admin") return { ok: true, decoded };
 
     return { ok: false, res: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
-  } catch {
+  } catch(e: any) {
+    console.error("Token verification failed:", e.message);
     return { ok: false, res: NextResponse.json({ error: "Invalid token" }, { status: 401 }) };
   }
 }
@@ -53,4 +54,109 @@ export async function GET(req: NextRequest) {
   }));
 
   return NextResponse.json(out);
+}
+
+export async function POST(req: NextRequest) {
+    const vr = await verifyAdmin(req);
+    if (!vr.ok) return vr.res!;
+
+    try {
+        const { email, password, firstName, lastName, role } = await req.json();
+
+        if (!email || !password || !firstName || !lastName || !role) {
+            return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+        }
+
+        const userRecord = await adminAuth.createUser({
+            email,
+            password,
+            displayName: `${firstName} ${lastName}`,
+        });
+
+        await adminAuth.setCustomUserClaims(userRecord.uid, { role });
+        
+        await adminDb.collection('users').doc(userRecord.uid).set({
+            firstName,
+            lastName,
+            email,
+            role,
+        }, { merge: true });
+
+        const finalUser = {
+            id: userRecord.uid,
+            email,
+            firstName,
+            lastName,
+            role,
+        };
+        
+        return NextResponse.json(finalUser, { status: 201 });
+
+    } catch (error: any) {
+        console.error("Error creating user:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
+export async function PUT(req: NextRequest) {
+    const vr = await verifyAdmin(req);
+    if (!vr.ok) return vr.res!;
+
+    try {
+        const { id, firstName, lastName, role, email } = await req.json();
+
+        if (!id || !firstName || !lastName || !role || !email) {
+            return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+        }
+        
+        await adminAuth.updateUser(id, {
+            displayName: `${firstName} ${lastName}`,
+        });
+
+        await adminAuth.setCustomUserClaims(id, { role });
+
+        await adminDb.collection('users').doc(id).set({
+            firstName,
+            lastName,
+            role,
+        }, { merge: true });
+
+        const updatedUser = {
+            id,
+            email,
+            firstName,
+            lastName,
+            role,
+        };
+
+        return NextResponse.json(updatedUser, { status: 200 });
+
+    } catch (error: any) {
+        console.error("Error updating user:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
+export async function DELETE(req: NextRequest) {
+    const vr = await verifyAdmin(req);
+    if (!vr.ok) return vr.res!;
+
+    try {
+        const { id } = await req.json();
+
+        if (!id) {
+            return NextResponse.json({ error: "User ID is required" }, { status: 400 });
+        }
+        
+        await adminAuth.deleteUser(id);
+        
+        // Optional: Delete user data from Firestore as well
+        await adminDb.collection('users').doc(id).delete();
+
+        return NextResponse.json({ message: "User deleted successfully" }, { status: 200 });
+
+    } catch (error: any) {
+        console.error("Error deleting user:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 }
