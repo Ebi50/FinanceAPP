@@ -67,14 +67,10 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
   const incomeCategory = useMemo(() => categories?.find(c => c.name.toLowerCase() === 'einnahmen'), [categories]);
 
   const [transactionsForChart, setTransactionsForChart] = useState<Transaction[]>([]);
+  const [yearlyTransactions, setYearlyTransactions] = useState<Transaction[]>([]);
 
   const generatePdf = async (period: "monthly" | "yearly", year: number, month: number) => {
     const doc = new jsPDF() as AutoTableDoc;
-
-    if (transactions.length === 0) {
-      toast({ title: "Keine Daten", description: "Keine Transaktionen für die Berichterstellung vorhanden." });
-      return;
-    }
     
     const reportDate = new Date(year, month);
     
@@ -233,12 +229,14 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
   };
   
   useEffect(() => {
-    // Initially render the chart for the current year
-    const yearlyTransactions = transactions.filter(t => {
+    // This effect now sets both expenses for the chart and all transactions for the year
+    const yearlyData = transactions.filter(t => {
       const transactionDate = t.date.toDate();
       return isValid(transactionDate) && getYear(transactionDate) === currentYear;
     });
-    const yearlyExpenses = yearlyTransactions.filter(t => t.categoryId !== incomeCategory?.id);
+    setYearlyTransactions(yearlyData);
+    
+    const yearlyExpenses = yearlyData.filter(t => t.categoryId !== incomeCategory?.id);
     setTransactionsForChart(yearlyExpenses);
   }, [transactions, currentYear, incomeCategory]);
 
@@ -264,6 +262,26 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
       total
     })).sort((a,b) => b.total - a.total);
   }, [transactionsForChart, categoryMap]);
+  
+  const incomeByDescriptionForTable = useMemo(() => {
+    if (!incomeCategory) return [];
+    
+    const incomes = yearlyTransactions
+      .filter(t => t.categoryId === incomeCategory.id)
+      .reduce((acc, transaction) => {
+        const description = transaction.description || 'Unbekannte Einnahme';
+        if (!acc[description]) {
+          acc[description] = 0;
+        }
+        acc[description] += transaction.amount;
+        return acc;
+      }, {} as Record<string, number>);
+
+    return Object.entries(incomes).map(([name, total]) => ({
+      name,
+      total
+    })).sort((a,b) => b.total - a.total);
+  }, [yearlyTransactions, incomeCategory]);
 
   return (
     <>
@@ -299,7 +317,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                         <Download className="mr-2 h-4 w-4" />
                         Monatlicher Bericht (PDF)
                     </Button>
-                    <Button variant="secondary" onClick={() => generatePdf("yearly", currentYear, currentMonth)}>
+                    <Button variant="secondary" onClick={() => generatePdf("yearly", currentYear, 0)}>
                         <Download className="mr-2 h-4 w-4" />
                         Jahresbericht (PDF)
                     </Button>
@@ -326,6 +344,34 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                                     <TableCell className="text-right">{formatCurrency(item.total)}</TableCell>
                                 </TableRow>
                             ))}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
+             <Card>
+                <CardHeader>
+                    <CardTitle className="font-headline">Einnahmenübersicht {currentYear}</CardTitle>
+                    <CardDescription>Gesamteinnahmen für das ausgewählte Jahr.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Einnahmequelle</TableHead>
+                                <TableHead className="text-right">Gesamtbetrag</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {incomeByDescriptionForTable.length > 0 ? incomeByDescriptionForTable.map(item => (
+                                <TableRow key={item.name}>
+                                    <TableCell className="font-medium">{item.name}</TableCell>
+                                    <TableCell className="text-right">{formatCurrency(item.total)}</TableCell>
+                                </TableRow>
+                            )) : (
+                                <TableRow>
+                                    <TableCell colSpan={2} className="text-center text-muted-foreground">Keine Einnahmen in diesem Jahr erfasst.</TableCell>
+                                </TableRow>
+                            )}
                         </TableBody>
                     </Table>
                 </CardContent>
