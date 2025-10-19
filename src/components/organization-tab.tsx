@@ -70,10 +70,13 @@ export function OrganizationTab() {
 
   useEffect(() => {
     const fetchUsers = async () => {
-      if (!currentUserAuth) return;
+      if (!currentUserAuth) {
+        setUsersLoading(false);
+        return;
+      };
       setUsersLoading(true);
       try {
-        const idToken = await currentUserAuth.getIdToken();
+        const idToken = await currentUserAuth.getIdToken(true); // Force refresh the token
         const response = await fetch('/api/users', {
           headers: {
             'Authorization': `Bearer ${idToken}`
@@ -84,7 +87,7 @@ export function OrganizationTab() {
           try {
             errorData = await response.json();
           } catch(e) {
-            errorData = { error: 'Failed to parse error response.' };
+            errorData = { error: 'Failed to parse error response. The server might be down or returning HTML instead of JSON.' };
           }
           throw new Error(errorData.error || `Request failed with status ${response.status}`);
         }
@@ -102,7 +105,10 @@ export function OrganizationTab() {
       }
     };
 
-    fetchUsers();
+    // We wait for the user to be loaded before fetching
+    if (currentUserAuth) {
+      fetchUsers();
+    }
   }, [currentUserAuth, toast]);
 
 
