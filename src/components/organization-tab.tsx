@@ -80,8 +80,13 @@ export function OrganizationTab() {
           }
         });
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to fetch users.');
+          let errorData;
+          try {
+            errorData = await response.json();
+          } catch(e) {
+            errorData = { error: 'Failed to parse error response.' };
+          }
+          throw new Error(errorData.error || `Request failed with status ${response.status}`);
         }
         const data = await response.json();
         setUsers(data);

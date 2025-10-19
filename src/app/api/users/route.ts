@@ -1,14 +1,23 @@
+'use server';
 import { NextResponse } from 'next/server';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { initAdmin } from '@/firebase/admin-config';
+import * as admin from 'firebase-admin';
 
 // Initialize Firebase Admin SDK
-const adminApp = initAdmin();
-const adminAuth = getAuth(adminApp);
-const adminDb = getFirestore(adminApp);
+let adminApp: admin.app.App;
+try {
+    adminApp = initAdmin();
+} catch (e) {
+    console.error("Failed to initialize Firebase Admin SDK in route.", e);
+}
+
 
 async function verifyAdmin(request: Request): Promise<string | null> {
+    const adminDb = getFirestore(adminApp);
+    const adminAuth = getAuth(adminApp);
+    
     const authorization = request.headers.get('Authorization');
     if (authorization?.startsWith('Bearer ')) {
         const idToken = authorization.split('Bearer ')[1];
@@ -28,12 +37,16 @@ async function verifyAdmin(request: Request): Promise<string | null> {
 
 // GET all users (Admin only)
 export async function GET(request: Request) {
+    if (!adminApp) {
+        return NextResponse.json({ error: 'Admin SDK not initialized' }, { status: 500 });
+    }
     const adminUid = await verifyAdmin(request);
     if (!adminUid) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
     try {
+        const adminDb = getFirestore(adminApp);
         const usersSnapshot = await adminDb.collection('users').get();
         const users = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         return NextResponse.json(users);
@@ -45,12 +58,16 @@ export async function GET(request: Request) {
 
 // POST a new user (Admin only)
 export async function POST(request: Request) {
+     if (!adminApp) {
+        return NextResponse.json({ error: 'Admin SDK not initialized' }, { status: 500 });
+    }
     const adminUid = await verifyAdmin(request);
     if (!adminUid) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
     try {
+        const adminDb = getFirestore(adminApp);
         const { email, firstName, lastName, role } = await request.json();
         
         // This just creates the user document. The user must still register via Firebase Auth client.
@@ -68,19 +85,24 @@ export async function POST(request: Request) {
 
 // PUT (update) a user (Admin only)
 export async function PUT(request: Request) {
+     if (!adminApp) {
+        return NextResponse.json({ error: 'Admin SDK not initialized' }, { status: 500 });
+    }
     const adminUid = await verifyAdmin(request);
     if (!adminUid) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
     try {
+        const adminDb = getFirestore(adminApp);
         const { id, ...userData } = await request.json();
         if (!id) {
             return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
         }
         await adminDb.collection('users').doc(id).update(userData);
-        const updatedUser = await adminDb.collection('users').doc(id).get();
-        return NextResponse.json({ id: updatedUser.id, ...updatedUser.data() });
+        const updatedUserDoc = await adminDb.collection('users').doc(id).get();
+        const updatedUser = { id: updatedUserDoc.id, ...updatedUserDoc.data() };
+        return NextResponse.json(updatedUser);
     } catch (error) {
         console.error("Error updating user:", error);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -90,12 +112,16 @@ export async function PUT(request: Request) {
 
 // DELETE a user (Admin only)
 export async function DELETE(request: Request) {
+     if (!adminApp) {
+        return NextResponse.json({ error: 'Admin SDK not initialized' }, { status: 500 });
+    }
     const adminUid = await verifyAdmin(request);
     if (!adminUid) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
     try {
+        const adminDb = getFirestore(adminApp);
         const { id } = await request.json();
         if (!id) {
             return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
