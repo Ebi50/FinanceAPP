@@ -44,7 +44,6 @@ import {
   } from '@/components/ui/select';
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from '@/firebase';
-import { getFunctions, httpsCallable } from 'firebase/functions';
 
 type UserProfile = {
   id: string;
@@ -69,21 +68,34 @@ export function OrganizationTab() {
   
   const { toast } = useToast();
 
-  const functions = useMemo(() => currentUserAuth ? getFunctions() : null, [currentUserAuth]);
-
   useEffect(() => {
     const fetchUsers = async () => {
-      if (!currentUserAuth || !functions) {
+      if (!currentUserAuth) {
         setUsersLoading(false);
         return;
       };
       setUsersLoading(true);
       try {
-        // Force a token refresh to get latest custom claims
-        await currentUserAuth.getIdToken(true);
-        const listUsers = httpsCallable(functions, 'listUsers');
-        const response: any = await listUsers();
-        setUsers(response.data as UserProfile[]);
+        const idToken = await currentUserAuth.getIdToken();
+        const response = await fetch('/api/users', {
+          headers: {
+            'Authorization': `Bearer ${idToken}`
+          }
+        });
+
+        if (!response.ok) {
+          let errorData;
+          try {
+            errorData = await response.json();
+          } catch(e) {
+            errorData = { error: 'Failed to parse error response. The server might be down or returning HTML instead of JSON.' };
+          }
+          throw new Error(errorData.error || `Request failed with status ${response.status}`);
+        }
+        
+        const data = await response.json();
+        setUsers(data);
+
       } catch (error: any) {
         console.error("Error fetching users:", error);
         toast({
@@ -99,7 +111,7 @@ export function OrganizationTab() {
     if (currentUserAuth) {
       fetchUsers();
     }
-  }, [currentUserAuth, functions, toast]);
+  }, [currentUserAuth, toast]);
 
 
   const sortedUsers = useMemo(() => {
@@ -128,10 +140,17 @@ export function OrganizationTab() {
   };
 
   const handleDelete = async (userId: string) => {
-    if (!currentUserAuth || !functions) return;
+    if (!currentUserAuth) return;
     try {
-        const deleteUserFunc = httpsCallable(functions, 'deleteUser');
-        await deleteUserFunc({ id: userId });
+        const idToken = await currentUserAuth.getIdToken();
+        await fetch('/api/users', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          },
+          body: JSON.stringify({ id: userId })
+        });
         setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
         toast({
             title: 'Benutzer gelöscht',
@@ -147,7 +166,7 @@ export function OrganizationTab() {
   };
 
   const handleSave = async () => {
-    if (!email.trim() || !firstName.trim() || !lastName.trim() || !currentUserAuth || !functions) {
+    if (!email.trim() || !firstName.trim() || !lastName.trim() || !currentUserAuth) {
         toast({
             variant: "destructive",
             title: "Fehler",
@@ -157,14 +176,24 @@ export function OrganizationTab() {
     }
     
     try {
+        const idToken = await currentUserAuth.getIdToken();
         const userData = { id: currentUser?.id, email, firstName, lastName, role };
         
-        const saveUserFunc = isEditing 
-            ? httpsCallable(functions, 'updateUser') 
-            : httpsCallable(functions, 'createUser');
-        
-        const result: any = await saveUserFunc(userData);
-        const savedUser = result.data;
+        const response = await fetch('/api/users', {
+            method: isEditing ? 'PUT' : 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify(userData)
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Request failed with status ${response.status}`);
+        }
+
+        const savedUser = await response.json();
         
         if (isEditing) {
             setUsers(prevUsers => prevUsers.map(u => u.id === savedUser.id ? savedUser : u));
