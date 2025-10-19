@@ -384,7 +384,7 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <p>Für Support-Anfragen senden Sie bitte eine E-Mail an: <a href="mailto:support@expencetrack.app" className="text-primary underline">support@expencetrack.app</a></p>
+                    <p>Für Support-Anfragen senden Sie bitte eine E-Mail an: <a href={`mailto:${email}`} className="text-primary underline">{email}</a></p>
                 </CardContent>
               </Card>
             );
