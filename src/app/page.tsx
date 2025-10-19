@@ -305,11 +305,11 @@ export default function Dashboard() {
         </div>
         <Tabs defaultValue="overview" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="overview">Übersicht</TabsTrigger>
-            <TabsTrigger value="transactions" className="data-[state=inactive]:bg-red-200">Transaktionen</TabsTrigger>
-            <TabsTrigger value="categories">Kategorien</TabsTrigger>
-            <TabsTrigger value="reports" className="data-[state=active]:bg-blue-800 data-[state=active]:text-white">Berichte</TabsTrigger>
-            <TabsTrigger value="import">Importieren</TabsTrigger>
+            <TabsTrigger value="overview" className="data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=inactive]:bg-gray-200">Übersicht</TabsTrigger>
+            <TabsTrigger value="transactions" className="data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=inactive]:bg-gray-200">Transaktionen</TabsTrigger>
+            <TabsTrigger value="categories" className="data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=inactive]:bg-gray-200">Kategorien</TabsTrigger>
+            <TabsTrigger value="reports" className="data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=inactive]:bg-gray-200">Berichte</TabsTrigger>
+            <TabsTrigger value="import" className="data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=inactive]:bg-gray-200">Importieren</TabsTrigger>
           </TabsList>
           <TabsContent value="reports" className="space-y-4">
             <ReportsTab 
