@@ -121,32 +121,33 @@ export function AddTransactionSheet({
 
   useEffect(() => {
     if (open) {
-      let defaultValues: Partial<TransactionFormValues> = {
+      let defaultValues: Partial<TransactionFormValues>;
+
+      if (transaction) {
+          const transactionDate = transaction.date ? transaction.date.toDate() : new Date();
+          
+          const amounts = transaction.items && transaction.items.length > 0 
+              ? transaction.items.map(item => ({ ...item, value: item.value || '' as any }))
+              : [{ value: transaction.amount || '' as any, description: '' }];
+
+
+          defaultValues = {
+              id: transaction.id,
+              description: transaction.description || '',
+              amounts: amounts,
+              categoryId: transaction.categoryId || '',
+              date: isValid(transactionDate) ? transactionDate : new Date(),
+              isRecurring: (transaction as any).isRecurring || false,
+          };
+      } else {
+        defaultValues = {
           id: undefined,
           description: '',
           amounts: [{ value: '' as any, description: '' }],
           categoryId: '',
           date: new Date(),
           isRecurring: false,
-      };
-
-      if (transaction) {
-          // This ensures that a Firestore Timestamp is converted to a JS Date object
-          const transactionDate = transaction.date ? transaction.date.toDate() : new Date();
-          
-          const amounts = transaction.items && transaction.items.length > 0 
-              ? transaction.items 
-              : [{ value: transaction.amount, description: '' }];
-
-
-          defaultValues = {
-              id: transaction.id,
-              description: transaction.description || '',
-              amounts: amounts.map(item => ({...item, value: item.value || '' as any})),
-              categoryId: transaction.categoryId || '',
-              date: isValid(transactionDate) ? transactionDate : new Date(),
-              isRecurring: (transaction as any).isRecurring || false,
-          };
+        };
       }
       
       form.reset(defaultValues as TransactionFormValues);
