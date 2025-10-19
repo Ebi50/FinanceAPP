@@ -63,7 +63,6 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
       return;
     }
     
-    // For monthly report, use the month passed in. For yearly, it doesn't matter.
     const reportDate = new Date(year, month);
     
     const reportTransactions = transactions.filter(t => {
