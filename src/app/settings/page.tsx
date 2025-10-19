@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -34,9 +34,12 @@ import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/page-header';
-import { useUser, useFirestore, useDoc, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
-import { doc, writeBatch, collection, getDocs } from 'firebase/firestore';
+import { useUser, useFirestore, useDoc, useMemoFirebase, setDocumentNonBlocking, useCollection } from '@/firebase';
+import { doc, writeBatch, collection, getDocs, query, where, Timestamp } from 'firebase/firestore';
 import { updateProfile, updatePassword, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import type { Transaction } from '@/lib/types';
+import { de } from 'date-fns/locale';
+import { isValid, getYear, getMonth, startOfYear, endOfYear, startOfMonth, endOfMonth } from 'date-fns';
 
 const navItems = [
   'Allgemein',
@@ -67,6 +70,12 @@ export default function SettingsPage() {
     [firestore, user]
   );
   const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileQuery);
+  
+  const transactionsQuery = useMemoFirebase(() => 
+    user ? collection(firestore, 'transactions') : null,
+    [firestore, user]
+  );
+  const { data: allTransactions } = useCollection<Transaction>(transactionsQuery);
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -76,8 +85,24 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [budget, setBudget] = useState(2000);
   const [isMigrating, setIsMigrating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const [deleteYear, setDeleteYear] = useState<number | null>(null);
+  const [deleteMonth, setDeleteMonth] = useState<string>('all'); // 'all' or month index "0"-"11"
 
   const { toast } = useToast();
+
+  const availableYearsForDelete = useMemo(() => {
+    if (!allTransactions) return [];
+    const years = new Set(allTransactions.map(t => getYear(t.date.toDate())));
+    return Array.from(years).sort((a, b) => b - a);
+  }, [allTransactions]);
+
+  useEffect(() => {
+    if (availableYearsForDelete.length > 0 && !deleteYear) {
+      setDeleteYear(availableYearsForDelete[0]);
+    }
+  }, [availableYearsForDelete, deleteYear]);
 
   useEffect(() => {
     if (userProfile) {
@@ -186,21 +211,16 @@ export default function SettingsPage() {
   const handleDeleteAccount = async () => {
     if (!user || !firestore) return;
     try {
-      const batch = writeBatch(firestore);
-
+      // We are not deleting any user data to allow for collaborative features.
+      // But we will delete the user's profile document.
       const userDocRef = doc(firestore, 'users', user.uid);
-      batch.delete(userDocRef);
-      
-      // Since data is now global, we won't delete it when a user is deleted.
-      // If you want to delete user's data, you'd query transactions/categories by userId.
-      
-      await batch.commit();
+      await writeBatch(firestore).delete(userDocRef).commit();
       
       await deleteUser(user);
 
       toast({
         title: 'Konto gelöscht',
-        description: 'Ihr Konto und alle zugehörigen Daten wurden dauerhaft entfernt.',
+        description: 'Ihr Konto wurde dauerhaft entfernt.',
       });
     } catch (error: any) {
       console.error('Error deleting account:', error);
@@ -282,6 +302,60 @@ export default function SettingsPage() {
     }
   };
   
+  const handleDeletePeriodData = async () => {
+    if (!user || !firestore || deleteYear === null) {
+      toast({ variant: 'destructive', title: 'Fehler', description: 'Bitte wählen Sie ein Jahr aus.' });
+      return;
+    }
+    
+    setIsDeleting(true);
+
+    const transactionsRef = collection(firestore, 'transactions');
+    let startDate: Date;
+    let endDate: Date;
+    let confirmationText = '';
+
+    if (deleteMonth === 'all') {
+        startDate = startOfYear(new Date(deleteYear, 0, 1));
+        endDate = endOfYear(new Date(deleteYear, 11, 31));
+        confirmationText = `alle Daten für das Jahr ${deleteYear}`;
+    } else {
+        const monthIndex = parseInt(deleteMonth, 10);
+        startDate = startOfMonth(new Date(deleteYear, monthIndex));
+        endDate = endOfMonth(new Date(deleteYear, monthIndex));
+        confirmationText = `alle Daten für ${de.localize?.month(monthIndex)} ${deleteYear}`;
+    }
+
+    const q = query(transactionsRef, where('date', '>=', Timestamp.fromDate(startDate)), where('date', '<=', Timestamp.fromDate(endDate)));
+
+    try {
+        const querySnapshot = await getDocs(q);
+        if (querySnapshot.empty) {
+            toast({ title: 'Keine Daten gefunden', description: `Es gibt keine Transaktionen zum Löschen für ${confirmationText}.` });
+            setIsDeleting(false);
+            return;
+        }
+
+        const batch = writeBatch(firestore);
+        querySnapshot.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+
+        await batch.commit();
+        toast({ title: 'Daten gelöscht', description: `Es wurden ${querySnapshot.size} Transaktionen für ${confirmationText} gelöscht.` });
+
+    } catch (error) {
+        console.error("Error deleting period data:", error);
+        toast({
+            variant: 'destructive',
+            title: 'Löschen fehlgeschlagen',
+            description: 'Beim Löschen der Daten ist ein Fehler aufgetreten.',
+        });
+    } finally {
+        setIsDeleting(false);
+    }
+};
+
   const renderContent = () => {
     if (isProfileLoading) {
       return <p>Lade...</p>
@@ -450,25 +524,87 @@ export default function SettingsPage() {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button variant="destructive">Konto löschen</Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Diese Aktion kann nicht rückgängig gemacht werden. Dadurch werden Ihr Konto und alle Ihre Daten dauerhaft gelöscht.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                                    <AlertDialogAction onClick={handleDeleteAccount} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                        Ich verstehe, mein Konto löschen
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
+                        <div>
+                            <h4 className="font-semibold mb-2">Transaktionen löschen</h4>
+                            <div className="flex flex-col sm:flex-row gap-2 items-center">
+                                <Select
+                                    value={deleteYear?.toString() ?? ''}
+                                    onValueChange={(value) => setDeleteYear(Number(value))}
+                                >
+                                    <SelectTrigger className="w-full sm:w-[120px]">
+                                        <SelectValue placeholder="Jahr" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {availableYearsForDelete.map(year => (
+                                            <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <Select
+                                    value={deleteMonth}
+                                    onValueChange={setDeleteMonth}
+                                >
+                                    <SelectTrigger className="w-full sm:w-[180px]">
+                                        <SelectValue placeholder="Monat" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Ganzes Jahr</SelectItem>
+                                        {Array.from({ length: 12 }, (_, i) => (
+                                            <SelectItem key={i} value={String(i)}>
+                                                {de.localize?.month(i)}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="destructive" className="w-full sm:w-auto" disabled={!deleteYear || isDeleting}>
+                                            {isDeleting ? 'Löschen...' : 'Daten löschen'}
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                Diese Aktion kann nicht rückgängig gemacht werden. Es werden alle Transaktionen für 
+                                                {deleteMonth === 'all' ? ` das Jahr ${deleteYear}` : ` ${de.localize?.month(Number(deleteMonth))} ${deleteYear}`}
+                                                {' '}dauerhaft gelöscht.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                            <AlertDialogAction onClick={handleDeletePeriodData} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                                Ich verstehe, Daten löschen
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            </div>
+                        </div>
+
+                        <div className="border-t pt-4">
+                           <h4 className="font-semibold mb-2">Konto löschen</h4>
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="destructive">Konto löschen</Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird Ihr Konto dauerhaft gelöscht.
+                                            Ihre Transaktionsdaten bleiben für andere Benutzer erhalten.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                        <AlertDialogAction onClick={handleDeleteAccount} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                            Ich verstehe, mein Konto löschen
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        </div>
                     </CardContent>
                 </Card>
               </>
