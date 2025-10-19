@@ -362,6 +362,40 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                 )}
             </CardContent>
             </Card>
+             <Card>
+                <CardHeader>
+                    <CardTitle className="font-headline">Einnahmenübersicht {currentYear} {selectedMonth !== null ? `(${de.localize?.month(selectedMonth)})` : ''}</CardTitle>
+                    <CardDescription>Gesamteinnahmen für den ausgewählten Zeitraum.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Einnahmequelle</TableHead>
+                                <TableHead className="text-right">Gesamtbetrag</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {incomeByDescriptionForTable.length > 0 ? incomeByDescriptionForTable.map(item => (
+                                <TableRow key={item.name}>
+                                    <TableCell className="font-medium">{item.name}</TableCell>
+                                    <TableCell className="text-right">{formatCurrency(item.total)}</TableCell>
+                                </TableRow>
+                            )) : (
+                                <TableRow>
+                                    <TableCell colSpan={2} className="text-center text-muted-foreground">Keine Einnahmen in diesem Zeitraum erfasst.</TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                         <UiTableFooter>
+                            <TableRow>
+                                <TableCell className="font-bold">Gesamtsumme</TableCell>
+                                <TableCell className="text-right font-bold">{formatCurrency(totalIncome)}</TableCell>
+                            </TableRow>
+                        </UiTableFooter>
+                    </Table>
+                </CardContent>
+            </Card>
         </div>
         <div className="lg:col-span-2 flex flex-col gap-4">
              <div className="space-y-2">
@@ -419,40 +453,6 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                             <TableRow>
                                 <TableCell className="font-bold">Gesamtsumme</TableCell>
                                 <TableCell className="text-right font-bold">{formatCurrency(totalExpenses)}</TableCell>
-                            </TableRow>
-                        </UiTableFooter>
-                    </Table>
-                </CardContent>
-            </Card>
-             <Card>
-                <CardHeader>
-                    <CardTitle className="font-headline">Einnahmenübersicht {currentYear} {selectedMonth !== null ? `(${de.localize?.month(selectedMonth)})` : ''}</CardTitle>
-                    <CardDescription>Gesamteinnahmen für den ausgewählten Zeitraum.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Einnahmequelle</TableHead>
-                                <TableHead className="text-right">Gesamtbetrag</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {incomeByDescriptionForTable.length > 0 ? incomeByDescriptionForTable.map(item => (
-                                <TableRow key={item.name}>
-                                    <TableCell className="font-medium">{item.name}</TableCell>
-                                    <TableCell className="text-right">{formatCurrency(item.total)}</TableCell>
-                                </TableRow>
-                            )) : (
-                                <TableRow>
-                                    <TableCell colSpan={2} className="text-center text-muted-foreground">Keine Einnahmen in diesem Zeitraum erfasst.</TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                         <UiTableFooter>
-                            <TableRow>
-                                <TableCell className="font-bold">Gesamtsumme</TableCell>
-                                <TableCell className="text-right font-bold">{formatCurrency(totalIncome)}</TableCell>
                             </TableRow>
                         </UiTableFooter>
                     </Table>
