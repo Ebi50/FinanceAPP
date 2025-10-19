@@ -44,7 +44,7 @@ import { collection, Timestamp } from 'firebase/firestore';
 
 const transactionSchema = z.object({
   id: z.string().optional(),
-  description: z.string().min(2, "Beschreibung ist erforderlich."),
+  description: z.string().optional(),
   amounts: z.array(z.object({ value: z.coerce.number({invalid_type_error: 'Ungültiger Betrag'}).positive('Betrag muss positiv sein.') })).min(1, 'Mindestens ein Betrag ist erforderlich.'),
   categoryId: z.string().min(1, 'Kategorie ist erforderlich.'),
   date: z.date({ required_error: 'Datum ist erforderlich.' }),
@@ -175,7 +175,7 @@ export function AddTransactionSheet({
 
     const newTransaction: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date } = {
       id: data.id,
-      description: data.description,
+      description: data.description || '',
       amount: totalAmount,
       categoryId: data.categoryId,
       date: data.date,
