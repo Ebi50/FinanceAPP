@@ -44,6 +44,7 @@ import {
   } from '@/components/ui/select';
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from '@/firebase';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 type UserProfile = {
   id: string;
@@ -68,31 +69,22 @@ export function OrganizationTab() {
   
   const { toast } = useToast();
 
+  const functions = useMemo(() => currentUserAuth ? getFunctions() : null, [currentUserAuth]);
+
   useEffect(() => {
     const fetchUsers = async () => {
-      if (!currentUserAuth) {
+      if (!currentUserAuth || !functions) {
         setUsersLoading(false);
         return;
       };
       setUsersLoading(true);
       try {
-        const idToken = await currentUserAuth.getIdToken(true); // Force refresh the token
-        const response = await fetch('/api/users', {
-          headers: {
-            'Authorization': `Bearer ${idToken}`
-          }
-        });
-        if (!response.ok) {
-          let errorData;
-          try {
-            errorData = await response.json();
-          } catch(e) {
-            errorData = { error: 'Failed to parse error response. The server might be down or returning HTML instead of JSON.' };
-          }
-          throw new Error(errorData.error || `Request failed with status ${response.status}`);
+        const listUsers = httpsCallable(functions, 'listUsers');
+        const response: any = await listUsers();
+        if (response.data.error) {
+            throw new Error(response.data.error);
         }
-        const data = await response.json();
-        setUsers(data);
+        setUsers(response.data);
       } catch (error: any) {
         console.error("Error fetching users:", error);
         toast({
@@ -105,11 +97,10 @@ export function OrganizationTab() {
       }
     };
 
-    // We wait for the user to be loaded before fetching
     if (currentUserAuth) {
       fetchUsers();
     }
-  }, [currentUserAuth, toast]);
+  }, [currentUserAuth, functions, toast]);
 
 
   const sortedUsers = useMemo(() => {
@@ -138,21 +129,14 @@ export function OrganizationTab() {
   };
 
   const handleDelete = async (userId: string) => {
-    if (!currentUserAuth) return;
+    if (!currentUserAuth || !functions) return;
     try {
-        const idToken = await currentUserAuth.getIdToken();
-        const response = await fetch(`/api/users`, {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${idToken}`
-            },
-            body: JSON.stringify({ id: userId })
-        });
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to delete user.');
+        const deleteUserFunc = httpsCallable(functions, 'deleteUser');
+        const result: any = await deleteUserFunc({ id: userId });
+        if (result.data.error) {
+            throw new Error(result.data.error);
         }
+
         setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
         toast({
             title: 'Benutzer gelöscht',
@@ -168,7 +152,7 @@ export function OrganizationTab() {
   };
 
   const handleSave = async () => {
-    if (!email.trim() || !firstName.trim() || !lastName.trim() || !currentUserAuth) {
+    if (!email.trim() || !firstName.trim() || !lastName.trim() || !currentUserAuth || !functions) {
         toast({
             variant: "destructive",
             title: "Fehler",
@@ -178,31 +162,19 @@ export function OrganizationTab() {
     }
     
     try {
-        const idToken = await currentUserAuth.getIdToken();
-        const method = isEditing ? 'PUT' : 'POST';
-        const body = JSON.stringify({ 
-            id: currentUser?.id, 
-            email, 
-            firstName, 
-            lastName, 
-            role 
-        });
+        const userData = { id: currentUser?.id, email, firstName, lastName, role };
+        
+        const saveUserFunc = isEditing 
+            ? httpsCallable(functions, 'updateUser') 
+            : httpsCallable(functions, 'createUser');
+        
+        const result: any = await saveUserFunc(userData);
 
-        const response = await fetch('/api/users', {
-            method: method,
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${idToken}`
-            },
-body,
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to save user.');
+        if (result.data.error) {
+            throw new Error(result.data.error);
         }
-
-        const savedUser = await response.json();
+        
+        const savedUser = result.data;
         
         if (isEditing) {
             setUsers(prevUsers => prevUsers.map(u => u.id === savedUser.id ? savedUser : u));
