@@ -18,14 +18,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Switch } from '@/components/ui/switch';
 import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/page-header';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
-import { doc, setDoc } from 'firebase/firestore';
-import { updateProfile, updatePassword } from 'firebase/auth';
+import { doc, setDoc, writeBatch, collection, getDocs, deleteDoc } from 'firebase/firestore';
+import { updateProfile, updatePassword, deleteUser } from 'firebase/auth';
 
 const navItems = [
   'Allgemein',
@@ -158,6 +169,45 @@ export default function SettingsPage() {
             title: "Fehler",
             description: "Budget konnte nicht gespeichert werden.",
         });
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!user || !firestore) return;
+    try {
+      const batch = writeBatch(firestore);
+
+      // Delete all collections for the user
+      const transactionsRef = collection(firestore, `users/${user.uid}/transactions`);
+      const categoriesRef = collection(firestore, `users/${user.uid}/expenseCategories`);
+      
+      const transactionsSnap = await getDocs(transactionsRef);
+      transactionsSnap.forEach(doc => batch.delete(doc.ref));
+
+      const categoriesSnap = await getDocs(categoriesRef);
+      categoriesSnap.forEach(doc => batch.delete(doc.ref));
+
+      // Delete the user profile document
+      const userDocRef = doc(firestore, 'users', user.uid);
+      batch.delete(userDocRef);
+
+      // Commit the batch delete
+      await batch.commit();
+
+      // Finally, delete the user from Firebase Auth
+      await deleteUser(user);
+
+      toast({
+        title: 'Konto gelöscht',
+        description: 'Ihr Konto und alle zugehörigen Daten wurden dauerhaft entfernt.',
+      });
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Fehler beim Löschen des Kontos',
+        description: 'Bitte melden Sie sich erneut an und versuchen Sie es erneut.',
+      });
     }
   };
   
@@ -309,6 +359,54 @@ export default function SettingsPage() {
           </Card>
         );
         break;
+        case 'Support':
+            content = (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Support</CardTitle>
+                  <CardDescription>
+                    Benötigen Sie Hilfe? Kontaktieren Sie uns.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <p>Für Support-Anfragen senden Sie bitte eine E-Mail an: <a href="mailto:support@expencetrack.app" className="text-primary underline">support@expencetrack.app</a></p>
+                </CardContent>
+              </Card>
+            );
+            break;
+        case 'Erweitert':
+            content = (
+                <Card className="border-destructive">
+                    <CardHeader>
+                        <CardTitle className="text-destructive">Gefahrenzone</CardTitle>
+                        <CardDescription>
+                            Diese Aktionen können nicht rückgängig gemacht werden. Bitte seien Sie vorsichtig.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="destructive">Konto löschen</Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Diese Aktion kann nicht rückgängig gemacht werden. Dadurch werden Ihr Konto und alle Ihre Daten dauerhaft gelöscht, einschliesslich aller Transaktionen und Kategorien.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleDeleteAccount} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                        Ich verstehe, mein Konto löschen
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    </CardContent>
+                </Card>
+            );
+            break;
       default:
         content = (
           <Card>
