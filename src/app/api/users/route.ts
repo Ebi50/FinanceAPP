@@ -2,30 +2,38 @@ import { NextResponse, NextRequest } from 'next/server';
 import * as admin from 'firebase-admin';
 import { initAdmin } from '@/firebase/admin-config';
 
+// Initialize Firebase Admin SDK right away at the module level.
+initAdmin();
+
 const ADMIN_EMAIL = 'eberhard.janzen@freenet.de';
 
-async function verifyAdmin(request: NextRequest) {
+async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean }> {
     try {
-        initAdmin();
         const authorization = request.headers.get('Authorization');
         if (authorization?.startsWith('Bearer ')) {
             const idToken = authorization.split('Bearer ')[1];
             const decodedToken = await admin.auth().verifyIdToken(idToken);
             
+            // Direct role check
             if (decodedToken.role === 'admin') {
                 return { isAdmin: true };
             }
             
+            // Fallback for the special admin email
             if (decodedToken.email === ADMIN_EMAIL) {
+                 // If the special admin logs in but doesn't have the claim yet, set it.
                  if (decodedToken.role !== 'admin') {
                     await admin.auth().setCustomUserClaims(decodedToken.uid, { role: 'admin' });
                  }
+                 // Crucially, return true for the current request as well.
                  return { isAdmin: true };
             }
         }
+        // If no token or conditions are met, they are not an admin.
         return { isAdmin: false };
     } catch(error) {
         console.error("Admin verification failed:", error);
+        // In case of any error (e.g., invalid token), deny access.
         return { isAdmin: false };
     }
 }
