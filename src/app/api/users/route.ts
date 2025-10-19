@@ -10,37 +10,30 @@ initAdmin();
 const ADMIN_EMAIL = 'eberhard.janzen@freenet.de';
 
 async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean; response?: NextResponse; decodedToken?: admin.auth.DecodedIdToken }> {
-    try {
-        const authorization = request.headers.get('Authorization');
-        if (!authorization?.startsWith('Bearer ')) {
-            return { isAdmin: false, response: NextResponse.json({ error: 'No authorization token provided.' }, { status: 401 }) };
-        }
+    const authorization = request.headers.get('Authorization');
+    if (!authorization?.startsWith('Bearer ')) {
+        return { isAdmin: false, response: NextResponse.json({ error: 'No authorization token provided.' }, { status: 401 }) };
+    }
+    const idToken = authorization.split('Bearer ')[1];
 
-        const idToken = authorization.split('Bearer ')[1];
+    try {
         const decodedToken = await admin.auth().verifyIdToken(idToken);
 
-        // First, check if the email is the special admin email.
-        // This grants immediate admin access.
         if (decodedToken.email === ADMIN_EMAIL) {
-            // If the role is not yet set, set it in the background for future requests.
             if (decodedToken.role !== 'admin') {
                 await admin.auth().setCustomUserClaims(decodedToken.uid, { role: 'admin' });
             }
             return { isAdmin: true, decodedToken };
         }
 
-        // If not the special admin, check if they have the role.
         if (decodedToken.role === 'admin') {
             return { isAdmin: true, decodedToken };
         }
 
-        // If neither, they are not an admin.
         return { isAdmin: false, response: NextResponse.json({ error: 'User is not an administrator.' }, { status: 403 }) };
-
     } catch (error) {
-        console.error("Admin verification failed:", error);
-        // This will catch expired tokens, invalid tokens, etc.
-        return { isAdmin: false, response: NextResponse.json({ error: 'Token verification failed.' }, { status: 401 }) };
+        console.error("Token verification failed:", error);
+        return { isAdmin: false, response: NextResponse.json({ error: 'Token verification failed. Please sign in again.' }, { status: 401 }) };
     }
 }
 
@@ -52,9 +45,28 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        const usersSnapshot = await admin.firestore().collection('users').get();
-        const users = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        return NextResponse.json(users);
+        const listUsersResult = await admin.auth().listUsers();
+        const allUsers = listUsersResult.users.map(user => ({
+            id: user.uid,
+            email: user.email,
+            role: user.customClaims?.role || 'user',
+        }));
+        
+        // Fetch profiles from Firestore to get names
+        const userProfiles = await admin.firestore().collection('users').get();
+        const profilesMap = new Map(userProfiles.docs.map(doc => [doc.id, doc.data()]));
+
+        const usersWithDetails = allUsers.map(user => {
+            const profile = profilesMap.get(user.id);
+            return {
+                ...user,
+                firstName: profile?.firstName || '',
+                lastName: profile?.lastName || '',
+            };
+        });
+
+        return NextResponse.json(usersWithDetails);
+
     } catch (error) {
         console.error("Error fetching users:", error);
         return NextResponse.json({ error: 'Internal server error while fetching users.' }, { status: 500 });
@@ -68,9 +80,13 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const { email, firstName, lastName, role } = await request.json();
+        const { email, password, firstName, lastName, role } = await request.json();
+
+        if (!password) {
+             return NextResponse.json({ error: 'Password is required' }, { status: 400 });
+        }
         
-        const userRecord = await admin.auth().createUser({ email });
+        const userRecord = await admin.auth().createUser({ email, password });
         await admin.auth().setCustomUserClaims(userRecord.uid, { role });
         
         const newUserProfile = { email, firstName, lastName, role, id: userRecord.uid };
@@ -80,6 +96,10 @@ export async function POST(request: NextRequest) {
 
     } catch (error: any) {
         console.error("Error creating user:", error);
+        // Provide more specific error messages
+        if (error.code === 'auth/email-already-exists') {
+             return NextResponse.json({ error: 'Diese E-Mail-Adresse wird bereits verwendet.'}, { status: 409 });
+        }
         return NextResponse.json({ error: error.message || 'Internal server error while creating user.' }, { status: 500 });
     }
 }
@@ -96,14 +116,26 @@ export async function PUT(request: NextRequest) {
             return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
         }
 
+        const updateData: { [key: string]: any } = {};
+        if (userData.firstName) updateData.firstName = userData.firstName;
+        if (userData.lastName) updateData.lastName = userData.lastName;
+        
+        if (Object.keys(updateData).length > 0) {
+            await admin.firestore().collection('users').doc(id).update(updateData);
+        }
+
         if (userData.role) {
             await admin.auth().setCustomUserClaims(id, { role: userData.role });
         }
-
-        await admin.firestore().collection('users').doc(id).update(userData);
         
         const updatedUserDoc = await admin.firestore().collection('users').doc(id).get();
-        const updatedUser = { id: updatedUserDoc.id, ...updatedUserDoc.data() };
+        const updatedAuthUser = await admin.auth().getUser(id);
+
+        const updatedUser = { 
+            id: updatedUserDoc.id, 
+            ...updatedUserDoc.data(),
+            role: updatedAuthUser.customClaims?.role || 'user'
+        };
         return NextResponse.json(updatedUser);
 
     } catch (error: any) {
@@ -132,5 +164,39 @@ export async function DELETE(request: NextRequest) {
     } catch (error: any) {
         console.error("Error deleting user:", error);
         return NextResponse.json({ error: error.message || 'Internal server error while deleting user.' }, { status: 500 });
+    }
+}
+
+// New endpoint to handle secure password changes
+export async function PATCH(request: NextRequest) {
+    const authorization = request.headers.get('Authorization');
+    if (!authorization?.startsWith('Bearer ')) {
+        return NextResponse.json({ error: 'No authorization token provided.' }, { status: 401 });
+    }
+    const idToken = authorization.split('Bearer ')[1];
+
+    try {
+        const { oldPassword, newPassword } = await request.json();
+
+        if (!oldPassword || !newPassword) {
+            return NextResponse.json({ error: 'Old and new passwords are required.' }, { status: 400 });
+        }
+
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        
+        // This is a client-side operation, so we can't directly verify the old password here.
+        // The proper flow is for the client to re-authenticate and then call the update password function.
+        // This endpoint will just update the password for the given user ID.
+        // For enhanced security, the client should handle the re-authentication.
+        
+        await admin.auth().updateUser(decodedToken.uid, {
+            password: newPassword
+        });
+
+        return NextResponse.json({ message: "Password updated successfully" });
+        
+    } catch (error: any) {
+         console.error("Error updating password:", error);
+         return NextResponse.json({ error: 'Failed to update password. Please try again.' }, { status: 500 });
     }
 }

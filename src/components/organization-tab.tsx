@@ -1,14 +1,14 @@
-"use client";
+'use client';
 
-import { useState, useMemo, useEffect, useCallback } from "react";
-import { Button } from "./ui/button";
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { Button } from './ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "./ui/card";
+} from './ui/card';
 import {
   Table,
   TableBody,
@@ -16,8 +16,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "./ui/table";
-import { MoreHorizontal, PlusCircle } from "lucide-react";
+} from './ui/table';
+import { MoreHorizontal, PlusCircle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -25,24 +25,24 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
+} from '@/components/ui/dialog';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
+} from './ui/dropdown-menu';
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-  } from '@/components/ui/select';
-import { useToast } from "@/hooks/use-toast";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/firebase';
 
 type UserProfile = {
@@ -60,43 +60,47 @@ export function OrganizationTab() {
 
   const [open, setOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [currentUser, setCurrentUser] = useState<Partial<UserProfile> | null>(null);
-  const [email, setEmail] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
+  const [currentUser, setCurrentUser] = useState<Partial<UserProfile> | null>(
+    null
+  );
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [role, setRole] = useState<'admin' | 'user'>('user');
-  
+
   const { toast } = useToast();
 
   const fetchUsers = useCallback(async () => {
     if (!currentUserAuth) {
       setUsersLoading(false);
       return;
-    };
+    }
     setUsersLoading(true);
     try {
       // Force refresh the token to get latest claims.
       const idToken = await currentUserAuth.getIdToken(true);
       const response = await fetch('/api/users', {
         headers: {
-          'Authorization': `Bearer ${idToken}`
-        }
+          Authorization: `Bearer ${idToken}`,
+        },
       });
 
       const responseBody = await response.json();
 
       if (!response.ok) {
-        throw new Error(responseBody.error || `Request failed with status ${response.status}`);
+        throw new Error(
+          responseBody.error || `Request failed with status ${response.status}`
+        );
       }
-      
-      setUsers(responseBody);
 
+      setUsers(responseBody);
     } catch (error: any) {
-      console.error("Error fetching users:", error);
+      console.error('Error fetching users:', error);
       toast({
-        variant: "destructive",
-        title: "Fehler beim Laden der Benutzer",
-        description: error.message || "An unknown error occurred.",
+        variant: 'destructive',
+        title: 'Fehler beim Laden der Benutzer',
+        description: error.message || 'An unknown error occurred.',
       });
     } finally {
       setUsersLoading(false);
@@ -109,121 +113,149 @@ export function OrganizationTab() {
     }
   }, [currentUserAuth, fetchUsers]);
 
-
   const sortedUsers = useMemo(() => {
     if (!users) return [];
-    return [...users].sort((a, b) => (a.lastName || '').localeCompare(b.lastName || ''));
+    return [...users].sort((a, b) =>
+      (a.lastName || '').localeCompare(b.lastName || '')
+    );
   }, [users]);
 
   const handleAddClick = () => {
     setIsEditing(false);
     setCurrentUser(null);
-    setEmail("");
-    setFirstName("");
-    setLastName("");
-    setRole("user");
+    setEmail('');
+    setFirstName('');
+    setLastName('');
+    setRole('user');
+    setPassword('');
     setOpen(true);
   };
-  
+
   const handleEditClick = (user: UserProfile) => {
     setIsEditing(true);
     setCurrentUser(user);
-    setEmail(user.email || "");
-    setFirstName(user.firstName || "");
-    setLastName(user.lastName || "");
-    setRole(user.role || "user");
+    setEmail(user.email || '');
+    setFirstName(user.firstName || '');
+    setLastName(user.lastName || '');
+    setRole(user.role || 'user');
+    setPassword(''); // Clear password for editing
     setOpen(true);
   };
 
   const handleDelete = async (userId: string) => {
     if (!currentUserAuth) return;
     try {
-        const idToken = await currentUserAuth.getIdToken();
-        const response = await fetch('/api/users', {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${idToken}`
-          },
-          body: JSON.stringify({ id: userId })
-        });
-        
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `Request failed with status ${response.status}`);
-        }
+      const idToken = await currentUserAuth.getIdToken();
+      const response = await fetch('/api/users', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ id: userId }),
+      });
 
-        setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
-        toast({
-            title: 'Benutzer gelöscht',
-            description: 'Der Benutzer wurde erfolgreich entfernt.',
-        });
-    } catch(error: any) {
-        toast({
-            variant: "destructive",
-            title: 'Fehler beim Löschen',
-            description: error.message,
-        });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(
+          errorData.error || `Request failed with status ${response.status}`
+        );
+      }
+
+      setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
+      toast({
+        title: 'Benutzer gelöscht',
+        description: 'Der Benutzer wurde erfolgreich entfernt.',
+      });
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Fehler beim Löschen',
+        description: error.message,
+      });
     }
   };
 
   const handleSave = async () => {
-    if (!email.trim() || !firstName.trim() || !lastName.trim() || !currentUserAuth) {
-        toast({
-            variant: "destructive",
-            title: "Fehler",
-            description: "Bitte füllen Sie alle Felder aus.",
-        });
-        return;
+    if (
+      !email.trim() ||
+      !firstName.trim() ||
+      !lastName.trim() ||
+      !currentUserAuth
+    ) {
+      toast({
+        variant: 'destructive',
+        title: 'Fehler',
+        description: 'Bitte füllen Sie alle Felder aus.',
+      });
+      return;
     }
-    
+
+    if (!isEditing && !password) {
+      toast({
+        variant: 'destructive',
+        title: 'Fehler',
+        description: 'Ein Passwort ist für neue Benutzer erforderlich.',
+      });
+      return;
+    }
+
     try {
-        const idToken = await currentUserAuth.getIdToken();
-        const userData = { id: currentUser?.id, email, firstName, lastName, role };
-        
-        const response = await fetch('/api/users', {
-            method: isEditing ? 'PUT' : 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${idToken}`
-            },
-            body: JSON.stringify(userData)
-        });
+      const idToken = await currentUserAuth.getIdToken();
+      const userData = {
+        id: currentUser?.id,
+        email,
+        password: password || undefined, // Send password only if it's set
+        firstName,
+        lastName,
+        role,
+      };
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `Request failed with status ${response.status}`);
-        }
+      const response = await fetch('/api/users', {
+        method: isEditing ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify(userData),
+      });
 
-        const savedUser = await response.json();
-        
-        if (isEditing) {
-            setUsers(prevUsers => prevUsers.map(u => u.id === savedUser.id ? savedUser : u));
-            toast({
-                title: 'Benutzer aktualisiert',
-                description: 'Die Benutzerdaten wurden erfolgreich gespeichert.',
-            });
-        } else {
-            setUsers(prevUsers => [...prevUsers, savedUser]);
-            toast({
-                title: 'Benutzer hinzugefügt',
-                description: `Das Profil für ${email} wurde erstellt.`,
-            });
-        }
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(
+          errorData.error || `Request failed with status ${response.status}`
+        );
+      }
 
-        setOpen(false);
-        // Force a token refresh for the current user if their role might have changed
-        if (isEditing && currentUser?.id === currentUserAuth.uid) {
-          await currentUserAuth.getIdToken(true);
-        }
+      const savedUser = await response.json();
 
-
-    } catch (error: any) {
+      if (isEditing) {
+        setUsers(prevUsers =>
+          prevUsers.map(u => (u.id === savedUser.id ? savedUser : u))
+        );
         toast({
-            variant: "destructive",
-            title: isEditing ? 'Fehler beim Aktualisieren' : 'Fehler beim Hinzufügen',
-            description: error.message,
+          title: 'Benutzer aktualisiert',
+          description: 'Die Benutzerdaten wurden erfolgreich gespeichert.',
         });
+      } else {
+        setUsers(prevUsers => [...prevUsers, savedUser]);
+        toast({
+          title: 'Benutzer hinzugefügt',
+          description: `Das Profil für ${email} wurde erstellt.`,
+        });
+      }
+
+      setOpen(false);
+      // Force a token refresh for the current user if their role might have changed
+      if (isEditing && currentUser?.id === currentUserAuth.uid) {
+        await currentUserAuth.getIdToken(true);
+      }
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: isEditing ? 'Fehler beim Aktualisieren' : 'Fehler beim Hinzufügen',
+        description: error.message,
+      });
     }
   };
 
@@ -255,41 +287,56 @@ export function OrganizationTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {usersLoading && <TableRow><TableCell colSpan={4} className="text-center">Benutzer werden geladen...</TableCell></TableRow>}
-              {!usersLoading && sortedUsers?.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">
-                    {user.firstName} {user.lastName}
-                  </TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell>{user.role}</TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" disabled={user.id === currentUserAuth?.uid}>
-                          <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">Menü</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Aktionen</DropdownMenuLabel>
-                        <DropdownMenuItem onSelect={() => handleEditClick(user)}>
-                          Bearbeiten
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={() => handleDelete(user.id)}
-                          className="text-destructive"
-                        >
-                          Löschen
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+              {usersLoading && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center">
+                    Benutzer werden geladen...
                   </TableCell>
                 </TableRow>
-              ))}
-               {!usersLoading && sortedUsers.length === 0 && (
+              )}
+              {!usersLoading &&
+                sortedUsers?.map(user => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">
+                      {user.firstName} {user.lastName}
+                    </TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell>{user.role}</TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled={user.id === currentUserAuth?.uid}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only">Menü</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Aktionen</DropdownMenuLabel>
+                          <DropdownMenuItem
+                            onSelect={() => handleEditClick(user)}
+                          >
+                            Bearbeiten
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => handleDelete(user.id)}
+                            className="text-destructive"
+                          >
+                            Löschen
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              {!usersLoading && sortedUsers.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center">Keine Benutzer gefunden.</TableCell>
+                  <TableCell colSpan={4} className="text-center">
+                    Keine Benutzer gefunden.
+                  </TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -300,7 +347,7 @@ export function OrganizationTab() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {isEditing ? "Benutzer bearbeiten" : "Neuen Benutzer hinzufügen"}
+              {isEditing ? 'Benutzer bearbeiten' : 'Neuen Benutzer hinzufügen'}
             </DialogTitle>
             <DialogDescription>
               Füllen Sie die Details aus, um einen Benutzer zu verwalten.
@@ -308,28 +355,56 @@ export function OrganizationTab() {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
-                <Label htmlFor="firstName">Vorname</Label>
-                <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+              <Label htmlFor="firstName">Vorname</Label>
+              <Input
+                id="firstName"
+                value={firstName}
+                onChange={e => setFirstName(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
-                <Label htmlFor="lastName">Nachname</Label>
-                <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+              <Label htmlFor="lastName">Nachname</Label>
+              <Input
+                id="lastName"
+                value={lastName}
+                onChange={e => setLastName(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={isEditing} />
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                disabled={isEditing}
+              />
             </div>
+            {!isEditing && (
+              <div className="space-y-2">
+                <Label htmlFor="password">Passwort</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                />
+              </div>
+            )}
             <div className="space-y-2">
-                <Label htmlFor="role">Rolle</Label>
-                <Select value={role} onValueChange={(value: 'admin' | 'user') => setRole(value)}>
-                    <SelectTrigger>
-                        <SelectValue placeholder="Rolle auswählen" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="user">User</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                    </SelectContent>
-                </Select>
+              <Label htmlFor="role">Rolle</Label>
+              <Select
+                value={role}
+                onValueChange={(value: 'admin' | 'user') => setRole(value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Rolle auswählen" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">User</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>

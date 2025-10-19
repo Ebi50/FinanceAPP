@@ -36,7 +36,7 @@ import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/page-header';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, setDoc, writeBatch, collection, getDocs, deleteDoc } from 'firebase/firestore';
-import { updateProfile, updatePassword, deleteUser } from 'firebase/auth';
+import { updateProfile, updatePassword, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { OrganizationTab } from '@/components/organization-tab';
 
 const allNavItems = [
@@ -75,13 +75,13 @@ export default function SettingsPage() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [budget, setBudget] = useState(2000);
 
   const { toast } = useToast();
   
-  // Eberhard Janzen is always admin.
   const isAdmin = user?.email === ADMIN_EMAIL || userProfile?.role === 'admin';
 
   const navItems = allNavItems;
@@ -94,7 +94,6 @@ export default function SettingsPage() {
       setEmail(userProfile.email || user?.email || '');
       setBudget(userProfile.budget || 2000);
     } else if (user) {
-        // Fallback if profile doesn't exist in Firestore yet
         const nameParts = user.displayName?.split(' ') || ['', ''];
         setFirstName(nameParts[0]);
         setLastName(nameParts.slice(1).join(' '));
@@ -127,38 +126,50 @@ export default function SettingsPage() {
 
   const handlePasswordSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
-    if (password !== confirmPassword) {
+    if (!user || !user.email) return;
+
+    if (newPassword !== confirmPassword) {
       toast({
         variant: 'destructive',
         title: 'Fehler',
-        description: 'Die Passwörter stimmen nicht überein.',
+        description: 'Die neuen Passwörter stimmen nicht überein.',
       });
       return;
     }
-    if (password.length < 6) {
+    if (newPassword.length < 6) {
         toast({
             variant: 'destructive',
             title: 'Fehler',
-            description: 'Das Passwort muss mindestens 6 Zeichen lang sein.',
+            description: 'Das neue Passwort muss mindestens 6 Zeichen lang sein.',
         });
         return;
     }
     
     try {
-        await updatePassword(user, password)
+        const credential = EmailAuthProvider.credential(user.email, oldPassword);
+        await reauthenticateWithCredential(user, credential);
+        
+        await updatePassword(user, newPassword);
+
         toast({
           title: 'Passwort geändert',
           description: 'Ihr Passwort wurde erfolgreich geändert.',
         });
-        setPassword('');
+        setOldPassword('');
+        setNewPassword('');
         setConfirmPassword('');
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error updating password: ", error);
+        let description = 'Ein unbekannter Fehler ist aufgetreten.';
+        if (error.code === 'auth/wrong-password') {
+            description = 'Das alte Passwort ist nicht korrekt.';
+        } else if (error.code === 'auth/requires-recent-login') {
+            description = 'Diese Aktion erfordert eine erneute Anmeldung. Bitte melden Sie sich ab und wieder an.';
+        }
         toast({
             variant: 'destructive',
             title: 'Fehler beim Ändern des Passworts',
-            description: 'Bitte melden Sie sich erneut an und versuchen Sie es erneut.',
+            description,
         })
     }
   };
@@ -187,7 +198,6 @@ export default function SettingsPage() {
     try {
       const batch = writeBatch(firestore);
 
-      // Delete all collections for the user
       const transactionsRef = collection(firestore, `users/${user.uid}/transactions`);
       const categoriesRef = collection(firestore, `users/${user.uid}/expenseCategories`);
       
@@ -197,14 +207,11 @@ export default function SettingsPage() {
       const categoriesSnap = await getDocs(categoriesRef);
       categoriesSnap.forEach(doc => batch.delete(doc.ref));
 
-      // Delete the user profile document
       const userDocRef = doc(firestore, 'users', user.uid);
       batch.delete(userDocRef);
 
-      // Commit the batch delete
       await batch.commit();
 
-      // Finally, delete the user from Firebase Auth
       await deleteUser(user);
 
       toast({
@@ -348,20 +355,24 @@ export default function SettingsPage() {
         content = (
           <Card>
               <CardHeader>
-                  <CardTitle>Passwort</CardTitle>
+                  <CardTitle>Passwort ändern</CardTitle>
                   <CardDescription>
-                      Ändern Sie hier Ihr Passwort.
+                      Um Ihr Passwort zu ändern, geben Sie bitte zuerst Ihr altes Passwort ein.
                   </CardDescription>
               </CardHeader>
               <CardContent>
                   <form className="space-y-4" onSubmit={handlePasswordSave}>
                       <div className="space-y-2">
-                          <Label htmlFor="password">Neues Passwort</Label>
-                          <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                          <Label htmlFor="oldPassword">Altes Passwort</Label>
+                          <Input id="oldPassword" type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} required />
+                      </div>
+                      <div className="space-y-2">
+                          <Label htmlFor="newPassword">Neues Passwort</Label>
+                          <Input id="newPassword" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
                       </div>
                       <div className="space-y-2">
                           <Label htmlFor="confirmPassword">Neues Passwort bestätigen</Label>
-                          <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+                          <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
                       </div>
                       <Button type="submit">Neues Passwort speichern</Button>
                   </form>
