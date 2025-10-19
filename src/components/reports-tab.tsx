@@ -309,6 +309,50 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
 
   return (
     <>
+      <div className="flex items-center gap-4 mb-4">
+        <div>
+          <Label htmlFor="year-select-reports">Jahr auswählen</Label>
+          <Select
+              value={String(currentYear)}
+              onValueChange={(value) => setCurrentYear(Number(value))}
+              disabled={availableYears.length === 0}
+          >
+              <SelectTrigger id="year-select-reports" className="w-[120px]">
+                  <SelectValue placeholder="Jahr" />
+              </SelectTrigger>
+              <SelectContent>
+                  {availableYears.map(year => (
+                      <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                  ))}
+              </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="month-select-reports">Monat auswählen</Label>
+          <Select
+              value={selectedMonth === null ? 'all' : String(selectedMonth)}
+              onValueChange={(value) => {
+                  if (value === 'all') {
+                      setSelectedMonth(null);
+                  } else {
+                      setSelectedMonth(Number(value));
+                  }
+              }}
+          >
+              <SelectTrigger id="month-select-reports" className="w-[180px]">
+                  <SelectValue placeholder="Monat" />
+              </SelectTrigger>
+              <SelectContent>
+                  <SelectItem value="all">Alle Monate</SelectItem>
+                  {Array.from({ length: 12 }, (_, i) => (
+                      <SelectItem key={i} value={String(i)}>
+                      {de.localize?.month(i)}
+                      </SelectItem>
+                  ))}
+              </SelectContent>
+          </Select>
+        </div>
+      </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <div className="lg:col-span-3 flex flex-col gap-4">
             <Card>
@@ -318,34 +362,15 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                 Laden Sie Ihre monatlichen oder jährlichen Ausgabenberichte herunter.
                 </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-                <div className="space-y-2">
-                    <Label htmlFor="year-select">Jahr auswählen</Label>
-                    <Select
-                        value={String(currentYear)}
-                        onValueChange={(value) => setCurrentYear(Number(value))}
-                        disabled={availableYears.length === 0}
-                    >
-                        <SelectTrigger id="year-select" className="w-[180px]">
-                            <SelectValue placeholder="Jahr auswählen" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {availableYears.map(year => (
-                                <SelectItem key={year} value={String(year)}>{year}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                    <Button variant="secondary" onClick={() => generatePdf("monthly", currentYear, currentMonth)}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Monatlicher Bericht (PDF)
-                    </Button>
-                    <Button variant="secondary" onClick={() => generatePdf("yearly", currentYear, 0)}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Jahresbericht (PDF)
-                    </Button>
-                </div>
+            <CardContent className="flex flex-col sm:flex-row gap-2">
+                <Button variant="secondary" onClick={() => generatePdf("monthly", currentYear, currentMonth)}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Monatlicher Bericht (PDF)
+                </Button>
+                <Button variant="secondary" onClick={() => generatePdf("yearly", currentYear, 0)}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Jahresbericht (PDF)
+                </Button>
             </CardContent>
             </Card>
             <Card>
@@ -365,7 +390,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                 )}
             </CardContent>
             </Card>
-             <Card>
+            <Card>
                 <CardHeader>
                     <CardTitle className="font-headline">Einnahmenübersicht {currentYear} {periodTitle}</CardTitle>
                     <CardDescription>Gesamteinnahmen für den ausgewählten Zeitraum.</CardDescription>
@@ -401,31 +426,6 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
             </Card>
         </div>
         <div className="lg:col-span-2 flex flex-col gap-4">
-             <div className="space-y-2">
-                <Label htmlFor="month-select-reports">Monat für Tabellenansicht auswählen</Label>
-                <Select
-                    value={selectedMonth === null ? 'all' : String(selectedMonth)}
-                    onValueChange={(value) => {
-                        if (value === 'all') {
-                            setSelectedMonth(null);
-                        } else {
-                            setSelectedMonth(Number(value));
-                        }
-                    }}
-                >
-                    <SelectTrigger id="month-select-reports" className="w-[180px]">
-                        <SelectValue placeholder="Monat auswählen" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Alle Monate</SelectItem>
-                        {Array.from({ length: 12 }, (_, i) => (
-                            <SelectItem key={i} value={String(i)}>
-                            {de.localize?.month(i)}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </div>
             <Card>
                 <CardHeader>
                     <CardTitle className="font-headline">Kategorienübersicht {currentYear} {periodTitle}</CardTitle>
