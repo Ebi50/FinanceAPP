@@ -21,12 +21,13 @@ import "jspdf-autotable";
 import { format, isValid, getYear, getMonth } from "date-fns";
 import { de } from "date-fns/locale";
 import type { Transaction, Category } from "@/lib/types";
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection } from 'firebase/firestore';
 import { Label } from "./ui/label";
 import { ExpensesPieChart } from "./expenses-pie-chart";
 import { formatCurrency } from "@/lib/utils";
+import html2canvas from "html2canvas";
 
 interface ReportsTabProps {
   transactions: Transaction[];
@@ -45,6 +46,8 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
   const { toast } = useToast();
   const { user } = useUser();
   const firestore = useFirestore();
+  const chartRef = useRef<HTMLDivElement>(null);
+
   const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'users', user.uid, 'expenseCategories') : null, [firestore, user]);
   const { data: categories } = useCollection<Category>(categoriesQuery);
   
@@ -55,7 +58,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
   
   const incomeCategory = useMemo(() => categories?.find(c => c.name.toLowerCase() === 'einnahmen'), [categories]);
 
-  const generatePdf = (period: "monthly" | "yearly", year: number, month: number) => {
+  const generatePdf = async (period: "monthly" | "yearly", year: number, month: number) => {
     const doc = new jsPDF() as AutoTableDoc;
 
     if (transactions.length === 0) {
@@ -101,17 +104,18 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
 
     let lastY = 30;
 
+    const expensesByCategory = expenses.reduce((acc, t) => {
+      const categoryName = categoryMap.get(t.categoryId) || 'Unbekannt';
+      if (!acc[categoryName]) {
+        acc[categoryName] = { transactions: [], total: 0 };
+      }
+      acc[categoryName].transactions.push(t);
+      acc[categoryName].total += t.amount;
+      return acc;
+    }, {} as Record<string, {transactions: Transaction[], total: number}>);
+
     if (expenses.length > 0) {
       doc.text("Ausgaben", 14, lastY);
-      const expensesByCategory = expenses.reduce((acc, t) => {
-        const categoryName = categoryMap.get(t.categoryId) || 'Unbekannt';
-        if (!acc[categoryName]) {
-          acc[categoryName] = { transactions: [], total: 0 };
-        }
-        acc[categoryName].transactions.push(t);
-        acc[categoryName].total += t.amount;
-        return acc;
-      }, {} as Record<string, {transactions: Transaction[], total: number}>);
       
       const expenseBody = [];
       for (const categoryName in expensesByCategory) {
@@ -162,6 +166,45 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
       ],
       theme: 'grid',
     });
+    lastY = doc.autoTable.previous.finalY;
+
+    if (expenses.length > 0) {
+        lastY += 10;
+        doc.text("Zusammenfassung nach Kategorien", 14, lastY);
+        const categorySummaryBody = Object.entries(expensesByCategory).map(([name, data]) => [name, formatCurrency(data.total)]);
+        doc.autoTable({
+            startY: lastY + 5,
+            head: [['Kategorie', 'Gesamtbetrag']],
+            body: categorySummaryBody,
+            theme: 'grid'
+        });
+        lastY = doc.autoTable.previous.finalY;
+
+        // Add Chart
+        if (chartRef.current) {
+            const canvas = await html2canvas(chartRef.current, {
+                backgroundColor: null, // Transparent background
+                scale: 3, // Increase resolution
+            });
+            const imgData = canvas.toDataURL('image/png');
+            const imgProps = doc.getImageProperties(imgData);
+            const pdfWidth = doc.internal.pageSize.getWidth();
+            const pdfHeight = doc.internal.pageSize.getHeight();
+            const imgWidth = pdfWidth * 0.7; // Use 70% of page width
+            const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+
+            lastY += 10;
+
+            if (lastY + imgHeight > pdfHeight - 20) {
+                doc.addPage();
+                lastY = 20;
+            }
+
+            doc.text("Ausgabenverteilung", 14, lastY);
+            doc.addImage(imgData, 'PNG', 14, lastY + 5, imgWidth, imgHeight);
+        }
+    }
+
 
     doc.save(`${title.toLowerCase().replace(/\s/g, "-")}.pdf`);
   };
@@ -229,7 +272,9 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
             <CardDescription>Visuelle Aufschlüsselung Ihrer Ausgaben nach Kategorien für das ausgewählte Jahr.</CardDescription>
         </CardHeader>
         <CardContent>
-            <ExpensesPieChart transactions={expensesForYear} />
+            <div ref={chartRef}>
+              <ExpensesPieChart transactions={expensesForYear} />
+            </div>
         </CardContent>
       </Card>
     </div>
