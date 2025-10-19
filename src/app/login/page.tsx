@@ -16,14 +16,29 @@ import { initiateEmailSignIn } from "@/firebase/non-blocking-login";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { PlaceHolderImages } from '@/lib/placeholder-images';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { useToast } from "@/hooks/use-toast"
+import { sendPasswordResetEmail } from "firebase/auth";
 
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [resetEmail, setResetEmail] = useState('');
   const auth = useAuth();
   const { user, isUserLoading } = useUser();
   const router = useRouter();
+  const { toast } = useToast();
   const loginImage = PlaceHolderImages.find(p => p.id === 'login-image-1');
 
   useEffect(() => {
@@ -34,6 +49,32 @@ export default function LoginPage() {
 
   const handleAuthAction = () => {
     initiateEmailSignIn(auth, email, password);
+  };
+  
+  const handlePasswordReset = () => {
+    if (!resetEmail) {
+        toast({
+            variant: "destructive",
+            title: "E-Mail erforderlich",
+            description: "Bitte geben Sie Ihre E-Mail-Adresse ein.",
+        });
+        return;
+    }
+    sendPasswordResetEmail(auth, resetEmail)
+        .then(() => {
+            toast({
+                title: "E-Mail gesendet",
+                description: "Wenn ein Konto mit dieser E-Mail existiert, wurde eine E-Mail zum Zurücksetzen des Passworts gesendet.",
+            });
+        })
+        .catch((error) => {
+            console.error("Error sending password reset email:", error);
+            // We show a generic message to not reveal which emails are registered.
+            toast({
+                title: "E-Mail gesendet",
+                description: "Wenn ein Konto mit dieser E-Mail existiert, wurde eine E-Mail zum Zurücksetzen des Passworts gesendet.",
+            });
+        });
   };
 
   if (isUserLoading || user) {
@@ -66,9 +107,35 @@ export default function LoginPage() {
               <div className="grid gap-2">
                 <div className="flex items-center">
                   <Label htmlFor="password">Passwort</Label>
-                    <Link href="#" className="ml-auto inline-block text-sm underline">
-                      Passwort vergessen?
-                    </Link>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                         <Button variant="link" className="ml-auto inline-block text-sm underline p-0 h-auto">
+                            Passwort vergessen?
+                          </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Passwort zurücksetzen</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Geben Sie Ihre E-Mail-Adresse ein, um einen Link zum Zurücksetzen Ihres Passworts zu erhalten.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <div className="grid gap-2">
+                          <Label htmlFor="reset-email">E-Mail</Label>
+                          <Input
+                            id="reset-email"
+                            type="email"
+                            placeholder="m@beispiel.com"
+                            value={resetEmail}
+                            onChange={(e) => setResetEmail(e.target.value)}
+                          />
+                        </div>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                          <AlertDialogAction onClick={handlePasswordReset}>Link senden</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                 </div>
                 <Input 
                   id="password" 
