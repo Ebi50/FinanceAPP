@@ -5,43 +5,32 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { initAdmin } from '@/firebase/admin-config';
 import * as admin from 'firebase-admin';
 
-// Initialize Firebase Admin SDK
-let adminApp: admin.app.App;
-try {
-    adminApp = initAdmin();
-} catch (e) {
-    console.error("Failed to initialize Firebase Admin SDK in route.", e);
-}
-
-
-async function verifyAdmin(request: Request): Promise<string | null> {
-    const adminDb = getFirestore(adminApp);
-    const adminAuth = getAuth(adminApp);
-    
-    const authorization = request.headers.get('Authorization');
-    if (authorization?.startsWith('Bearer ')) {
-        const idToken = authorization.split('Bearer ')[1];
-        try {
+async function verifyAdmin(request: Request): Promise<{adminUid: string | null, adminApp: admin.app.App | null}> {
+    try {
+        const adminApp = initAdmin();
+        const adminDb = getFirestore(adminApp);
+        const adminAuth = getAuth(adminApp);
+        
+        const authorization = request.headers.get('Authorization');
+        if (authorization?.startsWith('Bearer ')) {
+            const idToken = authorization.split('Bearer ')[1];
             const decodedToken = await adminAuth.verifyIdToken(idToken);
             const userDoc = await adminDb.collection('users').doc(decodedToken.uid).get();
             if (userDoc.exists && userDoc.data()?.role === 'admin') {
-                return decodedToken.uid;
+                return { adminUid: decodedToken.uid, adminApp };
             }
-        } catch (error) {
-            console.error("Error verifying token or admin role:", error);
-            return null;
         }
+    } catch (error) {
+        console.error("Error verifying token or admin role:", error);
+        return { adminUid: null, adminApp: null };
     }
-    return null;
+    return { adminUid: null, adminApp: null };
 }
 
 // GET all users (Admin only)
 export async function GET(request: Request) {
-    if (!adminApp) {
-        return NextResponse.json({ error: 'Admin SDK not initialized' }, { status: 500 });
-    }
-    const adminUid = await verifyAdmin(request);
-    if (!adminUid) {
+    const { adminUid, adminApp } = await verifyAdmin(request);
+    if (!adminUid || !adminApp) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
@@ -58,11 +47,8 @@ export async function GET(request: Request) {
 
 // POST a new user (Admin only)
 export async function POST(request: Request) {
-     if (!adminApp) {
-        return NextResponse.json({ error: 'Admin SDK not initialized' }, { status: 500 });
-    }
-    const adminUid = await verifyAdmin(request);
-    if (!adminUid) {
+    const { adminUid, adminApp } = await verifyAdmin(request);
+    if (!adminUid || !adminApp) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
@@ -85,11 +71,8 @@ export async function POST(request: Request) {
 
 // PUT (update) a user (Admin only)
 export async function PUT(request: Request) {
-     if (!adminApp) {
-        return NextResponse.json({ error: 'Admin SDK not initialized' }, { status: 500 });
-    }
-    const adminUid = await verifyAdmin(request);
-    if (!adminUid) {
+    const { adminUid, adminApp } = await verifyAdmin(request);
+    if (!adminUid || !adminApp) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
@@ -112,11 +95,8 @@ export async function PUT(request: Request) {
 
 // DELETE a user (Admin only)
 export async function DELETE(request: Request) {
-     if (!adminApp) {
-        return NextResponse.json({ error: 'Admin SDK not initialized' }, { status: 500 });
-    }
-    const adminUid = await verifyAdmin(request);
-    if (!adminUid) {
+    const { adminUid, adminApp } = await verifyAdmin(request);
+    if (!adminUid || !adminApp) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
