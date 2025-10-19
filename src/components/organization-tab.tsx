@@ -26,8 +26,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -81,10 +81,7 @@ export function OrganizationTab() {
       try {
         const listUsers = httpsCallable(functions, 'listUsers');
         const response: any = await listUsers();
-        if (response.data.error) {
-            throw new Error(response.data.error);
-        }
-        setUsers(response.data);
+        setUsers(response.data as UserProfile[]);
       } catch (error: any) {
         console.error("Error fetching users:", error);
         toast({
@@ -132,11 +129,7 @@ export function OrganizationTab() {
     if (!currentUserAuth || !functions) return;
     try {
         const deleteUserFunc = httpsCallable(functions, 'deleteUser');
-        const result: any = await deleteUserFunc({ id: userId });
-        if (result.data.error) {
-            throw new Error(result.data.error);
-        }
-
+        await deleteUserFunc({ id: userId });
         setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
         toast({
             title: 'Benutzer gelöscht',
@@ -169,11 +162,6 @@ export function OrganizationTab() {
             : httpsCallable(functions, 'createUser');
         
         const result: any = await saveUserFunc(userData);
-
-        if (result.data.error) {
-            throw new Error(result.data.error);
-        }
-        
         const savedUser = result.data;
         
         if (isEditing) {
@@ -186,7 +174,7 @@ export function OrganizationTab() {
             setUsers(prevUsers => [...prevUsers, savedUser]);
             toast({
                 title: 'Benutzer hinzugefügt',
-                description: `Das Profil für ${email} wurde erstellt. Der Benutzer muss sich noch mit dieser E-Mail registrieren.`,
+                description: `Das Profil für ${email} wurde erstellt.`,
             });
         }
 
