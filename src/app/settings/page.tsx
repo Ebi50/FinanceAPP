@@ -81,12 +81,7 @@ export default function SettingsPage() {
   
   const isAdmin = userProfile?.role === 'admin';
 
-  const navItems = useMemo(() => {
-    if (isAdmin) {
-      return allNavItems;
-    }
-    return allNavItems.filter(item => item !== 'Organisation');
-  }, [isAdmin]);
+  const navItems = isAdmin ? allNavItems : allNavItems.filter(item => item !== 'Organisation');
 
 
   useEffect(() => {
