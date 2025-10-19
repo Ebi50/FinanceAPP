@@ -33,7 +33,7 @@ import { Calendar } from './ui/calendar';
 import { cn, formatCurrency } from '@/lib/utils';
 import { format, isValid } from 'date-fns';
 import { de } from 'date-fns/locale';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -110,6 +110,11 @@ export function AddTransactionSheet({
     control: form.control,
     name: "amounts"
   });
+  
+  const sortedCategories = useMemo(() => {
+    if (!categories) return [];
+    return [...categories].sort((a, b) => a.name.localeCompare(b.name, 'de'));
+  }, [categories]);
 
   useEffect(() => {
     if (open) {
@@ -264,7 +269,7 @@ export function AddTransactionSheet({
                           {categoriesLoading ? (
                              <SelectItem value="loading" disabled>Lade...</SelectItem>
                           ) : (
-                            categories?.map((cat) => (
+                            sortedCategories?.map((cat) => (
                               <SelectItem key={cat.id} value={cat.id}>
                                 {cat.name}
                               </SelectItem>
