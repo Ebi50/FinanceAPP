@@ -8,15 +8,21 @@ import * as admin from 'firebase-admin';
 async function verifyAdmin(request: Request): Promise<{adminUid: string | null, adminApp: admin.app.App | null}> {
     try {
         const adminApp = initAdmin();
-        const adminDb = getFirestore(adminApp);
         const adminAuth = getAuth(adminApp);
         
         const authorization = request.headers.get('Authorization');
         if (authorization?.startsWith('Bearer ')) {
             const idToken = authorization.split('Bearer ')[1];
             const decodedToken = await adminAuth.verifyIdToken(idToken);
-            const userDoc = await adminDb.collection('users').doc(decodedToken.uid).get();
-            if (userDoc.exists && userDoc.data()?.role === 'admin') {
+            
+            // Check for custom claim first
+            if (decodedToken.role === 'admin') {
+                 return { adminUid: decodedToken.uid, adminApp };
+            }
+            
+            // Fallback to checking email if no custom claim
+            const user = await adminAuth.getUser(decodedToken.uid);
+            if (user.email === 'eberhard.janzen@freenet.de') {
                 return { adminUid: decodedToken.uid, adminApp };
             }
         }
