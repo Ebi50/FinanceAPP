@@ -117,6 +117,11 @@ const categoryNameMap = useMemo(() => {
             const fileYearMatch = file.name.match(/\d{4}/);
             const fileYear = fileYearMatch ? parseInt(fileYearMatch[0], 10) : new Date().getFullYear();
 
+            const monthShortNameToIndex: { [key: string]: number } = {
+                'jan': 0, 'feb': 1, 'mär': 2, 'apr': 3, 'mai': 4, 'jun': 5,
+                'jul': 6, 'aug': 7, 'sep': 8, 'okt': 9, 'nov': 10, 'dez': 11
+            };
+
             workbook.SheetNames.forEach((sheetName) => {
                 const worksheet = workbook.Sheets[sheetName];
                 if (!worksheet) return;
@@ -124,15 +129,15 @@ const categoryNameMap = useMemo(() => {
                 const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }) as RawRow[][];
                 if (!json || json.length === 0) return;
                 
-                const monthNames = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
-                const monthIndex = monthNames.indexOf(sheetName);
+                const sheetMonthShortName = sheetName.substring(0, 3).toLowerCase();
+                const monthIndex = monthShortNameToIndex[sheetMonthShortName];
+
+                if (monthIndex === undefined) {
+                    console.warn(`Konnte den Monat für das Tabellenblatt "${sheetName}" nicht bestimmen. Überspringe...`);
+                    return;
+                }
 
                 const parseDate = (value: string | number | Date | null): Date => {
-                    const monthMap: { [key: string]: number } = {
-                        'jan': 0, 'feb': 1, 'mär': 2, 'apr': 3, 'mai': 4, 'jun': 5,
-                        'jul': 6, 'aug': 7, 'sep': 8, 'okt': 9, 'nov': 10, 'dez': 11
-                    };
-                    
                     if (value instanceof Date && isValid(value)) return value;
                     
                     if (typeof value === 'string') {
@@ -140,13 +145,13 @@ const categoryNameMap = useMemo(() => {
                         if (parts.length === 2) {
                             const day = parseInt(parts[0], 10);
                             const monthAbbr = parts[1].substring(0, 3);
-                            const month = monthMap[monthAbbr];
-                            if (!isNaN(day) && month !== undefined) {
-                                return new Date(Date.UTC(fileYear, month, day, 12, 0, 0));
+                            const cellMonthIndex = monthShortNameToIndex[monthAbbr];
+                            if (!isNaN(day) && cellMonthIndex !== undefined) {
+                                return new Date(Date.UTC(fileYear, cellMonthIndex, day, 12, 0, 0));
                             }
                         }
                     }
-                    // Fallback for non-date strings or invalid formats
+                    // Fallback to sheet month if cell doesn't contain a valid date string
                     return new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
                 };
 
