@@ -7,42 +7,46 @@ initAdmin();
 
 const ADMIN_EMAIL = 'eberhard.janzen@freenet.de';
 
-async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean }> {
+async function verifyAdmin(request: NextRequest): Promise<{ isAdmin: boolean, error?: string }> {
     try {
         const authorization = request.headers.get('Authorization');
-        if (authorization?.startsWith('Bearer ')) {
-            const idToken = authorization.split('Bearer ')[1];
-            const decodedToken = await admin.auth().verifyIdToken(idToken);
-            
-            // Direct role check
-            if (decodedToken.role === 'admin') {
-                return { isAdmin: true };
-            }
-            
-            // Fallback for the special admin email
-            if (decodedToken.email === ADMIN_EMAIL) {
-                 // If the special admin logs in but doesn't have the claim yet, set it.
-                 if (decodedToken.role !== 'admin') {
-                    await admin.auth().setCustomUserClaims(decodedToken.uid, { role: 'admin' });
-                 }
-                 // Crucially, return true for the current request as well.
-                 return { isAdmin: true };
-            }
+        if (!authorization?.startsWith('Bearer ')) {
+            return { isAdmin: false, error: 'No authorization token provided.' };
         }
-        // If no token or conditions are met, they are not an admin.
-        return { isAdmin: false };
-    } catch(error) {
+
+        const idToken = authorization.split('Bearer ')[1];
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+
+        // First, check for the 'admin' role directly on the token.
+        if (decodedToken.role === 'admin') {
+            return { isAdmin: true };
+        }
+
+        // If the role isn't present, check if it's the special admin user.
+        if (decodedToken.email === ADMIN_EMAIL) {
+            // The user is the special admin. Set the custom claim for future requests.
+            // This is done in the background and won't block the current request.
+            admin.auth().setCustomUserClaims(decodedToken.uid, { role: 'admin' }).catch(console.error);
+            // CRUCIALLY, allow the current request to proceed as an admin immediately.
+            return { isAdmin: true };
+        }
+
+        // If neither condition is met, the user is not an admin.
+        return { isAdmin: false, error: 'User is not an administrator.' };
+
+    } catch (error) {
         console.error("Admin verification failed:", error);
         // In case of any error (e.g., invalid token), deny access.
-        return { isAdmin: false };
+        return { isAdmin: false, error: 'Token verification failed.' };
     }
 }
 
 
 export async function GET(request: NextRequest) {
-    const { isAdmin } = await verifyAdmin(request);
+    const { isAdmin, error } = await verifyAdmin(request);
     if (!isAdmin) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+        // Provide the specific reason for failure
+        return NextResponse.json({ error: error || 'Unauthorized' }, { status: 403 });
     }
 
     try {
@@ -51,14 +55,14 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(users);
     } catch (error) {
         console.error("Error fetching users:", error);
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+        return NextResponse.json({ error: 'Internal server error while fetching users.' }, { status: 500 });
     }
 }
 
 export async function POST(request: NextRequest) {
-    const { isAdmin } = await verifyAdmin(request);
+    const { isAdmin, error } = await verifyAdmin(request);
     if (!isAdmin) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+        return NextResponse.json({ error: error || 'Unauthorized' }, { status: 403 });
     }
 
     try {
@@ -74,18 +78,18 @@ export async function POST(request: NextRequest) {
         const newUserProfile = { email, firstName, lastName, role, id: userRecord.uid };
         await admin.firestore().collection('users').doc(userRecord.uid).set(newUserProfile);
         
-        return NextResponse.json(newUserProfile);
+        return NextResponse.json(newUserProfile, { status: 201 });
 
     } catch (error: any) {
         console.error("Error creating user:", error);
-        return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
+        return NextResponse.json({ error: error.message || 'Internal server error while creating user.' }, { status: 500 });
     }
 }
 
 export async function PUT(request: NextRequest) {
-    const { isAdmin } = await verifyAdmin(request);
+    const { isAdmin, error } = await verifyAdmin(request);
     if (!isAdmin) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+        return NextResponse.json({ error: error || 'Unauthorized' }, { status: 403 });
     }
     
     try {
@@ -108,14 +112,14 @@ export async function PUT(request: NextRequest) {
 
     } catch (error: any) {
         console.error("Error updating user:", error);
-        return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
+        return NextResponse.json({ error: error.message || 'Internal server error while updating user.' }, { status: 500 });
     }
 }
 
 export async function DELETE(request: NextRequest) {
-    const { isAdmin } = await verifyAdmin(request);
+    const { isAdmin, error } = await verifyAdmin(request);
     if (!isAdmin) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+        return NextResponse.json({ error: error || 'Unauthorized' }, { status: 403 });
     }
 
     try {
@@ -124,16 +128,16 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
         }
         
-        // Delete from Firestore
-        await admin.firestore().collection('users').doc(id).delete();
-        
-        // Delete from Firebase Auth
+        // Delete from Auth first
         await admin.auth().deleteUser(id);
         
-        return NextResponse.json({ message: 'User deleted successfully' });
+        // Then delete from Firestore
+        await admin.firestore().collection('users').doc(id).delete();
+        
+        return NextResponse.json({ message: 'User deleted successfully' }, { status: 200 });
 
     } catch (error: any) {
         console.error("Error deleting user:", error);
-        return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
+        return NextResponse.json({ error: error.message || 'Internal server error while deleting user.' }, { status: 500 });
     }
 }

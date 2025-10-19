@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Button } from "./ui/button";
 import {
   Card,
@@ -68,50 +68,46 @@ export function OrganizationTab() {
   
   const { toast } = useToast();
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      if (!currentUserAuth) {
-        setUsersLoading(false);
-        return;
-      };
-      setUsersLoading(true);
-      try {
-        const idToken = await currentUserAuth.getIdToken();
-        const response = await fetch('/api/users', {
-          headers: {
-            'Authorization': `Bearer ${idToken}`
-          }
-        });
-
-        if (!response.ok) {
-          let errorData;
-          try {
-            errorData = await response.json();
-          } catch(e) {
-            errorData = { error: 'Failed to parse error response. The server might be down or returning HTML instead of JSON.' };
-          }
-          throw new Error(errorData.error || `Request failed with status ${response.status}`);
-        }
-        
-        const data = await response.json();
-        setUsers(data);
-
-      } catch (error: any) {
-        console.error("Error fetching users:", error);
-        toast({
-          variant: "destructive",
-          title: "Fehler beim Laden der Benutzer",
-          description: error.message,
-        });
-      } finally {
-        setUsersLoading(false);
-      }
+  const fetchUsers = useCallback(async () => {
+    if (!currentUserAuth) {
+      setUsersLoading(false);
+      return;
     };
+    setUsersLoading(true);
+    try {
+      // Force refresh the token to get latest claims.
+      const idToken = await currentUserAuth.getIdToken(true);
+      const response = await fetch('/api/users', {
+        headers: {
+          'Authorization': `Bearer ${idToken}`
+        }
+      });
 
+      const responseBody = await response.json();
+
+      if (!response.ok) {
+        throw new Error(responseBody.error || `Request failed with status ${response.status}`);
+      }
+      
+      setUsers(responseBody);
+
+    } catch (error: any) {
+      console.error("Error fetching users:", error);
+      toast({
+        variant: "destructive",
+        title: "Fehler beim Laden der Benutzer",
+        description: error.message || "An unknown error occurred.",
+      });
+    } finally {
+      setUsersLoading(false);
+    }
+  }, [currentUserAuth, toast]);
+
+  useEffect(() => {
     if (currentUserAuth) {
       fetchUsers();
     }
-  }, [currentUserAuth, toast]);
+  }, [currentUserAuth, fetchUsers]);
 
 
   const sortedUsers = useMemo(() => {
@@ -143,7 +139,7 @@ export function OrganizationTab() {
     if (!currentUserAuth) return;
     try {
         const idToken = await currentUserAuth.getIdToken();
-        await fetch('/api/users', {
+        const response = await fetch('/api/users', {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
@@ -151,6 +147,12 @@ export function OrganizationTab() {
           },
           body: JSON.stringify({ id: userId })
         });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Request failed with status ${response.status}`);
+        }
+
         setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
         toast({
             title: 'Benutzer gelöscht',
@@ -210,6 +212,11 @@ export function OrganizationTab() {
         }
 
         setOpen(false);
+        // Force a token refresh for the current user if their role might have changed
+        if (isEditing && currentUser?.id === currentUserAuth.uid) {
+          await currentUserAuth.getIdToken(true);
+        }
+
 
     } catch (error: any) {
         toast({
@@ -248,7 +255,7 @@ export function OrganizationTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {usersLoading && <TableRow><TableCell colSpan={4}>Benutzer werden geladen...</TableCell></TableRow>}
+              {usersLoading && <TableRow><TableCell colSpan={4} className="text-center">Benutzer werden geladen...</TableCell></TableRow>}
               {!usersLoading && sortedUsers?.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell className="font-medium">
@@ -259,7 +266,7 @@ export function OrganizationTab() {
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" disabled={user.id === currentUserAuth?.uid}>
                           <MoreHorizontal className="h-4 w-4" />
                           <span className="sr-only">Menü</span>
                         </Button>
@@ -280,6 +287,11 @@ export function OrganizationTab() {
                   </TableCell>
                 </TableRow>
               ))}
+               {!usersLoading && sortedUsers.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center">Keine Benutzer gefunden.</TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
