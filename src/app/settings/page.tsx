@@ -407,7 +407,7 @@ export default function SettingsPage() {
                   <CardDescription>
                     Benötigen Sie Hilfe? Kontaktieren Sie uns.
                   </CardDescription>
-                </Header>
+                </CardHeader>
                 <CardContent>
                     <p>Für Support-Anfragen senden Sie bitte eine E-Mail an: <a href={`mailto:${ADMIN_EMAIL}`} className="text-primary underline">{ADMIN_EMAIL}</a></p>
                 </CardContent>
@@ -452,7 +452,7 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle>{activeTab}</CardTitle>
-            </Header>
+            </CardHeader>
             <CardContent>
               <p>Einstellungen für {activeTab} werden hier angezeigt.</p>
             </CardContent>
