@@ -40,6 +40,7 @@ import { updateProfile, updatePassword, deleteUser, EmailAuthProvider, reauthent
 import type { Transaction } from '@/lib/types';
 import { de } from 'date-fns/locale';
 import { isValid, getYear, getMonth, startOfYear, endOfYear, startOfMonth, endOfMonth } from 'date-fns';
+import { formatCurrency } from '@/lib/utils';
 
 const navItems = [
   'Allgemein',
@@ -204,7 +205,7 @@ export default function SettingsPage() {
     setDocumentNonBlocking(userProfileQuery, { budget }, { merge: true });
     toast({
       title: 'Budget gespeichert',
-      description: `Ihr monatliches Budget wurde auf ${budget} € festgelegt.`,
+      description: `Ihr monatliches Budget wurde auf ${formatCurrency(budget)} festgelegt.`,
     });
   };
 
@@ -410,8 +411,26 @@ export default function SettingsPage() {
               <CardContent>
                 <form className="space-y-4" onSubmit={handleBudgetSave}>
                   <div className="space-y-2">
-                    <Label htmlFor="budget">Monatliches Budget (€)</Label>
-                    <Input id="budget" type="number" value={budget} onChange={(e) => setBudget(Number(e.target.value))} />
+                    <Label htmlFor="budget">Monatliches Budget</Label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">€</span>
+                      <Input 
+                        id="budget" 
+                        type="text" 
+                        className="pl-8"
+                        value={new Intl.NumberFormat('de-DE').format(budget)}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\./g, '').replace(',', '.');
+                          const numberValue = parseFloat(value);
+                          if (!isNaN(numberValue)) {
+                            setBudget(numberValue);
+                          } else if (e.target.value === '') {
+                            setBudget(0);
+                          }
+                        }}
+                      />
+                    </div>
                   </div>
                   <Button type="submit">Budget speichern</Button>
                 </form>
