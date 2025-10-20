@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
-import { DollarSign, CreditCard, TrendingUp, TrendingDown } from "lucide-react";
+import { Euro, CreditCard, TrendingUp, TrendingDown } from "lucide-react";
 import { Progress } from "./ui/progress";
 
 interface OverviewStatsProps {
@@ -60,7 +60,7 @@ export function OverviewStats({ totalExpenses, totalIncome, budget }: OverviewSt
         <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Ersparnis</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <Euro className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(savings)}</div>
