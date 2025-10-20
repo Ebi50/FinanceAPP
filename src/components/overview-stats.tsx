@@ -30,7 +30,7 @@ export function OverviewStats({ totalExpenses, totalIncome, budget }: OverviewSt
             </p>
             </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-emerald-50 dark:bg-emerald-950/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
                 Einnahmen
