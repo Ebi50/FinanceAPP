@@ -257,9 +257,6 @@ export default function Dashboard() {
           <TabsContent value="reports" className="space-y-4">
             <ReportsTab 
               transactions={allTransactions || []}
-              availableYears={availableYears}
-              currentYear={currentYear}
-              setCurrentYear={setCurrentYear}
             />
           </TabsContent>
           <TabsContent value="import" className="space-y-4">

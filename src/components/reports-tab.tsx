@@ -487,7 +487,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
         </div>
       </div>
       {/* Hidden container for rendering chart for PDF */}
-      <div className="fixed -left-[9999px] -top-[9999px] -z-10" style={{ width: '800px', height: 'auto' }}>
+      <div className="absolute -z-10" style={{ left: '-9999px', top: '-9999px', width: '800px', height: 'auto' }}>
           <div ref={chartRef}>
               {transactionsForChart.length > 0 && <ExpensesChart transactions={transactionsForChart} />}
           </div>
