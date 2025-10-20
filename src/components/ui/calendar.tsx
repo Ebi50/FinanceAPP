@@ -15,12 +15,23 @@ function Calendar({
   showOutsideDays = true,
   ...props
 }: CalendarProps) {
+  const [month, setMonth] = React.useState<Date>(props.selected as Date || props.defaultMonth || new Date());
+
+  React.useEffect(() => {
+    if (props.selected instanceof Date) {
+      setMonth(props.selected);
+    }
+  }, [props.selected]);
+
+
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
       captionLayout="dropdown-buttons"
       fromYear={1960}
       toYear={new Date().getFullYear() + 5}
+      month={month}
+      onMonthChange={setMonth}
       className={cn("p-3", className)}
       classNames={{
         caption_label: "text-sm font-medium",
