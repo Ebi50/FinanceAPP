@@ -19,7 +19,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useRouter } from 'next/navigation';
 import { useState, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Image as ImageIcon } from 'lucide-react';
 
 export function UserNav() {
   const userAvatar = PlaceHolderImages.find(p => p.id === 'user-avatar-1');
@@ -38,10 +38,8 @@ export function UserNav() {
     });
   };
   
-  const handleAvatarClick = () => {
-      if (!isUploading) {
-          fileInputRef.current?.click();
-      }
+  const handleAvatarUploadClick = () => {
+      fileInputRef.current?.click();
   };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -104,57 +102,63 @@ export function UserNav() {
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-          <Avatar className="h-10 w-10 cursor-pointer" onClick={handleAvatarClick}>
-            {isUploading ? (
-                <div className="flex h-full w-full items-center justify-center rounded-full bg-muted/80">
-                    <Loader2 className="h-5 w-5 animate-spin"/>
-                </div>
-            ) : (
-                <>
-                    {user.photoURL && <AvatarImage src={user.photoURL} alt="Benutzeravatar" />}
-                    {!user.photoURL && userAvatar && <AvatarImage src={userAvatar.imageUrl} alt="Benutzeravatar" data-ai-hint={userAvatar.imageHint} />}
-                    <AvatarFallback>{user.email?.charAt(0).toUpperCase()}</AvatarFallback>
-                </>
-            )}
-          </Avatar>
-          <input 
-              type="file" 
-              ref={fileInputRef} 
-              onChange={handleFileChange}
-              className="hidden"
-              accept="image/png, image/jpeg, image/gif"
-          />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-56" align="end" forceMount>
-        <DropdownMenuLabel className="font-normal">
-          <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">{user.displayName || 'User'}</p>
-            <p className="text-xs leading-none text-muted-foreground">
-              {user.email}
-            </p>
-          </div>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuItem asChild>
-            <Link href="/settings">Profil</Link>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+            <Avatar className="h-10 w-10">
+              {isUploading ? (
+                  <div className="flex h-full w-full items-center justify-center rounded-full bg-muted/80">
+                      <Loader2 className="h-5 w-5 animate-spin"/>
+                  </div>
+              ) : (
+                  <>
+                      {user.photoURL && <AvatarImage src={user.photoURL} alt="Benutzeravatar" />}
+                      {!user.photoURL && userAvatar && <AvatarImage src={userAvatar.imageUrl} alt="Benutzeravatar" data-ai-hint={userAvatar.imageHint} />}
+                      <AvatarFallback>{user.email?.charAt(0).toUpperCase()}</AvatarFallback>
+                  </>
+              )}
+            </Avatar>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-56" align="end" forceMount>
+          <DropdownMenuLabel className="font-normal">
+            <div className="flex flex-col space-y-1">
+              <p className="text-sm font-medium leading-none">{user.displayName || 'User'}</p>
+              <p className="text-xs leading-none text-muted-foreground">
+                {user.email}
+              </p>
+            </div>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuItem asChild>
+              <Link href="/settings">Profil</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={handleAvatarUploadClick}>
+              <ImageIcon className="mr-2 h-4 w-4" />
+              <span>Profilbild ändern</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/billing">Abrechnung</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/settings">Einstellungen</Link>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={handleSignOut}>
+            Abmelden
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link href="/billing">Abrechnung</Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link href="/settings">Einstellungen</Link>
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleSignOut}>
-          Abmelden
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <input 
+          type="file" 
+          ref={fileInputRef} 
+          onChange={handleFileChange}
+          className="hidden"
+          accept="image/png, image/jpeg, image/gif"
+      />
+    </>
   );
 }
