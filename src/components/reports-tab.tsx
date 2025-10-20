@@ -462,7 +462,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                     <CardDescription>
                         Gesamtergebnis für den ausgewählten Zeitraum.
                     </CardDescription>
-                </Header>
+                </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="flex justify-between items-center">
                         <span className="font-medium">Gesamteinnahmen</span>
