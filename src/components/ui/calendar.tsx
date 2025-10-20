@@ -18,12 +18,23 @@ function Calendar({
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
+      captionLayout="dropdown-buttons"
+      fromYear={1960}
+      toYear={new Date().getFullYear() + 5}
       className={cn("p-3", className)}
       classNames={{
+        caption_label: "text-sm font-medium",
+        caption_dropdowns: "flex gap-1",
+        dropdown_month: "relative",
+        dropdown_year: "relative",
+        dropdown: cn(
+          buttonVariants({ variant: "outline" }),
+          "h-7 w-auto bg-transparent p-1 opacity-80 hover:opacity-100"
+        ),
+        vhidden: "hidden",
         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
         month: "space-y-4",
         caption: "flex justify-center pt-1 relative items-center",
-        caption_label: "text-sm font-medium",
         nav: "space-x-1 flex items-center",
         nav_button: cn(
           buttonVariants({ variant: "outline" }),
