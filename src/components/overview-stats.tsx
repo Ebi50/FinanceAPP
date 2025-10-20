@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import { Euro, CreditCard, TrendingUp, TrendingDown } from "lucide-react";
 import { Progress } from "./ui/progress";
 
@@ -16,7 +16,7 @@ export function OverviewStats({ totalExpenses, totalIncome, budget }: OverviewSt
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="bg-destructive/10 dark:bg-destructive/20">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
                 Gesamtausgaben
@@ -57,7 +57,9 @@ export function OverviewStats({ totalExpenses, totalIncome, budget }: OverviewSt
             <Progress value={budgetProgress} />
             </CardContent>
         </Card>
-        <Card>
+        <Card className={cn(
+            savings >= 0 ? "bg-emerald-50 dark:bg-emerald-950/50" : "bg-destructive/10 dark:bg-destructive/20"
+        )}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Ersparnis</CardTitle>
             <Euro className="h-4 w-4 text-muted-foreground" />
