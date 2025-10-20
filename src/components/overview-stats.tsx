@@ -10,7 +10,7 @@ interface OverviewStatsProps {
 }
 
 export function OverviewStats({ totalExpenses, totalIncome, budget }: OverviewStatsProps) {
-    const budgetToShow = totalIncome > 0 ? totalIncome : budget;
+    const budgetToShow = budget; // Immer das in den Einstellungen festgelegte Budget verwenden
     const budgetProgress = budgetToShow > 0 ? (totalExpenses / budgetToShow) * 100 : 0;
     const savings = totalIncome - totalExpenses;
 
