@@ -4,6 +4,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 import { ThemeProvider } from '@/components/theme-provider';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
+import { AutoLogoutProvider } from '@/hooks/use-auto-logout';
 
 export const metadata: Metadata = {
   title: 'Dashboard',
@@ -34,7 +35,9 @@ export default function RootLayout({
             disableTransitionOnChange
         >
           <FirebaseClientProvider>
-            {children}
+            <AutoLogoutProvider>
+              {children}
+            </AutoLogoutProvider>
           </FirebaseClientProvider>
           <Toaster />
         </ThemeProvider>

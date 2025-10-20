@@ -56,6 +56,7 @@ type UserProfile = {
   lastName?: string;
   email?: string;
   budget?: number;
+  autoLogoutTimeout?: number;
 }
 
 export default function SettingsPage() {
@@ -85,6 +86,7 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [budget, setBudget] = useState(2000);
+  const [autoLogoutTimeout, setAutoLogoutTimeout] = useState(0);
   const [isMigrating, setIsMigrating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -111,6 +113,7 @@ export default function SettingsPage() {
       setLastName(userProfile.lastName || '');
       setEmail(userProfile.email || user?.email || '');
       setBudget(userProfile.budget || 2000);
+      setAutoLogoutTimeout(userProfile.autoLogoutTimeout || 0); // 0 for 'Never'
     } else if (user) {
         const nameParts = user.displayName?.split(' ') || ['', ''];
         setFirstName(nameParts[0]);
@@ -198,6 +201,16 @@ export default function SettingsPage() {
         })
     }
   };
+  
+    const handleSecuritySettingsSave = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!user || !userProfileQuery) return;
+        setDocumentNonBlocking(userProfileQuery, { autoLogoutTimeout }, { merge: true });
+        toast({
+            title: 'Sicherheitseinstellungen gespeichert',
+            description: 'Der automatische Logout wurde aktualisiert.',
+        });
+    };
 
   const handleBudgetSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -477,31 +490,67 @@ export default function SettingsPage() {
         break;
       case 'Sicherheit':
         content = (
-          <Card>
-              <CardHeader>
-                  <CardTitle>Passwort ändern</CardTitle>
-                  <CardDescription>
-                      Um Ihr Passwort zu ändern, geben Sie bitte zuerst Ihr altes Passwort ein.
-                  </CardDescription>
-              </CardHeader>
-              <CardContent>
-                  <form className="space-y-4" onSubmit={handlePasswordSave}>
-                      <div className="space-y-2">
-                          <Label htmlFor="oldPassword">Altes Passwort</Label>
-                          <Input id="oldPassword" type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} required />
-                      </div>
-                      <div className="space-y-2">
-                          <Label htmlFor="newPassword">Neues Passwort</Label>
-                          <Input id="newPassword" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
-                      </div>
-                      <div className="space-y-2">
-                          <Label htmlFor="confirmPassword">Neues Passwort bestätigen</Label>
-                          <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
-                      </div>
-                      <Button type="submit">Neues Passwort speichern</Button>
-                  </form>
-              </CardContent>
-          </Card>
+          <>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Passwort ändern</CardTitle>
+                    <CardDescription>
+                        Um Ihr Passwort zu ändern, geben Sie bitte zuerst Ihr altes Passwort ein.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <form className="space-y-4" onSubmit={handlePasswordSave}>
+                        <div className="space-y-2">
+                            <Label htmlFor="oldPassword">Altes Passwort</Label>
+                            <Input id="oldPassword" type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} required />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="newPassword">Neues Passwort</Label>
+                            <Input id="newPassword" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="confirmPassword">Neues Passwort bestätigen</Label>
+                            <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
+                        </div>
+                        <Button type="submit">Neues Passwort speichern</Button>
+                    </form>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Sitzungsverwaltung</CardTitle>
+                    <CardDescription>
+                        Konfigurieren Sie den automatischen Logout bei Inaktivität.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <form className="space-y-4" onSubmit={handleSecuritySettingsSave}>
+                        <div className="space-y-2">
+                            <Label htmlFor="auto-logout">Automatischer Logout nach</Label>
+                            <Select
+                                value={String(autoLogoutTimeout)}
+                                onValueChange={(value) => setAutoLogoutTimeout(Number(value))}
+                            >
+                                <SelectTrigger id="auto-logout">
+                                    <SelectValue placeholder="Zeit auswählen" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="0">Niemals</SelectItem>
+                                    <SelectItem value="5">5 Minuten</SelectItem>
+                                    <SelectItem value="15">15 Minuten</SelectItem>
+                                    <SelectItem value="30">30 Minuten</SelectItem>
+                                    <SelectItem value="60">1 Stunde</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <p className="text-sm text-muted-foreground">
+                               Sie werden nach der ausgewählten Zeit der Inaktivität automatisch abgemeldet. Dies gilt auch, wenn der Laptop zugeklappt wird.
+                            </p>
+                        </div>
+                        <Button type="submit">Speichern</Button>
+                    </form>
+                </CardContent>
+            </Card>
+          </>
         );
         break;
         case 'Support':

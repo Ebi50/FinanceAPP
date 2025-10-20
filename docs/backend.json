@@ -30,6 +30,10 @@
             "admin",
             "user"
           ]
+        },
+        "autoLogoutTimeout": {
+          "type": "number",
+          "description": "The inactivity timeout in minutes before automatic logout. 0 means never."
         }
       },
       "required": [
