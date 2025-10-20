@@ -221,7 +221,7 @@ export default function Dashboard() {
             <TabsTrigger value="reports">Berichte</TabsTrigger>
             <TabsTrigger value="import">Importieren</TabsTrigger>
           </TabsList>
-           {activeTab === 'transactions' && (
+           {(activeTab === 'overview' || activeTab === 'transactions') && (
               <div className="flex items-center gap-2 pt-4">
                   <Select value={currentMonth === null ? 'all' : String(currentMonth)} onValueChange={(value) => {
                       if (value === 'all') {
