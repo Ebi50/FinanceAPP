@@ -12,7 +12,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { useUser, useAuth, useStorage, useFirebase } from '@/firebase';
 import { signOut, updateProfile } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -20,12 +19,11 @@ import { useRouter } from 'next/navigation';
 import { useState, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Image as ImageIcon } from 'lucide-react';
-import { setDocumentNonBlocking } from '@/firebase';
+import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { doc } from 'firebase/firestore';
 
 
 export function UserNav() {
-  const userAvatar = PlaceHolderImages.find(p => p.id === 'user-avatar-1');
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
   const storage = useStorage();
@@ -69,27 +67,19 @@ export function UserNav() {
         const snapshot = await uploadBytes(storageRef, file);
         const photoURL = await getDownloadURL(snapshot.ref);
 
+        // First, update the auth profile. This does NOT trigger onAuthStateChanged for profile updates.
         await updateProfile(user, { photoURL });
         
-        // Also update the user doc in firestore
+        // Then, update the user's document in Firestore.
+        // Our new useUser hook listens to this document, so the UI will update reactively.
         const userDocRef = doc(firestore, 'users', user.uid);
-        setDocumentNonBlocking(userDocRef, { photoURL }, { merge: true });
-
-        // Force a re-render by creating a new user object reference
-        // This is a workaround for the user object from the hook not updating automatically
-        const updatedUser = { ...user, photoURL };
-        
-        // You might need a way to update the user in your global state.
-        // For now, we will just rely on a page refresh after toast.
-        // A better solution would involve a global state management library.
+        // We use a blocking set here to ensure the spinner stops at the right time.
+        await setDoc(userDocRef, { photoURL }, { merge: true });
 
         toast({
             title: "Profilbild aktualisiert",
             description: "Ihr neues Profilbild wurde erfolgreich gespeichert.",
         });
-        // This is a simple way to force a re-render of components using the user object.
-        // In a real app, you'd use a state management library.
-        router.refresh(); 
 
     } catch (error) {
         console.error("Error uploading avatar:", error);
@@ -133,7 +123,6 @@ export function UserNav() {
               ) : (
                   <>
                       {user.photoURL && <AvatarImage src={user.photoURL} alt="Benutzeravatar" />}
-                      {!user.photoURL && userAvatar && <AvatarImage src={userAvatar.imageUrl} alt="Benutzeravatar" data-ai-hint={userAvatar.imageHint} />}
                       <AvatarFallback>{user.email?.charAt(0).toUpperCase()}</AvatarFallback>
                   </>
               )}
