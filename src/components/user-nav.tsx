@@ -13,19 +13,23 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
-import { useUser, useAuth, useStorage } from '@/firebase';
+import { useUser, useAuth, useStorage, useFirebase } from '@/firebase';
 import { signOut, updateProfile } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useRouter } from 'next/navigation';
 import { useState, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Image as ImageIcon } from 'lucide-react';
+import { setDocumentNonBlocking } from '@/firebase';
+import { doc } from 'firebase/firestore';
+
 
 export function UserNav() {
   const userAvatar = PlaceHolderImages.find(p => p.id === 'user-avatar-1');
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
   const storage = useStorage();
+  const { firestore } = useFirebase();
   const router = useRouter();
   const { toast } = useToast();
   
@@ -67,10 +71,25 @@ export function UserNav() {
 
         await updateProfile(user, { photoURL });
         
+        // Also update the user doc in firestore
+        const userDocRef = doc(firestore, 'users', user.uid);
+        setDocumentNonBlocking(userDocRef, { photoURL }, { merge: true });
+
+        // Force a re-render by creating a new user object reference
+        // This is a workaround for the user object from the hook not updating automatically
+        const updatedUser = { ...user, photoURL };
+        
+        // You might need a way to update the user in your global state.
+        // For now, we will just rely on a page refresh after toast.
+        // A better solution would involve a global state management library.
+
         toast({
             title: "Profilbild aktualisiert",
             description: "Ihr neues Profilbild wurde erfolgreich gespeichert.",
         });
+        // This is a simple way to force a re-render of components using the user object.
+        // In a real app, you'd use a state management library.
+        router.refresh(); 
 
     } catch (error) {
         console.error("Error uploading avatar:", error);
