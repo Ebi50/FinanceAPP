@@ -71,6 +71,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
 
   const [transactionsForChart, setTransactionsForChart] = useState<Transaction[]>([]);
   const [yearlyTransactions, setYearlyTransactions] = useState<Transaction[]>([]);
+  const periodTitle = selectedMonth !== null ? `${de.localize?.month(selectedMonth, { width: 'long' })} ${currentYear}` : `Gesamtjahr ${currentYear}`;
 
   const generatePdf = async (period: "monthly" | "yearly", year: number, month: number | null) => {
     const doc = new jsPDF() as AutoTableDoc;
@@ -88,9 +89,12 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
         title = `Jahresbericht ${year}`;
     }
     
+    const chartDataForPdf = period === 'monthly' && month !== null 
+    ? reportTransactions 
+    : yearlyTransactions;
 
     // Update state for the chart to render with the correct data
-    setTransactionsForChart(reportTransactions.filter(t => t.categoryId !== incomeCategory?.id));
+    setTransactionsForChart(chartDataForPdf.filter(t => t.categoryId !== incomeCategory?.id));
     
     // Wait for the chart to re-render with new data
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -228,23 +232,12 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
   };
   
   useEffect(() => {
-    // This effect now sets both expenses for the chart and all transactions for the year
     const yearlyData = transactions.filter(t => {
       const transactionDate = t.date.toDate();
       return isValid(transactionDate) && getYear(transactionDate) === currentYear;
     });
     setYearlyTransactions(yearlyData);
-    
-    const yearlyExpenses = yearlyData.filter(t => t.categoryId !== incomeCategory?.id);
-    setTransactionsForChart(yearlyExpenses);
-  }, [transactions, currentYear, incomeCategory]);
-
-
-  useEffect(() => {
-    if (availableYears.length > 0 && !availableYears.includes(currentYear)) {
-      setCurrentYear(availableYears[0]);
-    }
-  }, [availableYears, currentYear, setCurrentYear]);
+  }, [transactions, currentYear]);
 
   const filteredTableTransactions = useMemo(() => {
     if (selectedMonth === null) {
@@ -256,6 +249,18 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
     });
   }, [yearlyTransactions, selectedMonth]);
 
+  useEffect(() => {
+    // This effect now correctly filters the data for the chart based on the selected month
+    const expensesForChart = filteredTableTransactions.filter(t => t.categoryId !== incomeCategory?.id);
+    setTransactionsForChart(expensesForChart);
+  }, [filteredTableTransactions, incomeCategory]);
+
+
+  useEffect(() => {
+    if (availableYears.length > 0 && !availableYears.includes(currentYear)) {
+      setCurrentYear(availableYears[0]);
+    }
+  }, [availableYears, currentYear, setCurrentYear]);
 
   const expensesByCategoryForTable = useMemo(() => {
     const expenses = filteredTableTransactions
@@ -299,8 +304,6 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
   const totalIncome = useMemo(() => incomeByDescriptionForTable.reduce((sum, item) => sum + item.total, 0), [incomeByDescriptionForTable]);
   const balance = totalIncome - totalExpenses;
   
-  const periodTitle = selectedMonth !== null ? `${de.localize?.month(selectedMonth, { width: 'long' })} ${currentYear}` : `Gesamtjahr ${currentYear}`;
-
 
   return (
     <>
@@ -370,8 +373,8 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
             </Card>
             <Card>
             <CardHeader>
-                <CardTitle className="font-headline">Ausgabenverteilung {currentYear}</CardTitle>
-                <CardDescription>Visuelle Aufschlüsselung Ihrer Ausgaben nach Kategorien für das ausgewählte Jahr.</CardDescription>
+                <CardTitle className="font-headline">Ausgabenverteilung {periodTitle}</CardTitle>
+                <CardDescription>Visuelle Aufschlüsselung Ihrer Ausgaben nach Kategorien für den ausgewählten Zeitraum.</CardDescription>
             </CardHeader>
             <CardContent>
                 {transactionsForChart.length > 0 ? (
@@ -380,7 +383,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                 </div>
                 ) : (
                 <div className="flex items-center justify-center h-[350px] text-muted-foreground">
-                    Keine Ausgabendaten für das ausgewählte Jahr vorhanden.
+                    Keine Ausgabendaten für den ausgewählten Zeitraum vorhanden.
                 </div>
                 )}
             </CardContent>
@@ -462,7 +465,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                     <CardDescription>
                         Gesamtergebnis für den ausgewählten Zeitraum.
                     </CardDescription>
-                </CardHeader>
+                </Header>
                 <CardContent className="space-y-4">
                     <div className="flex justify-between items-center">
                         <span className="font-medium">Gesamteinnahmen</span>
@@ -484,7 +487,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
         </div>
       </div>
       {/* Hidden container for rendering chart for PDF */}
-      <div className="absolute -z-10 -left-[9999px] top-0" style={{width: '800px', height: 'auto'}}>
+      <div className="absolute -z-10" style={{ left: '-9999px', top: '0', width: '800px', height: 'auto' }}>
           <div ref={chartRef}>
               {transactionsForChart.length > 0 && <ExpensesChart transactions={transactionsForChart} />}
           </div>
