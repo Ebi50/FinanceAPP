@@ -28,7 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
 import type { Transaction, Category } from "@/lib/types";
 import React, { useState, useMemo } from "react";
-import { format, isValid, parse } from "date-fns";
+import { format, isValid, parse, getYear } from "date-fns";
 import { de } from "date-fns/locale";
 import { Timestamp } from "firebase/firestore";
 
@@ -114,8 +114,7 @@ const categoryNameMap = useMemo(() => {
             let allTransactions: MappedTransaction[] = [];
             const allDetectedCategories = new Set<string>();
 
-            const fileYearMatch = file.name.match(/\d{4}/);
-            const fileYear = fileYearMatch ? parseInt(fileYearMatch[0], 10) : new Date().getFullYear();
+            const currentSelectedYearOnPage = getYear(new Date()); // Fallback to current year
 
             const monthShortNameToIndex: { [key: string]: number } = {
                 'jan': 0, 'feb': 1, 'mär': 2, 'apr': 3, 'mai': 4, 'jun': 5,
@@ -136,23 +135,42 @@ const categoryNameMap = useMemo(() => {
                     console.warn(`Konnte den Monat für das Tabellenblatt "${sheetName}" nicht bestimmen. Überspringe...`);
                     return;
                 }
+                
+                let yearForSheet = currentSelectedYearOnPage;
+                const fileYearMatch = file.name.match(/\d{4}/);
+                if (fileYearMatch) {
+                    yearForSheet = parseInt(fileYearMatch[0], 10);
+                }
+
 
                 const parseDate = (value: string | number | Date | null): Date => {
-                    if (value instanceof Date && isValid(value)) return value;
+                    if (value instanceof Date && isValid(value)) {
+                        // If date is valid and year is not 1899 or 1900, use it.
+                        const year = getYear(value);
+                        if (year > 1900) {
+                            return value;
+                        }
+                    }
                     
                     if (typeof value === 'string') {
+                         // Try parsing dd.MM.yyyy or dd.MM.yy
+                        const parsedDate = parse(value, 'dd.MM.yyyy', new Date());
+                        if (isValid(parsedDate)) return parsedDate;
+                        const parsedDateShort = parse(value, 'dd.MM.yy', new Date());
+                        if (isValid(parsedDateShort)) return parsedDateShort;
+
                         const parts = value.toLowerCase().replace('.', '').split(' ');
                         if (parts.length === 2) {
                             const day = parseInt(parts[0], 10);
                             const monthAbbr = parts[1].substring(0, 3);
                             const cellMonthIndex = monthShortNameToIndex[monthAbbr];
                             if (!isNaN(day) && cellMonthIndex !== undefined) {
-                                return new Date(Date.UTC(fileYear, cellMonthIndex, day, 12, 0, 0));
+                                return new Date(Date.UTC(yearForSheet, cellMonthIndex, day, 12, 0, 0));
                             }
                         }
                     }
-                    // Fallback to sheet month if cell doesn't contain a valid date string
-                    return new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                    // Fallback to sheet month and determined year
+                    return new Date(Date.UTC(yearForSheet, monthIndex, 15, 12, 0, 0));
                 };
 
                 const isSumRow = (row: RawRow) => row.some(cell => typeof cell === 'string' && cell.toLowerCase().includes('summe'));
@@ -181,7 +199,7 @@ const categoryNameMap = useMemo(() => {
                             if (amount === 0) continue;
                             
                             const date = parseDate(descOrDateCell);
-                            const description = (typeof descOrDateCell === 'string' && !descOrDateCell.match(/^\d{1,2}\. \w{3}/i)) ? descOrDateCell : categoryName;
+                            const description = (typeof descOrDateCell === 'string' && !/^\d{1,2}/.test(descOrDateCell)) ? descOrDateCell : categoryName;
                             
                             allTransactions.push({ description, amount, date, categoryId: categoryName, userId: '' });
 
@@ -207,7 +225,7 @@ const categoryNameMap = useMemo(() => {
                             if (amount === 0) continue;
                             
                             const date = parseDate(descOrDateCell);
-                            const description = (typeof descOrDateCell === 'string' && !descOrDateCell.match(/^\d{1,2}\. \w{3}/i)) ? descOrDateCell : categoryName;
+                            const description = (typeof descOrDateCell === 'string' && !/^\d{1,2}/.test(descOrDateCell)) ? descOrDateCell : categoryName;
                             
                             allTransactions.push({ description, amount, date, categoryId: categoryName, userId: '' });
                         }
@@ -224,7 +242,7 @@ const categoryNameMap = useMemo(() => {
                     const description = row[0] as string;
                     const amount = row[2] as number;
                     if (description && typeof amount === 'number' && amount !== 0) {
-                        const date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                        const date = new Date(Date.UTC(yearForSheet, monthIndex, 15, 12, 0, 0));
                         allTransactions.push({ description, amount, date, categoryId: sonderausgabenCategory, userId: '' });
                     }
                 }
@@ -242,7 +260,7 @@ const categoryNameMap = useMemo(() => {
                     const valF = row[5] as number; 
                     const valH = row[7] as number;
                     
-                    const date = new Date(Date.UTC(fileYear, monthIndex, 15, 12, 0, 0));
+                    const date = new Date(Date.UTC(yearForSheet, monthIndex, 15, 12, 0, 0));
 
                     if (typeof valF === 'number' && valF !== 0) {
                         allTransactions.push({ description: "Sonderwert Spalte F", amount: valF, date, categoryId: sonderwerteFCategory, userId: '' });
