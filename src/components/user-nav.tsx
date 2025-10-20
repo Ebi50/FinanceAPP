@@ -91,8 +91,8 @@ export function UserNav() {
 
 
   if (isUserLoading) {
-    return <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-      <Avatar className="h-9 w-9">
+    return <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+      <Avatar className="h-10 w-10">
         <AvatarFallback>..
         </AvatarFallback>
       </Avatar>
@@ -106,11 +106,11 @@ export function UserNav() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-          <Avatar className="h-9 w-9 cursor-pointer" onClick={handleAvatarClick}>
+        <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+          <Avatar className="h-10 w-10 cursor-pointer" onClick={handleAvatarClick}>
             {isUploading ? (
                 <div className="flex h-full w-full items-center justify-center rounded-full bg-muted/80">
-                    <Loader2 className="h-4 w-4 animate-spin"/>
+                    <Loader2 className="h-5 w-5 animate-spin"/>
                 </div>
             ) : (
                 <>
