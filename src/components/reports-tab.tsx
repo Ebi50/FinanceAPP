@@ -41,9 +41,6 @@ import html2canvas from "html2canvas";
 
 interface ReportsTabProps {
   transactions: Transaction[];
-  availableYears: number[];
-  currentYear: number;
-  setCurrentYear: (year: number) => void;
 }
 
 interface AutoTableDoc extends jsPDF {
@@ -51,11 +48,13 @@ interface AutoTableDoc extends jsPDF {
 }
 
 
-export function ReportsTab({ transactions, availableYears, currentYear, setCurrentYear }: ReportsTabProps) {
+export function ReportsTab({ transactions }: ReportsTabProps) {
   const { toast } = useToast();
   const { user } = useUser();
   const firestore = useFirestore();
   const chartRef = useRef<HTMLDivElement>(null);
+  
+  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number | null>(new Date().getMonth());
 
 
@@ -70,9 +69,23 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
   const incomeCategory = useMemo(() => categories?.find(c => c.name.toLowerCase() === 'einnahmen'), [categories]);
 
   const [transactionsForChart, setTransactionsForChart] = useState<Transaction[]>([]);
-  const [yearlyTransactions, setYearlyTransactions] = useState<Transaction[]>([]);
   const periodTitle = selectedMonth !== null ? `${de.localize?.month(selectedMonth, { width: 'long' })} ${currentYear}` : `Gesamtjahr ${currentYear}`;
-
+  
+  const availableYears = useMemo(() => {
+    if (!transactions) return [new Date().getFullYear()];
+    const years = new Set<number>();
+    transactions.forEach(t => {
+      if (t.date && t.date.toDate) {
+        const date = t.date.toDate();
+        if (isValid(date)) {
+          years.add(date.getFullYear());
+        }
+      }
+    });
+    years.add(new Date().getFullYear());
+    return Array.from(years).sort((a, b) => b - a);
+  }, [transactions]);
+  
   const generatePdf = async (period: "monthly" | "yearly", year: number, month: number | null) => {
     const doc = new jsPDF() as AutoTableDoc;
     
@@ -89,9 +102,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
         title = `Jahresbericht ${year}`;
     }
     
-    const chartDataForPdf = period === 'monthly' && month !== null 
-    ? reportTransactions 
-    : yearlyTransactions;
+    const chartDataForPdf = reportTransactions;
 
     // Update state for the chart to render with the correct data
     setTransactionsForChart(chartDataForPdf.filter(t => t.categoryId !== incomeCategory?.id));
@@ -231,26 +242,25 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
     setTransactionsForChart([]); // Reset chart data
   };
   
-  useEffect(() => {
-    const yearlyData = transactions.filter(t => {
+  const filteredTableTransactions = useMemo(() => {
+    if (!transactions) return [];
+
+    let yearlyData = transactions.filter(t => {
       const transactionDate = t.date.toDate();
       return isValid(transactionDate) && getYear(transactionDate) === currentYear;
     });
-    setYearlyTransactions(yearlyData);
-  }, [transactions, currentYear]);
 
-  const filteredTableTransactions = useMemo(() => {
     if (selectedMonth === null) {
-      return yearlyTransactions;
+      return yearlyData;
     }
-    return yearlyTransactions.filter(t => {
+
+    return yearlyData.filter(t => {
       const transactionDate = t.date.toDate();
       return isValid(transactionDate) && getMonth(transactionDate) === selectedMonth;
     });
-  }, [yearlyTransactions, selectedMonth]);
+  }, [transactions, currentYear, selectedMonth]);
 
   useEffect(() => {
-    // This effect now correctly filters the data for the chart based on the selected month
     const expensesForChart = filteredTableTransactions.filter(t => t.categoryId !== incomeCategory?.id);
     setTransactionsForChart(expensesForChart);
   }, [filteredTableTransactions, incomeCategory]);
@@ -260,7 +270,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
     if (availableYears.length > 0 && !availableYears.includes(currentYear)) {
       setCurrentYear(availableYears[0]);
     }
-  }, [availableYears, currentYear, setCurrentYear]);
+  }, [availableYears, currentYear]);
 
   const expensesByCategoryForTable = useMemo(() => {
     const expenses = filteredTableTransactions
@@ -378,9 +388,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
             </CardHeader>
             <CardContent>
                 {transactionsForChart.length > 0 ? (
-                <div ref={chartRef}>
                     <ExpensesChart transactions={transactionsForChart} />
-                </div>
                 ) : (
                 <div className="flex items-center justify-center h-[350px] text-muted-foreground">
                     Keine Ausgabendaten für den ausgewählten Zeitraum vorhanden.
@@ -465,7 +473,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
                     <CardDescription>
                         Gesamtergebnis für den ausgewählten Zeitraum.
                     </CardDescription>
-                </Header>
+                </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="flex justify-between items-center">
                         <span className="font-medium">Gesamteinnahmen</span>
@@ -487,7 +495,7 @@ export function ReportsTab({ transactions, availableYears, currentYear, setCurre
         </div>
       </div>
       {/* Hidden container for rendering chart for PDF */}
-      <div className="absolute -z-10" style={{ left: '-9999px', top: '-9999px', width: '800px', height: 'auto' }}>
+      <div className="absolute -z-10" style={{ left: '-9999px', top: '0px', width: '800px', height: 'auto' }}>
           <div ref={chartRef}>
               {transactionsForChart.length > 0 && <ExpensesChart transactions={transactionsForChart} />}
           </div>
