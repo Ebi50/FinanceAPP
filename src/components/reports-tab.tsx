@@ -69,7 +69,7 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
   const incomeCategory = useMemo(() => categories?.find(c => c.name.toLowerCase() === 'einnahmen'), [categories]);
 
   const [transactionsForChart, setTransactionsForChart] = useState<Transaction[]>([]);
-  const periodTitle = selectedMonth !== null ? `${de.localize?.month(selectedMonth, { width: 'long' })} ${currentYear}` : `Gesamtjahr ${currentYear}`;
+  const periodTitle = selectedMonth !== null && de.localize ? `${de.localize.month(selectedMonth, { width: 'long' })} ${currentYear}` : `Gesamtjahr ${currentYear}`;
   
   const availableYears = useMemo(() => {
     if (!transactions) return [new Date().getFullYear()];
@@ -90,6 +90,7 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
     const doc = new jsPDF() as AutoTableDoc;
     
     let reportTransactions = transactions.filter(t => {
+        if (!t.date || !t.date.toDate) return false;
         const transactionDate = t.date.toDate();
         return isValid(transactionDate) && getYear(transactionDate) === year;
     });
@@ -122,8 +123,8 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
     const expenses = reportTransactions.filter(t => t.categoryId !== incomeCategory?.id);
     const income = reportTransactions.filter(t => t.categoryId === incomeCategory?.id);
 
-    const totalExpenses = expenses.reduce((sum, t) => sum + t.amount, 0);
-    const totalIncome = income.reduce((sum, t) => sum + t.amount, 0);
+    const totalExpenses = expenses.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const totalIncome = income.reduce((sum, t) => sum + (t.amount || 0), 0);
     const balance = totalIncome - totalExpenses;
 
     doc.text(title, 14, 20);
@@ -136,7 +137,7 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
         acc[categoryName] = { transactions: [], total: 0 };
       }
       acc[categoryName].transactions.push(t);
-      acc[categoryName].total += t.amount;
+      acc[categoryName].total += (t.amount || 0);
       return acc;
     }, {} as Record<string, {transactions: Transaction[], total: number}>);
 
@@ -246,6 +247,7 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
     if (!transactions) return [];
 
     let yearlyData = transactions.filter(t => {
+      if (!t.date || !t.date.toDate) return false;
       const transactionDate = t.date.toDate();
       return isValid(transactionDate) && getYear(transactionDate) === currentYear;
     });
@@ -255,6 +257,7 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
     }
 
     return yearlyData.filter(t => {
+      if (!t.date || !t.date.toDate) return false;
       const transactionDate = t.date.toDate();
       return isValid(transactionDate) && getMonth(transactionDate) === selectedMonth;
     });
@@ -280,7 +283,7 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
       if (!acc[categoryName]) {
         acc[categoryName] = 0;
       }
-      acc[categoryName] += transaction.amount;
+      acc[categoryName] += transaction.amount || 0;
       return acc;
     }, {} as Record<string, number>);
 
@@ -300,7 +303,7 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
         if (!acc[description]) {
           acc[description] = 0;
         }
-        acc[description] += transaction.amount;
+        acc[description] += transaction.amount || 0;
         return acc;
       }, {} as Record<string, number>);
 
@@ -503,3 +506,4 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
     </>
   );
 }
+
