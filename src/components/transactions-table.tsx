@@ -176,6 +176,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
             const incomeCategory = categories?.find(c => c.name.toLowerCase() === 'einnahmen');
             const isIncome = category?.id === incomeCategory?.id;
             const isVirtual = (transaction as any).isVirtual;
+            const isOriginalRecurring = (transaction as any).isRecurring === true;
             
             // This robustly converts Firestore Timestamps into a JS Date for formatting
             const transactionDate = transaction.date.toDate();
@@ -187,14 +188,14 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
                   {transaction.items && transaction.items.length > 1 && (
                     <span className="text-xs text-muted-foreground ml-2">({transaction.items.length} Posten)</span>
                   )}
-                  {isVirtual && (
+                  {(isVirtual || isOriginalRecurring) && (
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Repeat className="h-3 w-3 ml-2 inline-block"/>
+                           <Repeat className="h-3 w-3 ml-2 inline-block"/>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>Automatisch wiederholte Transaktion</p>
+                          <p>{isOriginalRecurring ? "Vorlage für wiederkehrende Transaktionen" : "Automatisch wiederholte Transaktion"}</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -216,7 +217,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
                 <TableCell className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                       <Button aria-haspopup="true" size="icon" variant="ghost" disabled={(transaction as any).isRecurring && !isVirtual}>
+                       <Button aria-haspopup="true" size="icon" variant="ghost">
                         <MoreHorizontal className="h-4 w-4" />
                         <span className="sr-only">Menü umschalten</span>
                       </Button>
