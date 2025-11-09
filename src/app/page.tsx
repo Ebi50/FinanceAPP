@@ -30,7 +30,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useMemoFirebase } from '@/firebase/provider';
-import { isValid } from 'date-fns';
+import { isValid, addMonths } from 'date-fns';
 import { de } from 'date-fns/locale';
 
 
@@ -132,12 +132,42 @@ export default function Dashboard() {
     const docRef = doc(firestore, 'transactions', id);
     deleteDocumentNonBlocking(docRef);
   };
+
+  const transactionsWithRecurrences = useMemo(() => {
+    if (!allTransactions) return [];
+  
+    const generatedTransactions: Transaction[] = [];
+  
+    allTransactions.forEach(t => {
+      // Add the original transaction
+      generatedTransactions.push(t);
+  
+      // If it's a recurring transaction, generate future occurrences
+      if ((t as any).isRecurring) {
+        const originalDate = t.date.toDate();
+        for (let i = 1; i <= 12; i++) { // Generate for the next 12 months
+          const futureDate = addMonths(originalDate, i);
+          
+          // Create a new transaction object for the future occurrence
+          const recurringInstance: Transaction = {
+            ...t,
+            id: `${t.id}-recurring-${i}`, // Create a unique ID for the virtual transaction
+            date: Timestamp.fromDate(futureDate),
+            isRecurring: false, // The virtual instance itself is not recurring
+          };
+          generatedTransactions.push(recurringInstance);
+        }
+      }
+    });
+  
+    return generatedTransactions;
+  }, [allTransactions]);
   
   const availableYears = useMemo(() => {
-    if (!allTransactions) return [new Date().getFullYear()];
+    if (!transactionsWithRecurrences) return [new Date().getFullYear()];
 
     const years = new Set<number>();
-    allTransactions.forEach(t => {
+    transactionsWithRecurrences.forEach(t => {
       if (t.date && t.date.toDate) { 
         const date = t.date.toDate();
         if (isValid(date)) {
@@ -149,12 +179,12 @@ export default function Dashboard() {
     years.add(new Date().getFullYear());
 
     return Array.from(years).sort((a, b) => b - a);
-  }, [allTransactions]);
+  }, [transactionsWithRecurrences]);
 
   const filteredTransactions = useMemo(() => {
-    if (!allTransactions) return [];
+    if (!transactionsWithRecurrences) return [];
   
-    const filteredByYear = allTransactions.filter(t => {
+    const filteredByYear = transactionsWithRecurrences.filter(t => {
         if (!t.date || !t.date.toDate) return false;
         const date = t.date.toDate();
         return isValid(date) && date.getFullYear() === currentYear;
@@ -174,7 +204,7 @@ export default function Dashboard() {
         return dateB.getTime() - dateA.getTime();
     });
     
-  }, [allTransactions, currentMonth, currentYear]);
+  }, [transactionsWithRecurrences, currentMonth, currentYear]);
 
   useEffect(() => {
     if (availableYears.length > 0 && !availableYears.includes(currentYear)) {
@@ -221,7 +251,7 @@ export default function Dashboard() {
             <TabsTrigger value="reports">Berichte</TabsTrigger>
             <TabsTrigger value="import">Importieren</TabsTrigger>
           </TabsList>
-           {(activeTab === 'overview' || activeTab === 'transactions') && (
+           {(activeTab === 'overview' || activeTab === 'transactions' || activeTab === 'reports') && (
               <div className="flex items-center gap-2 pt-4">
                   <Select value={currentMonth === null ? 'all' : String(currentMonth)} onValueChange={(value) => {
                       if (value === 'all') {
@@ -256,12 +286,12 @@ export default function Dashboard() {
             )}
           <TabsContent value="reports" className="space-y-4">
             <ReportsTab 
-              transactions={allTransactions || []}
+              transactions={filteredTransactions}
             />
           </TabsContent>
           <TabsContent value="import" className="space-y-4">
             <ImportTab 
-              transactions={allTransactions || []} 
+              transactions={transactionsWithRecurrences} 
               onImport={handleImportTransactions}
               categories={categories || []}
             />

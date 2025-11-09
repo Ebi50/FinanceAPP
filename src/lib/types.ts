@@ -14,6 +14,7 @@ export type Transaction = {
   categoryId: string;
   items?: TransactionItem[];
   userId: string;
+  isRecurring?: boolean;
 };
 
 export type Category = {

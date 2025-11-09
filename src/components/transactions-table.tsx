@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "./ui/table";
 import { Button } from "./ui/button";
-import { MoreHorizontal, Trash2, Edit, ArrowUpDown } from "lucide-react";
+import { MoreHorizontal, Trash2, Edit, ArrowUpDown, Repeat } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -63,10 +63,14 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
   }, [categories]);
 
   const handleDelete = (id: string) => {
+    // Prevent deleting virtual recurring transactions
+    if (id.includes('-recurring-')) return;
     onDelete(id);
   };
   
   const handleEdit = (transaction: Transaction) => {
+    // Prevent editing virtual recurring transactions
+    if (transaction.id.includes('-recurring-')) return;
     setEditingTransaction(transaction);
   }
 
@@ -165,16 +169,29 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
             const category = categoryMap.get(transaction.categoryId);
             const incomeCategory = categories?.find(c => c.name.toLowerCase() === 'einnahmen');
             const isIncome = category?.id === incomeCategory?.id;
+            const isVirtualRecurring = transaction.id.includes('-recurring-');
             
             // This robustly converts Firestore Timestamps into a JS Date for formatting
             const transactionDate = transaction.date.toDate();
 
             return (
-              <TableRow key={transaction.id}>
+              <TableRow key={transaction.id} className={cn(isVirtualRecurring && "text-muted-foreground/80")}>
                 <TableCell className="font-medium">
                   {transaction.description}
                   {transaction.items && transaction.items.length > 1 && (
                     <span className="text-xs text-muted-foreground ml-2">({transaction.items.length} Posten)</span>
+                  )}
+                  {isVirtualRecurring && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Repeat className="h-3 w-3 ml-2 inline-block"/>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Automatisch wiederholte Transaktion</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   )}
                 </TableCell>
                 <TableCell>
@@ -187,13 +204,13 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
                 <TableCell>
                   {isValid(transactionDate) ? format(transactionDate, "dd. MMMM yyyy", { locale: de }) : 'Ungültiges Datum'}
                 </TableCell>
-                <TableCell className={cn("text-right", isIncome ? "text-emerald-500" : "text-destructive")}>
+                <TableCell className={cn("text-right", isIncome ? "text-emerald-500" : "text-destructive", isVirtualRecurring && "font-normal")}>
                   {isIncome ? '+' : '-'}{formatCurrency(transaction.amount)}
                 </TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button aria-haspopup="true" size="icon" variant="ghost">
+                      <Button aria-haspopup="true" size="icon" variant="ghost" disabled={isVirtualRecurring}>
                         <MoreHorizontal className="h-4 w-4" />
                         <span className="sr-only">Menü umschalten</span>
                       </Button>

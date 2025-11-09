@@ -320,50 +320,6 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
 
   return (
     <>
-      <div className="flex items-center gap-4 mb-4">
-        <div>
-          <Label htmlFor="year-select-reports">Jahr auswählen</Label>
-          <Select
-              value={String(currentYear)}
-              onValueChange={(value) => setCurrentYear(Number(value))}
-              disabled={availableYears.length === 0}
-          >
-              <SelectTrigger id="year-select-reports" className="w-[120px]">
-                  <SelectValue placeholder="Jahr" />
-              </SelectTrigger>
-              <SelectContent>
-                  {availableYears.map(year => (
-                      <SelectItem key={year} value={String(year)}>{year}</SelectItem>
-                  ))}
-              </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="month-select-reports">Monat auswählen</Label>
-          <Select
-              value={selectedMonth === null ? 'all' : String(selectedMonth)}
-              onValueChange={(value) => {
-                  if (value === 'all') {
-                      setSelectedMonth(null);
-                  } else {
-                      setSelectedMonth(Number(value));
-                  }
-              }}
-          >
-              <SelectTrigger id="month-select-reports" className="w-[180px]">
-                  <SelectValue placeholder="Monat" />
-              </SelectTrigger>
-              <SelectContent>
-                  <SelectItem value="all">Alle Monate</SelectItem>
-                  {Array.from({ length: 12 }, (_, i) => (
-                      <SelectItem key={i} value={String(i)}>
-                      {de.localize?.month(i, { width: 'long' })}
-                      </SelectItem>
-                  ))}
-              </SelectContent>
-          </Select>
-        </div>
-      </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <div className="lg:col-span-3 flex flex-col gap-4">
             <Card>
@@ -472,10 +428,10 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
             </Card>
             <Card>
                 <CardHeader>
-                    <CardTitle className="font-headline">Zusammenfassung {periodTitle}</CardTitle>
-                    <CardDescription>
-                        Gesamtergebnis für den ausgewählten Zeitraum.
-                    </CardDescription>
+                  <CardTitle>Zusammenfassung {periodTitle}</CardTitle>
+                  <CardDescription>
+                      Gesamtergebnis für den ausgewählten Zeitraum.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="flex justify-between items-center">
@@ -506,4 +462,3 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
     </>
   );
 }
-
