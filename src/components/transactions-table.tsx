@@ -36,7 +36,7 @@ import {
 import { AddTransactionSheet } from "./add-transaction-sheet";
 import { useState, useMemo } from "react";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection } from 'firebase/firestore';
+import { collection, doc } from 'firebase/firestore';
 import {
   Tooltip,
   TooltipContent,
@@ -69,15 +69,23 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
     return new Map(categories.map((c) => [c.id, c]));
   }, [categories]);
 
-  const handleDelete = (id: string) => {
-    // Prevent deleting virtual recurring transactions, they don't exist in DB
-    if ((id || '').includes('-recurring-')) return;
-    onDelete(id);
+  const handleDelete = (transaction: Transaction) => {
+    // If it's a virtual transaction, find the original template to delete
+    if ((transaction.id || '').includes('-recurring-')) {
+        const originalId = transaction.id.split('-recurring-')[0];
+        onDelete(originalId);
+    } else { // Otherwise, delete the transaction itself (works for templates and one-offs)
+        onDelete(transaction.id);
+    }
   };
   
   const handleEdit = (transaction: Transaction) => {
-    // Editing a virtual transaction will create a one-off exception
-    setEditingTransaction(transaction);
+    // For both virtual and original recurring transactions, we open the editor.
+    // The submission logic will handle updating the correct document.
+    let transactionToEdit = transaction;
+    // If it's a virtual one, we might want to fetch the original to get the purest data
+    // For now, passing the virtual one is fine as it contains all necessary data.
+    setEditingTransaction(transactionToEdit);
   }
 
   const handleUpdate = (updatedTransaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date; items: TransactionItem[] }) => {
@@ -226,26 +234,26 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
                       <DropdownMenuLabel>Aktionen</DropdownMenuLabel>
                       <DropdownMenuItem onSelect={() => handleEdit(transaction)}>
                         <Edit className="mr-2 h-4 w-4" />
-                        Bearbeiten
+                        {isVirtual || isOriginalRecurring ? 'Serie bearbeiten' : 'Bearbeiten'}
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                        <AlertDialog>
                           <AlertDialogTrigger asChild>
-                             <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive" disabled={isVirtual}>
+                             <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive">
                                <Trash2 className="mr-2 h-4 w-4" />
-                               Löschen
+                               {isVirtual || isOriginalRecurring ? 'Serie löschen' : 'Löschen'}
                              </DropdownMenuItem>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
                               <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird die Transaktion dauerhaft gelöscht.
+                                Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird die Transaktion {isVirtual || isOriginalRecurring ? 'und alle zukünftigen Wiederholungen' : ''} dauerhaft gelöscht.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDelete(transaction.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                              <AlertDialogAction onClick={() => handleDelete(transaction)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                                 Löschen
                               </AlertDialogAction>
                             </AlertDialogFooter>

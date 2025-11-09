@@ -76,29 +76,20 @@ export default function Dashboard() {
     const { id: transactionId, date, items, ...restOfData } = transactionData;
   
     const firestoreTimestamp = Timestamp.fromDate(date);
-    
-    // Logic for handling virtual recurring transactions
-    if (transactionId && transactionId.includes('-recurring-')) {
-      // This is an edit of a virtual transaction, so we create a new, real, one-off transaction.
-      // This acts as an "exception" for the month.
-      const originalRecurringId = transactionId.split('-recurring-')[0];
-      const dataToCreate = {
-        ...restOfData,
-        date: firestoreTimestamp,
-        items,
-        userId: user.uid,
-        createdAt: serverTimestamp(),
-        isRecurring: false, // This is a one-off exception
-        originalRecurringId: originalRecurringId, // Link to the original series
-      };
-      addDocumentNonBlocking(collection(firestore, 'transactions'), dataToCreate);
 
-    } else if (transactionId) {
-      // This is a normal update of a real transaction
-      const docRef = doc(firestore, 'transactions', transactionId);
+    let idToUpdate = transactionId;
+    // If we're editing a virtual transaction, we need to find the original template to update it.
+    if (transactionId && transactionId.includes('-recurring-')) {
+      idToUpdate = transactionId.split('-recurring-')[0];
+    }
+    
+    // Now idToUpdate is either the original recurring ID, a normal transaction ID, or undefined (for new ones)
+    if (idToUpdate) {
+      // This is an update of a real transaction (normal or recurring template)
+      const docRef = doc(firestore, 'transactions', idToUpdate);
       const dataToUpdate = {
         ...restOfData,
-        date: firestoreTimestamp,
+        date: firestoreTimestamp, // The date of the template might change
         items, 
         updatedAt: serverTimestamp(),
       };
@@ -180,7 +171,7 @@ export default function Dashboard() {
             ...template,
             id: `${template.id}-recurring-${i}`, // Unique virtual ID
             date: Timestamp.fromDate(futureDate),
-            isRecurring: false, // The virtual instance itself is not recurring
+            isRecurring: false, // The virtual instance itself is not a template
             isVirtual: true, // Mark as virtual
           };
           generatedTransactions.push(recurringInstance);
