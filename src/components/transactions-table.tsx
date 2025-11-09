@@ -37,6 +37,13 @@ import { AddTransactionSheet } from "./add-transaction-sheet";
 import { useState, useMemo } from "react";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection } from 'firebase/firestore';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
 
 interface TransactionsTableProps {
   transactions: Transaction[];
