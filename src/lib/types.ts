@@ -15,6 +15,8 @@ export type Transaction = {
   items?: TransactionItem[];
   userId: string;
   isRecurring?: boolean;
+  isVirtual?: boolean; // Added to identify virtual transactions
+  originalRecurringId?: string; // Link to the original recurring transaction
 };
 
 export type Category = {

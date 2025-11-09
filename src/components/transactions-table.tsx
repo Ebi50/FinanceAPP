@@ -70,14 +70,13 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
   }, [categories]);
 
   const handleDelete = (id: string) => {
-    // Prevent deleting virtual recurring transactions
-    if (id.includes('-recurring-')) return;
+    // Prevent deleting virtual recurring transactions, they don't exist in DB
+    if ((id || '').includes('-recurring-')) return;
     onDelete(id);
   };
   
   const handleEdit = (transaction: Transaction) => {
-    // Prevent editing virtual recurring transactions
-    if (transaction.id.includes('-recurring-')) return;
+    // Editing a virtual transaction will create a one-off exception
     setEditingTransaction(transaction);
   }
 
@@ -176,19 +175,19 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
             const category = categoryMap.get(transaction.categoryId);
             const incomeCategory = categories?.find(c => c.name.toLowerCase() === 'einnahmen');
             const isIncome = category?.id === incomeCategory?.id;
-            const isVirtualRecurring = transaction.id.includes('-recurring-');
+            const isVirtual = (transaction as any).isVirtual;
             
             // This robustly converts Firestore Timestamps into a JS Date for formatting
             const transactionDate = transaction.date.toDate();
 
             return (
-              <TableRow key={transaction.id} className={cn(isVirtualRecurring && "text-muted-foreground/80")}>
+              <TableRow key={transaction.id} className={cn(isVirtual && "text-muted-foreground/80")}>
                 <TableCell className="font-medium">
                   {transaction.description}
                   {transaction.items && transaction.items.length > 1 && (
                     <span className="text-xs text-muted-foreground ml-2">({transaction.items.length} Posten)</span>
                   )}
-                  {isVirtualRecurring && (
+                  {isVirtual && (
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -211,13 +210,13 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
                 <TableCell>
                   {isValid(transactionDate) ? format(transactionDate, "dd. MMMM yyyy", { locale: de }) : 'Ungültiges Datum'}
                 </TableCell>
-                <TableCell className={cn("text-right", isIncome ? "text-emerald-500" : "text-destructive", isVirtualRecurring && "font-normal")}>
+                <TableCell className={cn("text-right", isIncome ? "text-emerald-500" : "text-destructive", isVirtual && "font-normal")}>
                   {isIncome ? '+' : '-'}{formatCurrency(transaction.amount)}
                 </TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button aria-haspopup="true" size="icon" variant="ghost" disabled={isVirtualRecurring}>
+                       <Button aria-haspopup="true" size="icon" variant="ghost" disabled={(transaction as any).isRecurring && !isVirtual}>
                         <MoreHorizontal className="h-4 w-4" />
                         <span className="sr-only">Menü umschalten</span>
                       </Button>
@@ -231,7 +230,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
                       <DropdownMenuSeparator />
                        <AlertDialog>
                           <AlertDialogTrigger asChild>
-                             <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive">
+                             <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive" disabled={isVirtual}>
                                <Trash2 className="mr-2 h-4 w-4" />
                                Löschen
                              </DropdownMenuItem>

@@ -30,7 +30,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useMemoFirebase } from '@/firebase/provider';
-import { isValid, addMonths } from 'date-fns';
+import { isValid, addMonths, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { de } from 'date-fns/locale';
 
 
@@ -76,8 +76,25 @@ export default function Dashboard() {
     const { id: transactionId, date, items, ...restOfData } = transactionData;
   
     const firestoreTimestamp = Timestamp.fromDate(date);
-  
-    if (transactionId) {
+    
+    // Logic for handling virtual recurring transactions
+    if (transactionId && transactionId.includes('-recurring-')) {
+      // This is an edit of a virtual transaction, so we create a new, real, one-off transaction.
+      // This acts as an "exception" for the month.
+      const originalRecurringId = transactionId.split('-recurring-')[0];
+      const dataToCreate = {
+        ...restOfData,
+        date: firestoreTimestamp,
+        items,
+        userId: user.uid,
+        createdAt: serverTimestamp(),
+        isRecurring: false, // This is a one-off exception
+        originalRecurringId: originalRecurringId, // Link to the original series
+      };
+      addDocumentNonBlocking(collection(firestore, 'transactions'), dataToCreate);
+
+    } else if (transactionId) {
+      // This is a normal update of a real transaction
       const docRef = doc(firestore, 'transactions', transactionId);
       const dataToUpdate = {
         ...restOfData,
@@ -87,12 +104,13 @@ export default function Dashboard() {
       };
       setDocumentNonBlocking(docRef, dataToUpdate, { merge: true });
     } else {
+      // This is a creation of a new real transaction
       const coll = collection(firestore, 'transactions');
       const dataToCreate = {
         ...restOfData,
         date: firestoreTimestamp,
         items,
-        userId: user.uid, // Add user ID for tracking
+        userId: user.uid,
         createdAt: serverTimestamp(),
       };
       addDocumentNonBlocking(coll, dataToCreate);
@@ -136,24 +154,34 @@ export default function Dashboard() {
   const transactionsWithRecurrences = useMemo(() => {
     if (!allTransactions) return [];
   
-    const generatedTransactions: Transaction[] = [];
+    const generatedTransactions: Transaction[] = [...allTransactions];
+    const realTransactions = allTransactions;
   
-    allTransactions.forEach(t => {
-      // Add the original transaction
-      generatedTransactions.push(t);
+    // Identify original recurring transactions
+    const recurringTemplates = realTransactions.filter(t => (t as any).isRecurring === true);
   
-      // If it's a recurring transaction, generate future occurrences
-      if ((t as any).isRecurring) {
-        const originalDate = t.date.toDate();
-        for (let i = 1; i <= 12; i++) { // Generate for the next 12 months
-          const futureDate = addMonths(originalDate, i);
-          
-          // Create a new transaction object for the future occurrence
+    recurringTemplates.forEach(template => {
+      const originalDate = template.date.toDate();
+  
+      // Generate for the next 12 months
+      for (let i = 1; i <= 12; i++) {
+        const futureDate = addMonths(originalDate, i);
+        const interval = { start: startOfMonth(futureDate), end: endOfMonth(futureDate) };
+  
+        // Check if a real transaction (an exception) already exists for this month for this series
+        const exceptionExists = realTransactions.some(t => 
+          (t as any).originalRecurringId === template.id && 
+          isWithinInterval(t.date.toDate(), interval)
+        );
+        
+        // If no exception exists for this month, create a virtual one
+        if (!exceptionExists) {
           const recurringInstance: Transaction = {
-            ...t,
-            id: `${t.id}-recurring-${i}`, // Create a unique ID for the virtual transaction
+            ...template,
+            id: `${template.id}-recurring-${i}`, // Unique virtual ID
             date: Timestamp.fromDate(futureDate),
             isRecurring: false, // The virtual instance itself is not recurring
+            isVirtual: true, // Mark as virtual
           };
           generatedTransactions.push(recurringInstance);
         }
