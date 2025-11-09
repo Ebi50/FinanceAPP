@@ -77,18 +77,26 @@ export default function Dashboard() {
   
     const firestoreTimestamp = Timestamp.fromDate(date);
 
-    let idToUpdate = transactionId;
-    // If we're editing a virtual transaction, we need to find the original template to update it.
-    if (transactionId && transactionId.includes('-recurring-')) {
-      idToUpdate = transactionId.split('-recurring-')[0];
-    }
-    
-    // Now idToUpdate is either the original recurring ID, a normal transaction ID, or undefined (for new ones)
-    if (idToUpdate) {
-      // This is an update of a real transaction (normal or recurring template)
-      const docRef = doc(firestore, 'transactions', idToUpdate);
+    // If we are editing a virtual transaction, we need to create a *new* non-recurring transaction for that specific date (an exception).
+    if (transactionId && (transactionData as any).isVirtual) {
+        const coll = collection(firestore, 'transactions');
+        const dataToCreate = {
+            ...restOfData,
+            amount: transactionData.amount,
+            date: firestoreTimestamp,
+            items,
+            userId: user.uid,
+            createdAt: serverTimestamp(),
+            isRecurring: false, // This is an exception, not a new recurring template
+            originalRecurringId: transactionId.split('-recurring-')[0] // Link to the original series
+        };
+        addDocumentNonBlocking(coll, dataToCreate);
+    } else if (transactionId) {
+      // This is an update of a real transaction (normal or a recurring template)
+      const docRef = doc(firestore, 'transactions', transactionId);
       const dataToUpdate = {
         ...restOfData,
+        amount: transactionData.amount,
         date: firestoreTimestamp, // The date of the template might change
         items, 
         updatedAt: serverTimestamp(),
@@ -99,6 +107,7 @@ export default function Dashboard() {
       const coll = collection(firestore, 'transactions');
       const dataToCreate = {
         ...restOfData,
+        amount: transactionData.amount,
         date: firestoreTimestamp,
         items,
         userId: user.uid,

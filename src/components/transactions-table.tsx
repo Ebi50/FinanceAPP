@@ -234,26 +234,26 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
                       <DropdownMenuLabel>Aktionen</DropdownMenuLabel>
                       <DropdownMenuItem onSelect={() => handleEdit(transaction)}>
                         <Edit className="mr-2 h-4 w-4" />
-                        {isVirtual || isOriginalRecurring ? 'Serie bearbeiten' : 'Bearbeiten'}
+                        Bearbeiten
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                        <AlertDialog>
                           <AlertDialogTrigger asChild>
-                             <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive">
+                             <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive" disabled={isVirtual}>
                                <Trash2 className="mr-2 h-4 w-4" />
-                               {isVirtual || isOriginalRecurring ? 'Serie löschen' : 'Löschen'}
+                               Löschen
                              </DropdownMenuItem>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
                               <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird die Transaktion {isVirtual || isOriginalRecurring ? 'und alle zukünftigen Wiederholungen' : ''} dauerhaft gelöscht.
+                                Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird die Transaktion dauerhaft gelöscht.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDelete(transaction)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                              <AlertDialogAction onClick={() => onDelete(transaction.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                                 Löschen
                               </AlertDialogAction>
                             </AlertDialogFooter>
