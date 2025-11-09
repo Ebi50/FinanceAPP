@@ -73,32 +73,24 @@ export default function Dashboard() {
   const handleAddOrUpdateTransaction = (transactionData: Omit<Transaction, 'id' | 'date' | 'amount'> & { id?: string, date: Date, amount: number, items: TransactionItem[] }) => {
     if (!user || !firestore) return;
   
-    const { id: transactionId, date, items, ...restOfData } = transactionData;
+    const { id, date, items, ...restOfData } = transactionData;
+    let transactionId = id;
   
     const firestoreTimestamp = Timestamp.fromDate(date);
-
-    // If we are editing a virtual transaction, we need to create a *new* non-recurring transaction for that specific date (an exception).
+  
+    // If we are editing a virtual transaction, we must target the original template for the update.
     if (transactionId && (transactionData as any).isVirtual) {
-        const coll = collection(firestore, 'transactions');
-        const dataToCreate = {
-            ...restOfData,
-            amount: transactionData.amount,
-            date: firestoreTimestamp,
-            items,
-            userId: user.uid,
-            createdAt: serverTimestamp(),
-            isRecurring: false, // This is an exception, not a new recurring template
-            originalRecurringId: transactionId.split('-recurring-')[0] // Link to the original series
-        };
-        addDocumentNonBlocking(coll, dataToCreate);
-    } else if (transactionId) {
+        transactionId = transactionId.split('-recurring-')[0]; 
+    }
+  
+    if (transactionId) {
       // This is an update of a real transaction (normal or a recurring template)
       const docRef = doc(firestore, 'transactions', transactionId);
       const dataToUpdate = {
         ...restOfData,
         amount: transactionData.amount,
-        date: firestoreTimestamp, // The date of the template might change
-        items, 
+        date: firestoreTimestamp,
+        items,
         updatedAt: serverTimestamp(),
       };
       setDocumentNonBlocking(docRef, dataToUpdate, { merge: true });
@@ -147,7 +139,15 @@ export default function Dashboard() {
 
   const handleDeleteTransaction = (id: string) => {
     if (!user) return;
-    const docRef = doc(firestore, 'transactions', id);
+    
+    let transactionIdToDelete = id;
+
+    // If it's a virtual transaction, find the original template to delete
+    if (id.includes('-recurring-')) {
+        transactionIdToDelete = id.split('-recurring-')[0];
+    }
+    
+    const docRef = doc(firestore, 'transactions', transactionIdToDelete);
     deleteDocumentNonBlocking(docRef);
   };
 
@@ -166,25 +166,16 @@ export default function Dashboard() {
       // Generate for the next 12 months
       for (let i = 1; i <= 12; i++) {
         const futureDate = addMonths(originalDate, i);
-        const interval = { start: startOfMonth(futureDate), end: endOfMonth(futureDate) };
-  
-        // Check if a real transaction (an exception) already exists for this month for this series
-        const exceptionExists = realTransactions.some(t => 
-          (t as any).originalRecurringId === template.id && 
-          isWithinInterval(t.date.toDate(), interval)
-        );
         
-        // If no exception exists for this month, create a virtual one
-        if (!exceptionExists) {
-          const recurringInstance: Transaction = {
-            ...template,
-            id: `${template.id}-recurring-${i}`, // Unique virtual ID
-            date: Timestamp.fromDate(futureDate),
-            isRecurring: false, // The virtual instance itself is not a template
-            isVirtual: true, // Mark as virtual
-          };
-          generatedTransactions.push(recurringInstance);
-        }
+        // No exception check needed anymore as per the new logic
+        const recurringInstance: Transaction = {
+          ...template,
+          id: `${template.id}-recurring-${i}`, // Unique virtual ID
+          date: Timestamp.fromDate(futureDate),
+          isRecurring: false, // The virtual instance itself is not a template
+          isVirtual: true, // Mark as virtual
+        };
+        generatedTransactions.push(recurringInstance);
       }
     });
   
