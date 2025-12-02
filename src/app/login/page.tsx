@@ -52,6 +52,14 @@ export default function LoginPage() {
   };
   
   const handlePasswordReset = () => {
+    if (!auth) {
+        toast({
+            variant: "destructive",
+            title: "Fehler",
+            description: "Authentifizierungsdienst nicht verfügbar.",
+        });
+        return;
+    }
     if (!resetEmail) {
         toast({
             variant: "destructive",
@@ -63,17 +71,25 @@ export default function LoginPage() {
     sendPasswordResetEmail(auth, resetEmail)
         .then(() => {
             toast({
-                title: "E-Mail gesendet",
-                description: "Wenn ein Konto mit dieser E-Mail existiert, wurde eine E-Mail zum Zurücksetzen des Passworts gesendet.",
+                title: "E-Mail zum Zurücksetzen gesendet",
+                description: "Wenn ein Konto mit dieser E-Mail existiert, wurde eine Anleitung zum Zurücksetzen des Passworts gesendet.",
             });
         })
         .catch((error) => {
-            console.error("Error sending password reset email:", error);
-            // We show a generic message to not reveal which emails are registered.
-            toast({
-                title: "E-Mail gesendet",
-                description: "Wenn ein Konto mit dieser E-Mail existiert, wurde eine E-Mail zum Zurücksetzen des Passworts gesendet.",
-            });
+            console.error("Error sending password reset email:", error.code, error.message);
+            if (error.code === 'auth/missing-continue-uri' || error.code === 'auth/invalid-continue-uri') {
+                 toast({
+                    variant: "destructive",
+                    title: "Konfigurationsfehler",
+                    description: "Bitte konfigurieren Sie die Passwort-Reset-Vorlage in Ihrer Firebase-Konsole.",
+                    duration: 9000,
+                });
+            } else {
+                 toast({
+                    title: "E-Mail zum Zurücksetzen gesendet",
+                    description: "Wenn ein Konto mit dieser E-Mail existiert, wurde eine Anleitung zum Zurücksetzen des Passworts gesendet.",
+                });
+            }
         });
   };
 
