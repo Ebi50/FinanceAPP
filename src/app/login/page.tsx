@@ -76,20 +76,14 @@ export default function LoginPage() {
             });
         })
         .catch((error) => {
-            console.error("Error sending password reset email:", error.code, error.message);
-            if (error.code === 'auth/missing-continue-uri' || error.code === 'auth/invalid-continue-uri') {
-                 toast({
-                    variant: "destructive",
-                    title: "Konfigurationsfehler",
-                    description: "Bitte konfigurieren Sie die Passwort-Reset-Vorlage in Ihrer Firebase-Konsole.",
-                    duration: 9000,
-                });
-            } else {
-                 toast({
-                    title: "E-Mail zum Zurücksetzen gesendet",
-                    description: "Wenn ein Konto mit dieser E-Mail existiert, wurde eine Anleitung zum Zurücksetzen des Passworts gesendet.",
-                });
-            }
+            console.error("Error sending password reset email:", error);
+            // Display a more detailed error message to help with debugging
+            toast({
+                variant: "destructive",
+                title: "Fehler beim E-Mail-Versand",
+                description: `Code: ${error.code} - Meldung: ${error.message}`,
+                duration: 9000, // Keep the toast on screen longer
+            });
         });
   };
 
