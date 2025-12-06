@@ -189,7 +189,7 @@ export default function SettingsPage() {
     } catch (error: any) {
         console.error("Error updating password: ", error);
         let description = 'Ein unbekannter Fehler ist aufgetreten.';
-        if (error.code === 'auth/wrong-password') {
+        if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
             description = 'Das alte Passwort ist nicht korrekt.';
         } else if (error.code === 'auth/requires-recent-login') {
             description = 'Diese Aktion erfordert eine erneute Anmeldung. Bitte melden Sie sich ab und wieder an.';
