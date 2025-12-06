@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import Image from "next/image"
 import { useAuth, useUser } from "@/firebase";
-import { initiateEmailSignIn } from "@/firebase/non-blocking-login";
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { PlaceHolderImages } from '@/lib/placeholder-images';
@@ -28,13 +28,14 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
-import { sendPasswordResetEmail } from "firebase/auth";
+import { Loader2 } from "lucide-react";
 
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [resetEmail, setResetEmail] = useState('');
+  const [isSigningIn, setIsSigningIn] = useState(false);
   const auth = useAuth();
   const { user, isUserLoading } = useUser();
   const router = useRouter();
@@ -47,8 +48,28 @@ export default function LoginPage() {
     }
   }, [user, isUserLoading, router]);
 
-  const handleAuthAction = () => {
-    initiateEmailSignIn(auth, email, password);
+  const handleAuthAction = async () => {
+    if (!auth) return;
+    setIsSigningIn(true);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      // onAuthStateChanged will handle the redirect
+    } catch (error: any) {
+      console.error("Sign-in failed:", error);
+      let description = "Ein unbekannter Fehler ist aufgetreten.";
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-email') {
+        description = "Für diese E-Mail-Adresse wurde kein Benutzerkonto gefunden.";
+      } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        description = "Das eingegebene Passwort ist nicht korrekt.";
+      }
+      toast({
+        variant: "destructive",
+        title: "Anmeldung fehlgeschlagen",
+        description: description,
+      });
+    } finally {
+      setIsSigningIn(false);
+    }
   };
   
   const handlePasswordReset = () => {
@@ -77,12 +98,15 @@ export default function LoginPage() {
         })
         .catch((error) => {
             console.error("Error sending password reset email:", error);
-            // Display a more detailed error message to help with debugging
+            let description = 'E-Mail konnte nicht gesendet werden. Bitte versuchen Sie es später erneut.';
+            if (error.code === 'auth/missing-continue-uri') {
+                description = 'Fehler: Die App ist nicht korrekt für den E-Mail-Versand konfiguriert. Bitte kontaktieren Sie den Support.';
+            }
             toast({
                 variant: "destructive",
                 title: "Fehler beim E-Mail-Versand",
-                description: `Code: ${error.code} - Meldung: ${error.message}`,
-                duration: 9000, // Keep the toast on screen longer
+                description: description,
+                duration: 9000,
             });
         });
   };
@@ -112,6 +136,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  disabled={isSigningIn}
                 />
               </div>
               <div className="grid gap-2">
@@ -153,10 +178,12 @@ export default function LoginPage() {
                   required 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  disabled={isSigningIn}
                 />
               </div>
-              <Button onClick={handleAuthAction} className="w-full">
-                Anmelden
+              <Button onClick={handleAuthAction} className="w-full" disabled={isSigningIn}>
+                {isSigningIn && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isSigningIn ? 'Anmelden...' : 'Anmelden'}
               </Button>
             </div>
             <div className="mt-4 text-center text-sm">
