@@ -34,8 +34,8 @@ import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/page-header';
-import { useUser, useFirestore, useDoc, useMemoFirebase, setDocumentNonBlocking, useCollection } from '@/firebase';
-import { doc, writeBatch, collection, getDocs, query, where, Timestamp } from 'firebase/firestore';
+import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase';
+import { doc, writeBatch, collection, getDocs, query, where, Timestamp, setDoc } from 'firebase/firestore';
 import { updateProfile, updatePassword, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import type { Transaction } from '@/lib/types';
 import { de } from 'date-fns/locale';
@@ -132,7 +132,7 @@ export default function SettingsPage() {
         }
         
         const userDocRef = doc(firestore, 'users', user.uid);
-        setDocumentNonBlocking(userDocRef, { 
+        await setDoc(userDocRef, { 
           firstName, 
           lastName,
           email: user.email // Make sure email is stored
@@ -202,24 +202,42 @@ export default function SettingsPage() {
     }
   };
   
-    const handleSecuritySettingsSave = (e: React.FormEvent) => {
+    const handleSecuritySettingsSave = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user || !userProfileQuery) return;
-        setDocumentNonBlocking(userProfileQuery, { autoLogoutTimeout }, { merge: true });
-        toast({
-            title: 'Sicherheitseinstellungen gespeichert',
-            description: 'Der automatische Logout wurde aktualisiert.',
-        });
+        try {
+            await setDoc(userProfileQuery, { autoLogoutTimeout }, { merge: true });
+            toast({
+                title: 'Sicherheitseinstellungen gespeichert',
+                description: 'Der automatische Logout wurde aktualisiert.',
+            });
+        } catch (error) {
+            console.error("Error updating security settings: ", error);
+            toast({
+                variant: "destructive",
+                title: "Fehler",
+                description: "Die Sicherheitseinstellungen konnten nicht gespeichert werden.",
+            });
+        }
     };
 
-  const handleBudgetSave = (e: React.FormEvent) => {
+  const handleBudgetSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !userProfileQuery) return;
-    setDocumentNonBlocking(userProfileQuery, { budget }, { merge: true });
-    toast({
-      title: 'Budget gespeichert',
-      description: `Ihr monatliches Budget wurde auf ${formatCurrency(budget)} festgelegt.`,
-    });
+    try {
+        await setDoc(userProfileQuery, { budget }, { merge: true });
+        toast({
+            title: 'Budget gespeichert',
+            description: `Ihr monatliches Budget wurde auf ${formatCurrency(budget)} festgelegt.`,
+        });
+    } catch (error) {
+        console.error("Error updating budget: ", error);
+        toast({
+            variant: "destructive",
+            title: "Fehler",
+            description: "Das Budget konnte nicht gespeichert werden.",
+        });
+    }
   };
 
   const handleDeleteAccount = async () => {
