@@ -24,8 +24,8 @@ import { ReportsTab } from "@/components/reports-tab";
 import { ImportTab } from "@/components/import-tab";
 import { AddTransactionSheet } from "@/components/add-transaction-sheet";
 import type { Transaction, Category, TransactionItem } from '@/lib/types';
-import { useUser, useFirestore, useCollection, useDoc, setDocumentNonBlocking, deleteDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
-import { collection, doc, serverTimestamp, writeBatch, getDocs, Timestamp } from 'firebase/firestore';
+import { useUser, useFirestore, useCollection, useDoc } from '@/firebase';
+import { collection, doc, serverTimestamp, writeBatch, getDocs, Timestamp, setDoc, deleteDoc, addDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
@@ -93,7 +93,7 @@ export default function Dashboard() {
         items,
         updatedAt: serverTimestamp(),
       };
-      setDocumentNonBlocking(docRef, dataToUpdate, { merge: true });
+      setDoc(docRef, dataToUpdate, { merge: true });
     } else {
       // This is a creation of a new real transaction
       const coll = collection(firestore, 'transactions');
@@ -105,7 +105,7 @@ export default function Dashboard() {
         userId: user.uid,
         createdAt: serverTimestamp(),
       };
-      addDocumentNonBlocking(coll, dataToCreate);
+      addDoc(coll, dataToCreate);
     }
   };
 
@@ -148,7 +148,7 @@ export default function Dashboard() {
     }
     
     const docRef = doc(firestore, 'transactions', transactionIdToDelete);
-    deleteDocumentNonBlocking(docRef);
+    deleteDoc(docRef);
   };
 
   const transactionsWithRecurrences = useMemo(() => {
