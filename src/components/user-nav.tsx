@@ -19,8 +19,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Image as ImageIcon } from 'lucide-react';
-import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
-import { doc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 
 
 export function UserNav() {
