@@ -53,7 +53,7 @@ export default function LoginPage() {
     setIsSigningIn(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // onAuthStateChanged will handle the redirect
+      // onAuthStateChanged in the provider will handle the redirect
     } catch (error: any) {
       console.error("Sign-in failed:", error);
       let description = "Ein unbekannter Fehler ist aufgetreten.";
@@ -99,16 +99,17 @@ export default function LoginPage() {
         .catch((error) => {
             console.error("Error sending password reset email:", error);
             let description = 'E-Mail konnte nicht gesendet werden. Bitte versuchen Sie es später erneut.';
-            // Catch specific configuration errors
-            if (error.code === 'auth/missing-android-pkg-name' || 
-                error.code === 'auth/missing-ios-bundle-id' || 
-                error.code === 'auth/missing-continue-uri' ||
+            
+            // Provide more specific feedback for configuration issues vs. general errors.
+            if (error.code === 'auth/missing-continue-uri' || 
                 error.code === 'auth/invalid-continue-uri' ||
                 error.code === 'auth/unauthorized-continue-uri') {
-                description = 'Die App ist nicht korrekt für den E-Mail-Versand konfiguriert. Bitte überprüfen Sie Ihre Firebase-Konsoleneinstellungen.';
-            } else if (error.message) {
+                description = 'Die App ist nicht korrekt für den E-Mail-Versand konfiguriert. Bitte überprüfen Sie Ihre Firebase-Konsoleneinstellungen für E-Mail-Vorlagen.';
+            } else if (error.code && error.message) {
+                // Show the specific error to aid debugging SMTP/other issues
                 description = `${error.code}: ${error.message}`;
             }
+
             toast({
                 variant: "destructive",
                 title: "Fehler beim E-Mail-Versand",
@@ -144,6 +145,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isSigningIn}
+                  autoComplete="email"
                 />
               </div>
               <div className="grid gap-2">
@@ -186,6 +188,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isSigningIn}
+                  autoComplete="new-password"
                 />
               </div>
               <Button onClick={handleAuthAction} className="w-full" disabled={isSigningIn}>
