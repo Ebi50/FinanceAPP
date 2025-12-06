@@ -99,8 +99,15 @@ export default function LoginPage() {
         .catch((error) => {
             console.error("Error sending password reset email:", error);
             let description = 'E-Mail konnte nicht gesendet werden. Bitte versuchen Sie es später erneut.';
-            if (error.code === 'auth/missing-continue-uri') {
-                description = 'Fehler: Die App ist nicht korrekt für den E-Mail-Versand konfiguriert. Bitte kontaktieren Sie den Support.';
+            // Catch specific configuration errors
+            if (error.code === 'auth/missing-android-pkg-name' || 
+                error.code === 'auth/missing-ios-bundle-id' || 
+                error.code === 'auth/missing-continue-uri' ||
+                error.code === 'auth/invalid-continue-uri' ||
+                error.code === 'auth/unauthorized-continue-uri') {
+                description = 'Die App ist nicht korrekt für den E-Mail-Versand konfiguriert. Bitte überprüfen Sie Ihre Firebase-Konsoleneinstellungen.';
+            } else if (error.message) {
+                description = `${error.code}: ${error.message}`;
             }
             toast({
                 variant: "destructive",

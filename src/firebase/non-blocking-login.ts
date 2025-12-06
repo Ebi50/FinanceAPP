@@ -6,8 +6,7 @@ import {
   signInWithEmailAndPassword,
   updateProfile
 } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
-import { firestore } from 'firebase-admin';
+import { doc } from 'firebase/firestore';
 import { getFirestore } from 'firebase/firestore';
 import { setDocumentNonBlocking } from './non-blocking-updates';
 
@@ -43,14 +42,4 @@ export function initiateEmailSignUp(authInstance: Auth, email: string, password:
     .catch(error => {
         console.error("Email sign-up failed:", error);
     });
-}
-
-/** Initiate email/password sign-in (non-blocking). */
-export function initiateEmailSignIn(authInstance: Auth, email: string, password: string): void {
-  signInWithEmailAndPassword(authInstance, email, password).catch(error => {
-      // This will be caught by the onAuthStateChanged listener's error handler in many cases,
-      // but logging here can be useful for debugging forms.
-      // A toast notification is shown in the login form component.
-      console.error("Email sign-in failed:", error.code);
-  });
 }
