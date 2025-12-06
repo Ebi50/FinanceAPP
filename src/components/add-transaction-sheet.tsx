@@ -23,7 +23,6 @@ import {
   Calendar as CalendarIcon,
   Loader2,
   PlusCircle,
-  Sparkles,
   Trash2,
 } from 'lucide-react';
 import { Textarea } from './ui/textarea';
@@ -37,7 +36,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { suggestExpenseCategory } from '@/ai/flows/suggest-expense-category';
 import type { Transaction, Category, TransactionItem } from '@/lib/types';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, Timestamp } from 'firebase/firestore';
@@ -86,8 +84,6 @@ export function AddTransactionSheet({
   transaction,
 }: AddTransactionSheetProps) {
   const [internalOpen, setInternalOpen] = useState(false);
-  const [suggestion, setSuggestion] = useState<string | null>(null);
-  const [isSuggesting, setIsSuggesting] = useState(false);
   
   const { user } = useUser();
   const firestore = useFirestore();
@@ -151,33 +147,8 @@ export function AddTransactionSheet({
       }
       
       form.reset(defaultValues as TransactionFormValues);
-      setSuggestion(null);
     }
   }, [open, transaction, form]);
-
-
-  const handleSuggestion = async () => {
-    const description = form.getValues('description');
-    if (!description || description.length < 5 || !categories) return;
-    setIsSuggesting(true);
-    setSuggestion(null);
-    try {
-      const result = await suggestExpenseCategory({
-        transactionDescription: description,
-      });
-      const suggestedCategory = categories.find(
-        (c) => c.name.toLowerCase() === result.category.toLowerCase()
-      );
-      if (suggestedCategory) {
-        form.setValue('categoryId', suggestedCategory.id, { shouldValidate: true });
-        setSuggestion(suggestedCategory.name);
-      }
-    } catch (error) {
-      console.error('Failed to get suggestion:', error);
-    } finally {
-      setIsSuggesting(false);
-    }
-  };
 
   const onSubmit = (data: TransactionFormValues) => {
     const totalAmount = data.amounts.reduce((sum, current) => sum + Number(current.value), 0);
@@ -307,29 +278,10 @@ export function AddTransactionSheet({
                       </Select>
                     )}
                   />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={handleSuggestion}
-                    disabled={isSuggesting || !categories}
-                    aria-label="Kategorie vorschlagen"
-                  >
-                    {isSuggesting ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-4 w-4 text-accent" />
-                    )}
-                  </Button>
                 </div>
                 {form.formState.errors.categoryId && (
                   <p className="text-sm text-destructive mt-1">
                     {form.formState.errors.categoryId.message}
-                  </p>
-                )}
-                {suggestion && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Vorschlag: <span className="text-primary">{suggestion}</span>
                   </p>
                 )}
               </div>
