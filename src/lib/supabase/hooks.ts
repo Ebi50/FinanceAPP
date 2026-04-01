@@ -55,26 +55,41 @@ export function useTable<T = any>(options: UseTableOptions): UseTableResult<T> {
     setIsLoading(true);
     setError(null);
 
-    let query = supabase.from(table).select(select);
+    // Supabase has a default limit of 1000 rows.
+    // We fetch in pages to get ALL data.
+    const PAGE_SIZE = 1000;
+    let allRows: any[] = [];
+    let from = 0;
+    let hasMore = true;
 
-    if (filter) {
-      for (const f of filter) {
-        query = query.eq(f.column, f.value);
+    while (hasMore) {
+      let query = supabase.from(table).select(select).range(from, from + PAGE_SIZE - 1);
+
+      if (filter) {
+        for (const f of filter) {
+          query = query.eq(f.column, f.value);
+        }
       }
+
+      if (orderBy) {
+        query = query.order(orderBy.column, { ascending: orderBy.ascending ?? true });
+      }
+
+      const { data: rows, error: fetchError } = await query;
+
+      if (fetchError) {
+        setError(new Error(fetchError.message));
+        setData(null);
+        setIsLoading(false);
+        return;
+      }
+
+      allRows = allRows.concat(rows || []);
+      hasMore = (rows?.length ?? 0) === PAGE_SIZE;
+      from += PAGE_SIZE;
     }
 
-    if (orderBy) {
-      query = query.order(orderBy.column, { ascending: orderBy.ascending ?? true });
-    }
-
-    const { data: rows, error: fetchError } = await query;
-
-    if (fetchError) {
-      setError(new Error(fetchError.message));
-      setData(null);
-    } else {
-      setData(rows as WithId<T>[]);
-    }
+    setData(allRows as WithId<T>[]);
     setIsLoading(false);
   }, [supabase, table, select, filterKey, orderKey, enabled]);
 
