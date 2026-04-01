@@ -147,9 +147,6 @@ export function UserNav() {
               <span>Profilbild ändern</span>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/billing">Abrechnung</Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
               <Link href="/settings">Einstellungen</Link>
             </DropdownMenuItem>
           </DropdownMenuGroup>
