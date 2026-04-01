@@ -43,3 +43,13 @@ next-env.d.ts
 # firebase
 firebase-debug.log
 firestore-debug.log
+studio-*.json
+studio.json
+
+# local IDE & workspace
+.vscode/
+.agents/
+*.code-workspace
+
+# export data
+export/
