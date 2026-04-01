@@ -55,8 +55,8 @@ export function useTable<T = any>(options: UseTableOptions): UseTableResult<T> {
     setIsLoading(true);
     setError(null);
 
-    // Fetch all rows. Supabase default limit is 1000, so we paginate.
-    const PAGE_SIZE = 5000;
+    // Fetch all rows. Supabase max_rows is 1000, so we paginate in chunks of 1000.
+    const PAGE_SIZE = 1000;
     let allRows: any[] = [];
     let from = 0;
 
