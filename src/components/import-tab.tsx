@@ -30,7 +30,7 @@ import type { Transaction, Category } from "@/lib/types";
 import React, { useState, useMemo } from "react";
 import { format, isValid, parse, getYear } from "date-fns";
 import { de } from "date-fns/locale";
-import { Timestamp } from "firebase/firestore";
+import { parseISO } from "date-fns";
 
 
 type MappedTransaction = Omit<Transaction, 'id'> & { date: Date };
@@ -86,8 +86,8 @@ const categoryNameMap = useMemo(() => {
       return;
     }
     const worksheetData = transactions.map((t) => {
-        const dateObject = t.date instanceof Timestamp ? t.date.toDate() : t.date;
-        const category = categoryIdMap.get(t.categoryId);
+        const dateObject = typeof t.date === 'string' ? parseISO(t.date) : t.date;
+        const category = categoryIdMap.get(t.category_id);
         return {
           Datum: isValid(dateObject) ? format(dateObject, "yyyy-MM-dd") : "Ungültiges Datum",
           Beschreibung: t.description,
@@ -201,7 +201,7 @@ const categoryNameMap = useMemo(() => {
                             const date = parseDate(descOrDateCell);
                             const description = (typeof descOrDateCell === 'string' && !/^\d{1,2}/.test(descOrDateCell)) ? descOrDateCell : categoryName;
                             
-                            allTransactions.push({ description, amount, date, categoryId: categoryName, userId: '' });
+                            allTransactions.push({ description, amount, date, category_id: categoryName, user_id: '' });
 
                             if(categoryName.toLowerCase().includes('kv')) col+=2;
                         }
@@ -227,7 +227,7 @@ const categoryNameMap = useMemo(() => {
                             const date = parseDate(descOrDateCell);
                             const description = (typeof descOrDateCell === 'string' && !/^\d{1,2}/.test(descOrDateCell)) ? descOrDateCell : categoryName;
                             
-                            allTransactions.push({ description, amount, date, categoryId: categoryName, userId: '' });
+                            allTransactions.push({ description, amount, date, category_id: categoryName, user_id: '' });
                         }
                     }
                 }
@@ -320,12 +320,12 @@ const categoryNameMap = useMemo(() => {
     try {
       const transactionsWithMappedCategory = allParsedTransactions
         .map(t => {
-          const excelCategoryName = t.categoryId; 
+          const excelCategoryName = t.category_id; 
           const mappedAppCategoryId = headerMapping[excelCategoryName];
           
           if (!mappedAppCategoryId) return null;
 
-          return { ...t, categoryId: mappedAppCategoryId };
+          return { ...t, category_id: mappedAppCategoryId };
         })
         .filter((t): t is MappedTransaction => t !== null);
   

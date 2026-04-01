@@ -41,19 +41,17 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, addDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { useUser, useSupabase, useTable } from '@/lib/supabase';
 
 
 export function CategoriesTab() {
   const { user } = useUser();
-  const firestore = useFirestore();
+  const supabase = useSupabase();
 
-  const categoriesQuery = useMemoFirebase(() => 
-    user ? collection(firestore, 'expenseCategories') : null,
-    [firestore, user]
-  );
-  const { data: categories, isLoading: categoriesLoading } = useCollection<Category>(categoriesQuery);
+  const { data: categories, isLoading: categoriesLoading } = useTable<Category>({
+    table: 'expense_categories',
+    enabled: !!user,
+  });
 
   const [open, setOpen] = useState(false);
   const [currentCategory, setCurrentCategory] = useState<Category | null>(null);
@@ -72,17 +70,24 @@ export function CategoriesTab() {
     setOpen(true);
   };
 
-  const handleDelete = (categoryId: string) => {
+  const handleDelete = async (categoryId: string) => {
     if (!user) return;
-    const docRef = doc(firestore, 'expenseCategories', categoryId);
-    deleteDoc(docRef);
+    const { error } = await supabase
+      .from('expense_categories')
+      .delete()
+      .eq('id', categoryId);
+
+    if (error) {
+      console.error('Error deleting category:', error);
+      return;
+    }
     toast({
       title: 'Kategorie gelöscht',
       description: 'Die Kategorie wurde erfolgreich entfernt.',
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!user) return;
     if (!categoryName.trim()) {
         toast({
@@ -92,24 +97,30 @@ export function CategoriesTab() {
         });
         return;
     }
-    
-    const coll = collection(firestore, 'expenseCategories');
 
     if (currentCategory) {
-      // Edit
-      const docRef = doc(coll, currentCategory.id);
-      setDoc(docRef, { ...currentCategory, name: categoryName }, { merge: true });
-       toast({
+      const { error } = await supabase
+        .from('expense_categories')
+        .update({ name: categoryName })
+        .eq('id', currentCategory.id);
+
+      if (error) {
+        console.error('Error updating category:', error);
+        return;
+      }
+      toast({
         title: 'Kategorie aktualisiert',
         description: 'Die Änderungen wurden erfolgreich gespeichert.',
       });
     } else {
-      // Add
-      const newCategory = {
-        name: categoryName,
-        userId: user.uid, // Add user ID for tracking
-      };
-      addDoc(coll, newCategory);
+      const { error } = await supabase
+        .from('expense_categories')
+        .insert({ name: categoryName, user_id: user.id });
+
+      if (error) {
+        console.error('Error adding category:', error);
+        return;
+      }
       toast({
         title: 'Kategorie hinzugefügt',
         description: `${categoryName} wurde erfolgreich erstellt.`,

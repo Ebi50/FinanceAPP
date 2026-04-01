@@ -6,15 +6,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  CardFooter,
 } from "./ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -28,13 +20,11 @@ import { Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
-import { format, isValid, getYear, getMonth } from "date-fns";
+import { format, isValid, getYear, getMonth, parseISO } from "date-fns";
 import { de } from "date-fns/locale";
 import type { Transaction, Category } from "@/lib/types";
 import React, { useMemo, useState, useEffect, useRef } from "react";
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection } from 'firebase/firestore';
-import { Label } from "./ui/label";
+import { useUser, useTable } from '@/lib/supabase';
 import { ExpensesChart } from "./expenses-chart";
 import { formatCurrency, cn } from "@/lib/utils";
 import html2canvas from "html2canvas";
@@ -47,70 +37,66 @@ interface AutoTableDoc extends jsPDF {
   autoTable: (options: any) => jsPDF;
 }
 
+const toDate = (d: string | Date): Date => {
+  if (d instanceof Date) return d;
+  return parseISO(d);
+};
 
 export function ReportsTab({ transactions }: ReportsTabProps) {
   const { toast } = useToast();
   const { user } = useUser();
-  const firestore = useFirestore();
   const chartRef = useRef<HTMLDivElement>(null);
-  
+
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number | null>(new Date().getMonth());
 
+  const { data: categories } = useTable<Category>({
+    table: 'expense_categories',
+    enabled: !!user,
+  });
 
-  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'expenseCategories') : null, [firestore, user]);
-  const { data: categories } = useCollection<Category>(categoriesQuery);
-  
   const categoryMap = useMemo(() => {
     if(!categories) return new Map();
     return new Map(categories.map((c) => [c.id, c.name]));
   }, [categories]);
-  
+
   const incomeCategory = useMemo(() => categories?.find(c => c.name.toLowerCase() === 'einnahmen'), [categories]);
 
   const [transactionsForChart, setTransactionsForChart] = useState<Transaction[]>([]);
   const periodTitle = selectedMonth !== null && de.localize ? `${de.localize.month(selectedMonth, { width: 'long' })} ${currentYear}` : `Gesamtjahr ${currentYear}`;
-  
+
   const availableYears = useMemo(() => {
     if (!transactions) return [new Date().getFullYear()];
     const years = new Set<number>();
     transactions.forEach(t => {
-      if (t.date && t.date.toDate) {
-        const date = t.date.toDate();
-        if (isValid(date)) {
-          years.add(date.getFullYear());
-        }
+      const date = toDate(t.date);
+      if (isValid(date)) {
+        years.add(date.getFullYear());
       }
     });
     years.add(new Date().getFullYear());
     return Array.from(years).sort((a, b) => b - a);
   }, [transactions]);
-  
+
   const generatePdf = async (period: "monthly" | "yearly", year: number, month: number | null) => {
     const doc = new jsPDF() as AutoTableDoc;
-    
+
     let reportTransactions = transactions.filter(t => {
-        if (!t.date || !t.date.toDate) return false;
-        const transactionDate = t.date.toDate();
+        const transactionDate = toDate(t.date);
         return isValid(transactionDate) && getYear(transactionDate) === year;
     });
 
     let title;
     if (period === "monthly" && month !== null) {
-        reportTransactions = reportTransactions.filter(t => getMonth(t.date.toDate()) === month);
+        reportTransactions = reportTransactions.filter(t => getMonth(toDate(t.date)) === month);
         title = `Monatlicher Bericht (${format(new Date(year, month), 'MMMM yyyy', { locale: de })})`;
     } else {
         title = `Jahresbericht ${year}`;
     }
-    
+
     const chartDataForPdf = reportTransactions;
-
-    // Update state for the chart to render with the correct data
-    setTransactionsForChart(chartDataForPdf.filter(t => t.categoryId !== incomeCategory?.id));
-    
-    // Wait for the chart to re-render with new data
+    setTransactionsForChart(chartDataForPdf.filter(t => t.category_id !== incomeCategory?.id));
     await new Promise(resolve => setTimeout(resolve, 500));
-
 
     if (reportTransactions.length === 0) {
       toast({
@@ -120,8 +106,8 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
       return;
     }
 
-    const expenses = reportTransactions.filter(t => t.categoryId !== incomeCategory?.id);
-    const income = reportTransactions.filter(t => t.categoryId === incomeCategory?.id);
+    const expenses = reportTransactions.filter(t => t.category_id !== incomeCategory?.id);
+    const income = reportTransactions.filter(t => t.category_id === incomeCategory?.id);
 
     const totalExpenses = expenses.reduce((sum, t) => sum + (t.amount || 0), 0);
     const totalIncome = income.reduce((sum, t) => sum + (t.amount || 0), 0);
@@ -132,7 +118,7 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
     let lastY = 30;
 
     const expensesByCategory = expenses.reduce((acc, t) => {
-      const categoryName = categoryMap.get(t.categoryId) || 'Unbekannt';
+      const categoryName = categoryMap.get(t.category_id) || 'Unbekannt';
       if (!acc[categoryName]) {
         acc[categoryName] = { transactions: [], total: 0 };
       }
@@ -143,39 +129,39 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
 
     if (expenses.length > 0) {
       doc.text("Ausgaben", 14, lastY);
-      
-      const expenseBody = [];
+
+      const expenseBody: any[] = [];
       for (const categoryName in expensesByCategory) {
         expenseBody.push([{ content: categoryName, colSpan: 3, styles: { fontStyle: 'bold', fillColor: '#f0f0f0' } }]);
         expensesByCategory[categoryName].transactions.forEach(t => {
           expenseBody.push([
-            format(t.date.toDate(), "dd.MM.yyyy"),
+            format(toDate(t.date), "dd.MM.yyyy"),
             t.description,
             formatCurrency(t.amount)
           ]);
         });
         expenseBody.push([{ content: `Summe ${categoryName}`, colSpan: 2, styles: { fontStyle: 'bold', halign: 'right' } }, { content: formatCurrency(expensesByCategory[categoryName].total), styles: { fontStyle: 'bold' } }]);
       }
-      
+
       doc.autoTable({
         startY: lastY + 5,
         head: [['Datum', 'Beschreibung', 'Betrag']],
         body: expenseBody,
         theme: 'striped',
-        didParseCell: (data) => {
+        didParseCell: (data: any) => {
             if (typeof data.cell.raw === 'object' && data.cell.raw !== null && 'colSpan' in data.cell.raw) {
                 data.cell.styles.halign = 'left';
             }
         }
       });
-      lastY = doc.autoTable.previous.finalY;
+      lastY = (doc as any).autoTable.previous.finalY;
     }
 
     if (income.length > 0) {
        lastY += 10;
       doc.text("Einnahmen", 14, lastY);
       const incomeBody = income.map(t => [
-        format(t.date.toDate(), "dd.MM.yyyy"),
+        format(toDate(t.date), "dd.MM.yyyy"),
         t.description,
         formatCurrency(t.amount)
       ]);
@@ -185,9 +171,9 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
         body: incomeBody,
         theme: 'striped'
       });
-      lastY = doc.autoTable.previous.finalY;
+      lastY = (doc as any).autoTable.previous.finalY;
     }
-   
+
     lastY += 10;
     doc.autoTable({
       startY: lastY,
@@ -199,7 +185,7 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
       theme: 'grid',
       columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 'auto' } }
     });
-    lastY = doc.autoTable.previous.finalY;
+    lastY = (doc as any).autoTable.previous.finalY;
 
     if (expenses.length > 0) {
         lastY += 10;
@@ -211,19 +197,18 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
             body: categorySummaryBody,
             theme: 'grid'
         });
-        lastY = doc.autoTable.previous.finalY;
+        lastY = (doc as any).autoTable.previous.finalY;
 
-        // Add Chart
         if (chartRef.current) {
             const canvas = await html2canvas(chartRef.current, {
-                backgroundColor: null, // Transparent background
-                scale: 3, // Increase resolution
+                backgroundColor: null,
+                scale: 3,
             });
             const imgData = canvas.toDataURL('image/png');
             const imgProps = doc.getImageProperties(imgData);
             const pdfWidth = doc.internal.pageSize.getWidth();
             const pdfHeight = doc.internal.pageSize.getHeight();
-            const imgWidth = pdfWidth * 0.9; // Use 90% of page width
+            const imgWidth = pdfWidth * 0.9;
             const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
 
             lastY += 10;
@@ -238,17 +223,15 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
         }
     }
 
-
     doc.save(`${title.toLowerCase().replace(/\s/g, "-")}.pdf`);
-    setTransactionsForChart([]); // Reset chart data
+    setTransactionsForChart([]);
   };
-  
+
   const filteredTableTransactions = useMemo(() => {
     if (!transactions) return [];
 
     let yearlyData = transactions.filter(t => {
-      if (!t.date || !t.date.toDate) return false;
-      const transactionDate = t.date.toDate();
+      const transactionDate = toDate(t.date);
       return isValid(transactionDate) && getYear(transactionDate) === currentYear;
     });
 
@@ -257,17 +240,15 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
     }
 
     return yearlyData.filter(t => {
-      if (!t.date || !t.date.toDate) return false;
-      const transactionDate = t.date.toDate();
+      const transactionDate = toDate(t.date);
       return isValid(transactionDate) && getMonth(transactionDate) === selectedMonth;
     });
   }, [transactions, currentYear, selectedMonth]);
 
   useEffect(() => {
-    const expensesForChart = filteredTableTransactions.filter(t => t.categoryId !== incomeCategory?.id);
+    const expensesForChart = filteredTableTransactions.filter(t => t.category_id !== incomeCategory?.id);
     setTransactionsForChart(expensesForChart);
   }, [filteredTableTransactions, incomeCategory]);
-
 
   useEffect(() => {
     if (availableYears.length > 0 && !availableYears.includes(currentYear)) {
@@ -277,9 +258,9 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
 
   const expensesByCategoryForTable = useMemo(() => {
     const expenses = filteredTableTransactions
-      .filter(t => t.categoryId !== incomeCategory?.id)
+      .filter(t => t.category_id !== incomeCategory?.id)
       .reduce((acc, transaction) => {
-      const categoryName = categoryMap.get(transaction.categoryId) || 'Sonstiges';
+      const categoryName = categoryMap.get(transaction.category_id) || 'Sonstiges';
       if (!acc[categoryName]) {
         acc[categoryName] = 0;
       }
@@ -292,12 +273,12 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
       total
     })).sort((a,b) => b.total - a.total);
   }, [filteredTableTransactions, categoryMap, incomeCategory]);
-  
+
   const incomeByDescriptionForTable = useMemo(() => {
     if (!incomeCategory) return [];
-    
+
     const incomes = filteredTableTransactions
-      .filter(t => t.categoryId === incomeCategory.id)
+      .filter(t => t.category_id === incomeCategory.id)
       .reduce((acc, transaction) => {
         const description = transaction.description || 'Unbekannte Einnahme';
         if (!acc[description]) {
@@ -316,7 +297,7 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
   const totalExpenses = useMemo(() => expensesByCategoryForTable.reduce((sum, item) => sum + item.total, 0), [expensesByCategoryForTable]);
   const totalIncome = useMemo(() => incomeByDescriptionForTable.reduce((sum, item) => sum + item.total, 0), [incomeByDescriptionForTable]);
   const balance = totalIncome - totalExpenses;
-  
+
 
   return (
     <>
@@ -453,7 +434,6 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
             </Card>
         </div>
       </div>
-      {/* Hidden container for rendering chart for PDF */}
       <div className="absolute -z-10" style={{ left: '-9999px', top: '0px', width: '800px', height: 'auto' }}>
           <div ref={chartRef}>
               {transactionsForChart.length > 0 && <ExpensesChart transactions={transactionsForChart} />}

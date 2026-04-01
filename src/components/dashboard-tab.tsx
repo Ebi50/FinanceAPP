@@ -2,11 +2,10 @@ import { OverviewStats } from "./overview-stats";
 import { ExpensesChart } from "./expenses-chart";
 import { RecentTransactions } from "./recent-transactions";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import type { Transaction } from "@/lib/types";
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection } from 'firebase/firestore';
-import type { Category } from "@/lib/types";
+import type { Transaction, Category } from "@/lib/types";
+import { useUser, useTable } from '@/lib/supabase';
 import { useMemo } from "react";
+import { parseISO } from 'date-fns';
 
 interface DashboardTabProps {
   transactions: Transaction[];
@@ -15,22 +14,23 @@ interface DashboardTabProps {
 
 export function DashboardTab({ transactions, budget }: DashboardTabProps) {
   const { user } = useUser();
-  const firestore = useFirestore();
-  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'expenseCategories') : null, [firestore, user]);
-  const { data: categories } = useCollection<Category>(categoriesQuery);
-  
+  const { data: categories } = useTable<Category>({
+    table: 'expense_categories',
+    enabled: !!user,
+  });
+
   const incomeCategory = useMemo(() => categories?.find(c => c.name.toLowerCase() === 'einnahmen'), [categories]);
-  
+
   const transactionsWithDates = useMemo(() => {
-    return transactions.map(t => ({ ...t, date: t.date.toDate() }));
+    return transactions.map(t => ({ ...t, date: typeof t.date === 'string' ? parseISO(t.date) : t.date }));
   }, [transactions]);
-  
+
   const totalExpenses = transactionsWithDates
-    .filter(t => t.categoryId !== incomeCategory?.id)
+    .filter(t => t.category_id !== incomeCategory?.id)
     .reduce((sum, t) => sum + t.amount, 0);
 
   const totalIncome = transactionsWithDates
-    .filter(t => t.categoryId === incomeCategory?.id)
+    .filter(t => t.category_id === incomeCategory?.id)
     .reduce((sum, t) => sum + t.amount, 0);
 
   return (

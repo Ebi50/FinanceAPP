@@ -29,17 +29,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Switch } from '@/components/ui/switch';
 import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/page-header';
-import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase';
-import { doc, writeBatch, collection, getDocs, query, where, Timestamp, setDoc } from 'firebase/firestore';
-import { updateProfile, updatePassword, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { useUser, useSupabase, useTable, useRow } from '@/lib/supabase';
 import type { Transaction } from '@/lib/types';
 import { de } from 'date-fns/locale';
-import { isValid, getYear, getMonth, startOfYear, endOfYear, startOfMonth, endOfMonth } from 'date-fns';
+import { isValid, getYear, startOfYear, endOfYear, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { formatCurrency } from '@/lib/utils';
 
 const navItems = [
@@ -51,33 +48,29 @@ const navItems = [
 
 const ADMIN_EMAIL = 'eberhard.janzen@freenet.de';
 
-type UserProfile = {
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-  budget?: number;
-  autoLogoutTimeout?: number;
-}
-
 export default function SettingsPage() {
   const { setTheme } = useTheme();
-  
+
   const { user } = useUser();
-  const firestore = useFirestore();
-  
+  const supabase = useSupabase();
+
   const [activeTab, setActiveTab] = useState('Allgemein');
 
-  const userProfileQuery = useMemoFirebase(() =>
-    user ? doc(firestore, 'users', user.uid) : null,
-    [firestore, user]
-  );
-  const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileQuery);
-  
-  const transactionsQuery = useMemoFirebase(() => 
-    user ? collection(firestore, 'transactions') : null,
-    [firestore, user]
-  );
-  const { data: allTransactions } = useCollection<Transaction>(transactionsQuery);
+  const { data: userProfile, isLoading: isProfileLoading } = useRow<{
+    first_name?: string;
+    last_name?: string;
+    email?: string;
+    budget?: number;
+    auto_logout_timeout?: number;
+  }>({
+    table: 'profiles',
+    id: user?.id,
+  });
+
+  const { data: allTransactions } = useTable<Transaction>({
+    table: 'transactions',
+    enabled: !!user,
+  });
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -87,17 +80,16 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [budget, setBudget] = useState(2000);
   const [autoLogoutTimeout, setAutoLogoutTimeout] = useState(0);
-  const [isMigrating, setIsMigrating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [deleteYear, setDeleteYear] = useState<number | null>(null);
-  const [deleteMonth, setDeleteMonth] = useState<string>('all'); // 'all' or month index "0"-"11"
+  const [deleteMonth, setDeleteMonth] = useState<string>('all');
 
   const { toast } = useToast();
 
   const availableYearsForDelete = useMemo(() => {
     if (!allTransactions) return [];
-    const years = new Set(allTransactions.map(t => getYear(t.date.toDate())));
+    const years = new Set(allTransactions.map(t => getYear(parseISO(t.date as string))));
     return Array.from(years).sort((a, b) => b - a);
   }, [allTransactions]);
 
@@ -109,34 +101,32 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (userProfile) {
-      setFirstName(userProfile.firstName || '');
-      setLastName(userProfile.lastName || '');
-      setEmail(userProfile.email || user?.email || '');
-      setBudget(userProfile.budget || 2000);
-      setAutoLogoutTimeout(userProfile.autoLogoutTimeout || 0); // 0 for 'Never'
+      setFirstName((userProfile as any).first_name || '');
+      setLastName((userProfile as any).last_name || '');
+      setEmail((userProfile as any).email || user?.email || '');
+      setBudget((userProfile as any).budget || 2000);
+      setAutoLogoutTimeout((userProfile as any).auto_logout_timeout || 0);
     } else if (user) {
-        const nameParts = user.displayName?.split(' ') || ['', ''];
-        setFirstName(nameParts[0]);
-        setLastName(nameParts.slice(1).join(' '));
+        setFirstName('');
+        setLastName('');
         setEmail(user.email || '');
     }
   }, [userProfile, user]);
 
   const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !userProfileQuery) return;
+    if (!user) return;
     try {
-        const displayName = `${firstName} ${lastName}`.trim();
-        if(user.displayName !== displayName) {
-            await updateProfile(user, { displayName });
-        }
-        
-        const userDocRef = doc(firestore, 'users', user.uid);
-        await setDoc(userDocRef, { 
-          firstName, 
-          lastName,
-          email: user.email // Make sure email is stored
-        }, { merge: true });
+        const { error } = await supabase
+          .from('profiles')
+          .upsert({
+            id: user.id,
+            first_name: firstName,
+            last_name: lastName,
+            email: user.email,
+          });
+
+        if (error) throw error;
 
         toast({
             title: 'Profil gespeichert',
@@ -154,7 +144,7 @@ export default function SettingsPage() {
 
   const handlePasswordSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !user.email) return;
+    if (!user) return;
 
     if (newPassword !== confirmPassword) {
       toast({
@@ -172,12 +162,17 @@ export default function SettingsPage() {
         });
         return;
     }
-    
+
     try {
-        const credential = EmailAuthProvider.credential(user.email, oldPassword);
-        await reauthenticateWithCredential(user, credential);
-        
-        await updatePassword(user, newPassword);
+        // Verify old password by signing in
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: user.email!,
+          password: oldPassword,
+        });
+        if (signInError) throw new Error('Das alte Passwort ist nicht korrekt.');
+
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) throw error;
 
         toast({
           title: 'Passwort geändert',
@@ -188,25 +183,23 @@ export default function SettingsPage() {
         setConfirmPassword('');
     } catch (error: any) {
         console.error("Error updating password: ", error);
-        let description = 'Ein unbekannter Fehler ist aufgetreten.';
-        if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-            description = 'Das alte Passwort ist nicht korrekt.';
-        } else if (error.code === 'auth/requires-recent-login') {
-            description = 'Diese Aktion erfordert eine erneute Anmeldung. Bitte melden Sie sich ab und wieder an.';
-        }
         toast({
             variant: 'destructive',
             title: 'Fehler beim Ändern des Passworts',
-            description,
+            description: error.message || 'Ein unbekannter Fehler ist aufgetreten.',
         })
     }
   };
-  
+
     const handleSecuritySettingsSave = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user || !userProfileQuery) return;
+        if (!user) return;
         try {
-            await setDoc(userProfileQuery, { autoLogoutTimeout }, { merge: true });
+            const { error } = await supabase
+              .from('profiles')
+              .upsert({ id: user.id, auto_logout_timeout: autoLogoutTimeout });
+
+            if (error) throw error;
             toast({
                 title: 'Sicherheitseinstellungen gespeichert',
                 description: 'Der automatische Logout wurde aktualisiert.',
@@ -223,9 +216,13 @@ export default function SettingsPage() {
 
   const handleBudgetSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !userProfileQuery) return;
+    if (!user) return;
     try {
-        await setDoc(userProfileQuery, { budget }, { merge: true });
+        const { error } = await supabase
+          .from('profiles')
+          .upsert({ id: user.id, budget });
+
+        if (error) throw error;
         toast({
             title: 'Budget gespeichert',
             description: `Ihr monatliches Budget wurde auf ${formatCurrency(budget)} festgelegt.`,
@@ -241,108 +238,37 @@ export default function SettingsPage() {
   };
 
   const handleDeleteAccount = async () => {
-    if (!user || !firestore) return;
+    if (!user) return;
     try {
-      // We are not deleting any user data to allow for collaborative features.
-      // But we will delete the user's profile document.
-      const userDocRef = doc(firestore, 'users', user.uid);
-      await writeBatch(firestore).delete(userDocRef).commit();
-      
-      await deleteUser(user);
+      // Delete user profile
+      await supabase.from('profiles').delete().eq('id', user.id);
+
+      // Note: Actual user deletion requires admin privileges or a server-side function.
+      // For now we sign out. To fully delete, set up a Supabase Edge Function.
+      await supabase.auth.signOut();
 
       toast({
-        title: 'Konto gelöscht',
-        description: 'Ihr Konto wurde dauerhaft entfernt.',
+        title: 'Abgemeldet',
+        description: 'Sie wurden abgemeldet. Kontaktieren Sie den Support, um Ihr Konto vollständig zu löschen.',
       });
     } catch (error: any) {
       console.error('Error deleting account:', error);
-      let description = 'Beim Löschen Ihres Kontos ist ein Fehler aufgetreten.';
-      if (error.code === 'auth/requires-recent-login') {
-        description = 'Diese Aktion erfordert eine erneute Anmeldung. Bitte melden Sie sich ab, wieder an und versuchen Sie es erneut.';
-      }
       toast({
         variant: 'destructive',
         title: 'Fehler beim Löschen des Kontos',
-        description: description,
+        description: error.message || 'Beim Löschen Ihres Kontos ist ein Fehler aufgetreten.',
       });
     }
   };
 
-  const handleDataMigration = async () => {
-    if (!user || !firestore) {
-      toast({
-        variant: 'destructive',
-        title: 'Fehler',
-        description: 'Benutzer nicht angemeldet oder Datenbank nicht verfügbar.',
-      });
-      return;
-    }
-  
-    setIsMigrating(true);
-    toast({
-      title: 'Datenmigration gestartet',
-      description: 'Ihre alten Daten werden jetzt kopiert...',
-    });
-  
-    try {
-      const batch = writeBatch(firestore);
-  
-      // --- Migrate Categories ---
-      const oldCategoriesRef = collection(firestore, `users/${user.uid}/expenseCategories`);
-      const categoriesSnapshot = await getDocs(oldCategoriesRef);
-      
-      let migratedCategoriesCount = 0;
-      categoriesSnapshot.forEach(docSnapshot => {
-        const newDocRef = doc(firestore, 'expenseCategories', docSnapshot.id);
-        batch.set(newDocRef, docSnapshot.data());
-        migratedCategoriesCount++;
-      });
-  
-      // --- Migrate Transactions ---
-      const oldTransactionsRef = collection(firestore, `users/${user.uid}/transactions`);
-      const transactionsSnapshot = await getDocs(oldTransactionsRef);
-  
-      let migratedTransactionsCount = 0;
-      transactionsSnapshot.forEach(docSnapshot => {
-        const newDocRef = doc(firestore, 'transactions', docSnapshot.id);
-        batch.set(newDocRef, docSnapshot.data());
-        migratedTransactionsCount++;
-      });
-  
-      if (migratedCategoriesCount === 0 && migratedTransactionsCount === 0) {
-        toast({
-          title: 'Keine Daten gefunden',
-          description: 'Es wurden keine alten Daten zum Migrieren gefunden.',
-        });
-      } else {
-        await batch.commit();
-        toast({
-          title: 'Migration erfolgreich!',
-          description: `${migratedCategoriesCount} Kategorien und ${migratedTransactionsCount} Transaktionen wurden erfolgreich verschoben.`,
-        });
-      }
-  
-    } catch (error) {
-      console.error("Error migrating data:", error);
-      toast({
-        variant: 'destructive',
-        title: 'Migration fehlgeschlagen',
-        description: 'Beim Verschieben Ihrer Daten ist ein Fehler aufgetreten. Prüfen Sie die Konsole für Details.',
-      });
-    } finally {
-      setIsMigrating(false);
-    }
-  };
-  
   const handleDeletePeriodData = async () => {
-    if (!user || !firestore || deleteYear === null) {
+    if (!user || deleteYear === null) {
       toast({ variant: 'destructive', title: 'Fehler', description: 'Bitte wählen Sie ein Jahr aus.' });
       return;
     }
-    
+
     setIsDeleting(true);
 
-    const transactionsRef = collection(firestore, 'transactions');
     let startDate: Date;
     let endDate: Date;
     let confirmationText = '';
@@ -358,23 +284,30 @@ export default function SettingsPage() {
         confirmationText = `alle Daten für ${de.localize?.month(monthIndex)} ${deleteYear}`;
     }
 
-    const q = query(transactionsRef, where('date', '>=', Timestamp.fromDate(startDate)), where('date', '<=', Timestamp.fromDate(endDate)));
-
     try {
-        const querySnapshot = await getDocs(q);
-        if (querySnapshot.empty) {
+        const { data: rows, error: fetchError } = await supabase
+          .from('transactions')
+          .select('id')
+          .gte('date', startDate.toISOString())
+          .lte('date', endDate.toISOString());
+
+        if (fetchError) throw fetchError;
+
+        if (!rows || rows.length === 0) {
             toast({ title: 'Keine Daten gefunden', description: `Es gibt keine Transaktionen zum Löschen für ${confirmationText}.` });
             setIsDeleting(false);
             return;
         }
 
-        const batch = writeBatch(firestore);
-        querySnapshot.forEach(doc => {
-            batch.delete(doc.ref);
-        });
+        const ids = rows.map(r => r.id);
+        const { error: deleteError } = await supabase
+          .from('transactions')
+          .delete()
+          .in('id', ids);
 
-        await batch.commit();
-        toast({ title: 'Daten gelöscht', description: `Es wurden ${querySnapshot.size} Transaktionen für ${confirmationText} gelöscht.` });
+        if (deleteError) throw deleteError;
+
+        toast({ title: 'Daten gelöscht', description: `Es wurden ${rows.length} Transaktionen für ${confirmationText} gelöscht.` });
 
     } catch (error) {
         console.error("Error deleting period data:", error);
@@ -386,13 +319,13 @@ export default function SettingsPage() {
     } finally {
         setIsDeleting(false);
     }
-};
+  };
 
   const renderContent = () => {
     if (isProfileLoading) {
       return <p>Lade...</p>
     }
-    
+
     let content;
     switch(activeTab) {
       case 'Allgemein':
@@ -445,9 +378,9 @@ export default function SettingsPage() {
                     <Label htmlFor="budget">Monatliches Budget</Label>
                     <div className="relative">
                       <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">€</span>
-                      <Input 
-                        id="budget" 
-                        type="text" 
+                      <Input
+                        id="budget"
+                        type="text"
                         className="pl-8"
                         value={new Intl.NumberFormat('de-DE').format(budget)}
                         onFocus={(e) => e.target.select()}
@@ -589,19 +522,6 @@ export default function SettingsPage() {
         case 'Erweitert':
             content = (
               <>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Datenmigration</CardTitle>
-                    <CardDescription>
-                      Verschieben Sie alte, privat gespeicherte Daten in die neue, gemeinsame Datenstruktur. Dieser Vorgang ist nur einmal notwendig.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button onClick={handleDataMigration} disabled={isMigrating}>
-                      {isMigrating ? 'Daten werden migriert...' : 'Alte Daten migrieren'}
-                    </Button>
-                  </CardContent>
-                </Card>
                 <Card className="border-destructive">
                     <CardHeader>
                         <CardTitle className="text-destructive">Gefahrenzone</CardTitle>
@@ -652,7 +572,7 @@ export default function SettingsPage() {
                                         <AlertDialogHeader>
                                             <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
                                             <AlertDialogDescription>
-                                                Diese Aktion kann nicht rückgängig gemacht werden. Es werden alle Transaktionen für 
+                                                Diese Aktion kann nicht rückgängig gemacht werden. Es werden alle Transaktionen für
                                                 {deleteMonth === 'all' ? ` das Jahr ${deleteYear}` : ` ${de.localize?.month(Number(deleteMonth))} ${deleteYear}`}
                                                 {' '}dauerhaft gelöscht.
                                             </AlertDialogDescription>

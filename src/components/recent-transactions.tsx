@@ -10,8 +10,7 @@ import {
 import { formatCurrency, cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import type { Transaction, Category } from "@/lib/types";
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection } from 'firebase/firestore';
+import { useUser, useTable } from '@/lib/supabase';
 import { useMemo } from "react";
 
 interface RecentTransactionsProps {
@@ -20,9 +19,10 @@ interface RecentTransactionsProps {
 
 export function RecentTransactions({ transactions }: RecentTransactionsProps) {
   const { user } = useUser();
-  const firestore = useFirestore();
-  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'expenseCategories') : null, [firestore, user]);
-  const { data: categories } = useCollection<Category>(categoriesQuery);
+  const { data: categories } = useTable<Category>({
+    table: 'expense_categories',
+    enabled: !!user,
+  });
 
   const categoryMap = useMemo(() => {
     if (!categories) return new Map();
@@ -33,9 +33,9 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
     if (!categories) return undefined;
     return categories.find(c => c.name.toLowerCase() === 'einnahmen');
   }, [categories]);
-  
+
   const recent = transactions.slice(0, 5);
-  
+
   return (
     <Card className="col-span-4 lg:col-span-3">
       <CardHeader>
@@ -47,13 +47,12 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
       <CardContent>
         <div className="space-y-8">
           {recent.map((transaction) => {
-            const category = categoryMap.get(transaction.categoryId);
+            const category = categoryMap.get(transaction.category_id);
             const isIncome = category?.id === incomeCategory?.id;
             return (
               <div key={transaction.id} className="flex items-center">
                 <Avatar className="h-9 w-9">
                   <AvatarFallback className="bg-secondary">
-                    {/* Icon display can be re-added if icons are stored in firestore */}
                   </AvatarFallback>
                 </Avatar>
                 <div className="ml-4 space-y-1">

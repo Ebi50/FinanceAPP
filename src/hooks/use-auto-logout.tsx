@@ -2,42 +2,36 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useCallback, useRef } from 'react';
-import { useUser, useAuth, useDoc, useMemoFirebase } from '@/firebase';
-import { doc } from 'firebase/firestore';
-import { signOut } from 'firebase/auth';
-import { useFirestore } from '@/firebase';
+import { useUser, useSupabase, useRow } from '@/lib/supabase';
 
 const useAutoLogout = () => {
   const { user } = useUser();
-  const auth = useAuth();
+  const supabase = useSupabase();
   const router = useRouter();
-  const firestore = useFirestore();
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const userProfileQuery = useMemoFirebase(() =>
-    user ? doc(firestore, 'users', user.uid) : null,
-    [firestore, user]
-  );
-  const { data: userProfile } = useDoc<{ autoLogoutTimeout?: number }>(userProfileQuery);
+  const { data: userProfile } = useRow<{ auto_logout_timeout?: number }>({
+    table: 'profiles',
+    id: user?.id,
+  });
 
   const logout = useCallback(() => {
-    if (auth) {
-      signOut(auth).then(() => {
-        router.push('/login');
-      });
-    }
-  }, [auth, router]);
+    supabase.auth.signOut().then(() => {
+      router.push('/login');
+    });
+  }, [supabase, router]);
 
   const resetTimer = useCallback(() => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
     }
 
-    if (userProfile?.autoLogoutTimeout && userProfile.autoLogoutTimeout > 0) {
-      const timeout = userProfile.autoLogoutTimeout * 60 * 1000; // convert minutes to ms
-      timerRef.current = setTimeout(logout, timeout);
+    const timeout = (userProfile as any)?.auto_logout_timeout;
+    if (timeout && timeout > 0) {
+      const ms = timeout * 60 * 1000;
+      timerRef.current = setTimeout(logout, ms);
     }
-  }, [logout, userProfile?.autoLogoutTimeout]);
+  }, [logout, userProfile]);
 
   useEffect(() => {
     const activityEvents = ['mousemove', 'keydown', 'click', 'scroll'];
@@ -48,12 +42,10 @@ const useAutoLogout = () => {
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        // This is a proxy for lid close. If the page is hidden, we start the timer.
-        // If the user comes back, the timer will be reset by other activity.
         resetTimer();
       }
     };
-    
+
     if (user) {
       activityEvents.forEach(event => {
         window.addEventListener(event, handleActivity);
@@ -73,7 +65,7 @@ const useAutoLogout = () => {
     };
   }, [user, resetTimer]);
 
-  return null; // This hook does not render anything
+  return null;
 };
 
 export const AutoLogoutProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

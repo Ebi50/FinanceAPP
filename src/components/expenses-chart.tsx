@@ -1,11 +1,9 @@
-// Note: This component uses Recharts, which is already included in the project's dependencies.
 "use client"
 
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Cell } from "recharts"
 import { formatCurrency } from "@/lib/utils"
 import type { Transaction, Category } from "@/lib/types";
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection } from 'firebase/firestore';
+import { useUser, useTable } from '@/lib/supabase';
 import { useMemo } from "react";
 
 interface ExpensesChartProps {
@@ -17,9 +15,10 @@ const COLORS = ['#A7D1AB', '#FFDA63', '#FF8042', '#0088FE', '#00C49F', '#FFBB28'
 
 export function ExpensesChart({ transactions }: ExpensesChartProps) {
   const { user } = useUser();
-  const firestore = useFirestore();
-  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'expenseCategories') : null, [firestore, user]);
-  const { data: categories } = useCollection<Category>(categoriesQuery);
+  const { data: categories } = useTable<Category>({
+    table: 'expense_categories',
+    enabled: !!user,
+  });
 
   const categoryMap = useMemo(() => {
     if (!categories) return new Map();
@@ -29,9 +28,9 @@ export function ExpensesChart({ transactions }: ExpensesChartProps) {
   const expensesByCategory = useMemo(() => {
     const incomeCategory = categories?.find(c => c.name.toLowerCase() === 'einnahmen');
     const expenses = transactions
-      .filter(t => t.categoryId !== incomeCategory?.id)
+      .filter(t => t.category_id !== incomeCategory?.id)
       .reduce((acc, transaction) => {
-        const categoryName = categoryMap.get(transaction.categoryId) || 'Sonstiges';
+        const categoryName = categoryMap.get(transaction.category_id) || 'Sonstiges';
         if (!acc[categoryName]) {
           acc[categoryName] = 0;
         }

@@ -3,7 +3,7 @@ import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 import { ThemeProvider } from '@/components/theme-provider';
-import { FirebaseClientProvider } from '@/firebase/client-provider';
+import { SupabaseProvider } from '@/lib/supabase';
 import { AutoLogoutProvider } from '@/hooks/use-auto-logout';
 
 export const metadata: Metadata = {
@@ -34,11 +34,11 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
         >
-          <FirebaseClientProvider>
+          <SupabaseProvider>
             <AutoLogoutProvider>
               {children}
             </AutoLogoutProvider>
-          </FirebaseClientProvider>
+          </SupabaseProvider>
           <Toaster />
         </ThemeProvider>
       </body>

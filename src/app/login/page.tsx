@@ -11,8 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import Image from "next/image"
-import { useAuth, useUser } from "@/firebase";
-import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
+import { useUser, useSupabase } from "@/lib/supabase";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { PlaceHolderImages } from '@/lib/placeholder-images';
@@ -36,7 +35,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [resetEmail, setResetEmail] = useState('');
   const [isSigningIn, setIsSigningIn] = useState(false);
-  const auth = useAuth();
+  const supabase = useSupabase();
   const { user, isUserLoading } = useUser();
   const router = useRouter();
   const { toast } = useToast();
@@ -49,18 +48,20 @@ export default function LoginPage() {
   }, [user, isUserLoading, router]);
 
   const handleAuthAction = async () => {
-    if (!auth) return;
     setIsSigningIn(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      // onAuthStateChanged in the provider will handle the redirect
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
     } catch (error: any) {
       console.error("Sign-in failed:", error);
       let description = "Ein unbekannter Fehler ist aufgetreten.";
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-email') {
-        description = "Für diese E-Mail-Adresse wurde kein Benutzerkonto gefunden.";
-      } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        description = "Das eingegebene Passwort ist nicht korrekt.";
+      if (error.message?.includes('Invalid login credentials')) {
+        description = "Die Anmeldedaten sind nicht korrekt.";
+      } else if (error.message?.includes('Email not confirmed')) {
+        description = "Bitte bestätigen Sie zuerst Ihre E-Mail-Adresse.";
       }
       toast({
         variant: "destructive",
@@ -71,16 +72,8 @@ export default function LoginPage() {
       setIsSigningIn(false);
     }
   };
-  
-  const handlePasswordReset = () => {
-    if (!auth) {
-        toast({
-            variant: "destructive",
-            title: "Fehler",
-            description: "Authentifizierungsdienst nicht verfügbar.",
-        });
-        return;
-    }
+
+  const handlePasswordReset = async () => {
     if (!resetEmail) {
         toast({
             variant: "destructive",
@@ -89,34 +82,25 @@ export default function LoginPage() {
         });
         return;
     }
-    sendPasswordResetEmail(auth, resetEmail)
-        .then(() => {
-            toast({
-                title: "E-Mail zum Zurücksetzen gesendet",
-                description: "Wenn ein Konto mit dieser E-Mail existiert, wurde eine Anleitung zum Zurücksetzen des Passworts gesendet.",
-            });
-        })
-        .catch((error) => {
-            console.error("Error sending password reset email:", error);
-            let description = 'E-Mail konnte nicht gesendet werden. Bitte versuchen Sie es später erneut.';
-            
-            // Provide more specific feedback for configuration issues vs. general errors.
-            if (error.code === 'auth/missing-continue-uri' || 
-                error.code === 'auth/invalid-continue-uri' ||
-                error.code === 'auth/unauthorized-continue-uri') {
-                description = 'Die App ist nicht korrekt für den E-Mail-Versand konfiguriert. Bitte überprüfen Sie Ihre Firebase-Konsoleneinstellungen für E-Mail-Vorlagen.';
-            } else if (error.code && error.message) {
-                // Show the specific error to aid debugging SMTP/other issues
-                description = `${error.code}: ${error.message}`;
-            }
 
-            toast({
-                variant: "destructive",
-                title: "Fehler beim E-Mail-Versand",
-                description: description,
-                duration: 9000,
-            });
-        });
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      redirectTo: `${window.location.origin}/settings`,
+    });
+
+    if (error) {
+      console.error("Error sending password reset email:", error);
+      toast({
+        variant: "destructive",
+        title: "Fehler beim E-Mail-Versand",
+        description: error.message || 'E-Mail konnte nicht gesendet werden.',
+        duration: 9000,
+      });
+    } else {
+      toast({
+        title: "E-Mail zum Zurücksetzen gesendet",
+        description: "Wenn ein Konto mit dieser E-Mail existiert, wurde eine Anleitung zum Zurücksetzen des Passworts gesendet.",
+      });
+    }
   };
 
   if (isUserLoading || user) {
@@ -181,10 +165,10 @@ export default function LoginPage() {
                       </AlertDialogContent>
                     </AlertDialog>
                 </div>
-                <Input 
-                  id="password" 
-                  type="password" 
-                  required 
+                <Input
+                  id="password"
+                  type="password"
+                  required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isSigningIn}
@@ -197,7 +181,7 @@ export default function LoginPage() {
               </Button>
             </div>
             <div className="mt-4 text-center text-sm">
-              Neue Benutzer können in der Firebase-Konsole angelegt werden.
+              Neue Benutzer können in den Supabase-Einstellungen angelegt werden.
             </div>
           </CardContent>
         </Card>

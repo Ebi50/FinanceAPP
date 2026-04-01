@@ -23,23 +23,21 @@ import { CategoriesTab } from "@/components/categories-tab";
 import { ReportsTab } from "@/components/reports-tab";
 import { ImportTab } from "@/components/import-tab";
 import { AddTransactionSheet } from "@/components/add-transaction-sheet";
-import type { Transaction, Category, TransactionItem } from '@/lib/types';
-import { useUser, useFirestore, useCollection, useDoc } from '@/firebase';
-import { collection, doc, serverTimestamp, writeBatch, getDocs, Timestamp, setDoc, deleteDoc, addDoc } from 'firebase/firestore';
+import type { Transaction, TransactionItem } from '@/lib/types';
+import { useUser, useSupabase, useTable, useRow } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { useMemoFirebase } from '@/firebase/provider';
-import { isValid, addMonths, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { isValid, addMonths, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
 
 
 export default function Dashboard() {
   const { user, isUserLoading } = useUser();
-  const firestore = useFirestore();
+  const supabase = useSupabase();
   const router = useRouter();
   const { toast } = useToast();
-  
+
   const [currentMonth, setCurrentMonth] = useState<number | null>(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [activeTab, setActiveTab] = useState('overview');
@@ -50,78 +48,94 @@ export default function Dashboard() {
     }
   }, [user, isUserLoading, router]);
 
-  const transactionsQuery = useMemoFirebase(() => 
-    user ? collection(firestore, 'transactions') : null,
-    [firestore, user]
-  );
-  const { data: allTransactions, isLoading: transactionsLoading } = useCollection<Transaction>(transactionsQuery);
+  const { data: allTransactions, isLoading: transactionsLoading } = useTable<Transaction>({
+    table: 'transactions',
+    enabled: !!user,
+  });
 
-  const categoriesQuery = useMemoFirebase(() => 
-    user ? collection(firestore, 'expenseCategories') : null,
-    [firestore, user]
-  );
-  const { data: categories } = useCollection<Category>(categoriesQuery);
+  const { data: categories } = useTable<{ id: string; name: string; user_id: string }>({
+    table: 'expense_categories',
+    enabled: !!user,
+  });
 
-  const userProfileQuery = useMemoFirebase(() =>
-    user ? doc(firestore, 'users', user.uid) : null,
-    [firestore, user]
-  );
-  const { data: userProfile } = useDoc<{budget?: number}>(userProfileQuery);
+  const { data: userProfile } = useRow<{ budget?: number }>({
+    table: 'profiles',
+    id: user?.id,
+  });
   const budget = userProfile?.budget ?? 2000;
 
 
-  const handleAddOrUpdateTransaction = (transactionData: Omit<Transaction, 'id' | 'date' | 'amount'> & { id?: string, date: Date, amount: number, items: TransactionItem[] }) => {
-    if (!user || !firestore) return;
-  
+  const handleAddOrUpdateTransaction = async (transactionData: Omit<Transaction, 'id' | 'date' | 'amount'> & { id?: string, date: Date, amount: number, items: TransactionItem[] }) => {
+    if (!user) return;
+
     const { id, date, items, ...restOfData } = transactionData;
     let transactionId = id;
-  
-    const firestoreTimestamp = Timestamp.fromDate(date);
-  
+
+    const isoDate = date.toISOString();
+
     // If we are editing a virtual transaction, we must target the original template for the update.
-    if (transactionId && (transactionData as any).isVirtual) {
-        transactionId = transactionId.split('-recurring-')[0]; 
+    if (transactionId && (transactionData as any).is_virtual) {
+        transactionId = transactionId.split('-recurring-')[0];
     }
-  
+
     if (transactionId) {
-      // This is an update of a real transaction (normal or a recurring template)
-      const docRef = doc(firestore, 'transactions', transactionId);
-      const dataToUpdate = {
-        ...restOfData,
-        amount: transactionData.amount,
-        date: firestoreTimestamp,
-        items,
-        updatedAt: serverTimestamp(),
-      };
-      setDoc(docRef, dataToUpdate, { merge: true });
+      const { error } = await supabase
+        .from('transactions')
+        .update({
+          ...restOfData,
+          amount: transactionData.amount,
+          date: isoDate,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', transactionId);
+
+      if (error) console.error('Error updating transaction:', error);
+
+      // Update transaction items
+      if (items) {
+        await supabase.from('transaction_items').delete().eq('transaction_id', transactionId);
+        if (items.length > 0) {
+          await supabase.from('transaction_items').insert(
+            items.map(item => ({ transaction_id: transactionId, value: item.value, description: item.description }))
+          );
+        }
+      }
     } else {
-      // This is a creation of a new real transaction
-      const coll = collection(firestore, 'transactions');
-      const dataToCreate = {
-        ...restOfData,
-        amount: transactionData.amount,
-        date: firestoreTimestamp,
-        items,
-        userId: user.uid,
-        createdAt: serverTimestamp(),
-      };
-      addDoc(coll, dataToCreate);
+      const { data: newTx, error } = await supabase
+        .from('transactions')
+        .insert({
+          ...restOfData,
+          amount: transactionData.amount,
+          date: isoDate,
+          user_id: user.id,
+        })
+        .select('id')
+        .single();
+
+      if (error) {
+        console.error('Error creating transaction:', error);
+        return;
+      }
+
+      if (newTx && items && items.length > 0) {
+        await supabase.from('transaction_items').insert(
+          items.map(item => ({ transaction_id: newTx.id, value: item.value, description: item.description }))
+        );
+      }
     }
   };
 
-  const handleImportTransactions = async (importedTransactions: Omit<Transaction, 'id' | 'createdAt'>[]) => {
-    if (!user || !firestore) return;
+  const handleImportTransactions = async (importedTransactions: Omit<Transaction, 'id' | 'created_at'>[]) => {
+    if (!user) return;
 
-    const batch = writeBatch(firestore);
-    const transactionsCollection = collection(firestore, `transactions`);
-
-    importedTransactions.forEach((transactionData) => {
-      const docRef = doc(transactionsCollection);
-      batch.set(docRef, { ...transactionData, userId: user.uid, createdAt: serverTimestamp() });
-    });
+    const rows = importedTransactions.map(t => ({
+      ...t,
+      user_id: user.id,
+    }));
 
     try {
-      await batch.commit();
+      const { error } = await supabase.from('transactions').insert(rows);
+      if (error) throw error;
       toast({
         title: "Import erfolgreich",
         description: `${importedTransactions.length} Transaktionen wurden erfolgreich importiert.`,
@@ -136,65 +150,64 @@ export default function Dashboard() {
     }
   };
 
-
-  const handleDeleteTransaction = (id: string) => {
+  const handleDeleteTransaction = async (id: string) => {
     if (!user) return;
-    
-    let transactionIdToDelete = id;
 
-    // If it's a virtual transaction, find the original template to delete
+    let transactionIdToDelete = id;
     if (id.includes('-recurring-')) {
         transactionIdToDelete = id.split('-recurring-')[0];
     }
-    
-    const docRef = doc(firestore, 'transactions', transactionIdToDelete);
-    deleteDoc(docRef);
+
+    const { error } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('id', transactionIdToDelete);
+
+    if (error) console.error('Error deleting transaction:', error);
+  };
+
+  const parseDate = (d: string | Date): Date => {
+    if (d instanceof Date) return d;
+    return parseISO(d);
   };
 
   const transactionsWithRecurrences = useMemo(() => {
     if (!allTransactions) return [];
-  
+
     const generatedTransactions: Transaction[] = [...allTransactions];
-    const realTransactions = allTransactions;
-  
-    // Identify original recurring transactions
-    const recurringTemplates = realTransactions.filter(t => (t as any).isRecurring === true);
-  
+    const recurringTemplates = allTransactions.filter(t => t.is_recurring === true);
+
     recurringTemplates.forEach(template => {
-      const originalDate = template.date.toDate();
-  
-      // Generate for the next 12 months
+      const originalDate = parseDate(template.date);
+
       for (let i = 1; i <= 12; i++) {
         const futureDate = addMonths(originalDate, i);
-        
-        // No exception check needed anymore as per the new logic
+
         const recurringInstance: Transaction = {
           ...template,
-          id: `${template.id}-recurring-${i}`, // Unique virtual ID
-          date: Timestamp.fromDate(futureDate),
-          isRecurring: false, // The virtual instance itself is not a template
-          isVirtual: true, // Mark as virtual
+          id: `${template.id}-recurring-${i}`,
+          date: futureDate.toISOString(),
+          is_recurring: false,
+          is_virtual: true,
         };
         generatedTransactions.push(recurringInstance);
       }
     });
-  
+
     return generatedTransactions;
   }, [allTransactions]);
-  
+
   const availableYears = useMemo(() => {
     if (!transactionsWithRecurrences) return [new Date().getFullYear()];
 
     const years = new Set<number>();
     transactionsWithRecurrences.forEach(t => {
-      if (t.date && t.date.toDate) { 
-        const date = t.date.toDate();
-        if (isValid(date)) {
-            years.add(date.getFullYear());
-        }
+      const date = parseDate(t.date);
+      if (isValid(date)) {
+        years.add(date.getFullYear());
       }
     });
-    
+
     years.add(new Date().getFullYear());
 
     return Array.from(years).sort((a, b) => b - a);
@@ -202,27 +215,26 @@ export default function Dashboard() {
 
   const filteredTransactions = useMemo(() => {
     if (!transactionsWithRecurrences) return [];
-  
+
     const filteredByYear = transactionsWithRecurrences.filter(t => {
-        if (!t.date || !t.date.toDate) return false;
-        const date = t.date.toDate();
+        const date = parseDate(t.date);
         return isValid(date) && date.getFullYear() === currentYear;
     });
 
-    const filteredByMonth = currentMonth === null 
-        ? filteredByYear 
+    const filteredByMonth = currentMonth === null
+        ? filteredByYear
         : filteredByYear.filter(t => {
-            const date = t.date.toDate();
+            const date = parseDate(t.date);
             return isValid(date) && date.getMonth() === currentMonth;
         });
 
     return filteredByMonth.sort((a, b) => {
-        const dateA = a.date.toDate();
-        const dateB = b.date.toDate();
+        const dateA = parseDate(a.date);
+        const dateB = parseDate(b.date);
         if (!isValid(dateA) || !isValid(dateB)) return 0;
         return dateB.getTime() - dateA.getTime();
     });
-    
+
   }, [transactionsWithRecurrences, currentMonth, currentYear]);
 
   useEffect(() => {
@@ -304,13 +316,13 @@ export default function Dashboard() {
               </div>
             )}
           <TabsContent value="reports" className="space-y-4">
-            <ReportsTab 
+            <ReportsTab
               transactions={filteredTransactions}
             />
           </TabsContent>
           <TabsContent value="import" className="space-y-4">
-            <ImportTab 
-              transactions={transactionsWithRecurrences} 
+            <ImportTab
+              transactions={transactionsWithRecurrences}
               onImport={handleImportTransactions}
               categories={categories || []}
             />
@@ -319,8 +331,8 @@ export default function Dashboard() {
             <CategoriesTab />
           </TabsContent>
           <TabsContent value="transactions" className="space-y-4">
-            <TransactionsTab 
-              transactions={filteredTransactions} 
+            <TransactionsTab
+              transactions={filteredTransactions}
               onDelete={handleDeleteTransaction}
               onUpdate={handleAddOrUpdateTransaction}
             />

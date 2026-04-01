@@ -1,5 +1,4 @@
 import type { LucideIcon } from "lucide-react";
-import type { Timestamp } from "firebase/firestore";
 
 export type TransactionItem = {
   value: number;
@@ -10,17 +9,26 @@ export type Transaction = {
   id: string;
   description: string;
   amount: number;
-  date: Date | Timestamp;
-  categoryId: string;
+  date: string; // ISO date string from PostgreSQL
+  category_id: string;
   items?: TransactionItem[];
-  userId: string;
-  isRecurring?: boolean;
-  isVirtual?: boolean; // Added to identify virtual transactions
-  originalRecurringId?: string; // Link to the original recurring transaction
+  user_id: string;
+  is_recurring?: boolean;
+  is_virtual?: boolean;
+  original_recurring_id?: string;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type Category = {
   id: string;
   name: string;
-  userId: string;
+  user_id: string;
+};
+
+export type TransactionItemRow = {
+  id: string;
+  transaction_id: string;
+  value: number;
+  description?: string;
 };

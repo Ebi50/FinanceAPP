@@ -30,20 +30,19 @@ import { Checkbox } from './ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
 import { cn, formatCurrency } from '@/lib/utils';
-import { format, isValid } from 'date-fns';
+import { format, isValid, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import type { Transaction, Category, TransactionItem } from '@/lib/types';
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, Timestamp } from 'firebase/firestore';
+import { useUser, useSupabase, useTable } from '@/lib/supabase';
 
 const transactionSchema = z.object({
   id: z.string().optional(),
   description: z.string().optional(),
-  amounts: z.array(z.object({ 
+  amounts: z.array(z.object({
       value: z.coerce.number({invalid_type_error: 'Ungültiger Betrag'}).refine(val => val !== 0, { message: 'Betrag darf nicht Null sein.' }),
       description: z.string().optional(),
     })).min(1, 'Mindestens ein Betrag ist erforderlich.'),
@@ -84,11 +83,12 @@ export function AddTransactionSheet({
   transaction,
 }: AddTransactionSheetProps) {
   const [internalOpen, setInternalOpen] = useState(false);
-  
+
   const { user } = useUser();
-  const firestore = useFirestore();
-  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'expenseCategories') : null, [firestore, user]);
-  const { data: categories, isLoading: categoriesLoading } = useCollection<Category>(categoriesQuery);
+  const { data: categories, isLoading: categoriesLoading } = useTable<Category>({
+    table: 'expense_categories',
+    enabled: !!user,
+  });
 
   const open = controlledOpen ?? internalOpen;
   const setOpen = setControlledOpen ?? setInternalOpen;
@@ -109,7 +109,7 @@ export function AddTransactionSheet({
     control: form.control,
     name: "amounts"
   });
-  
+
   const sortedCategories = useMemo(() => {
     if (!categories) return [];
     return [...categories].sort((a, b) => a.name.localeCompare(b.name, 'de'));
@@ -120,20 +120,23 @@ export function AddTransactionSheet({
       let defaultValues: Partial<TransactionFormValues>;
 
       if (transaction) {
-          const transactionDate = transaction.date ? transaction.date.toDate() : new Date();
-          
-          const amounts = transaction.items && transaction.items.length > 0 
+          const transactionDate = typeof transaction.date === 'string'
+            ? parseISO(transaction.date)
+            : transaction.date instanceof Date
+              ? transaction.date
+              : new Date();
+
+          const amounts = transaction.items && transaction.items.length > 0
               ? transaction.items.map(item => ({ ...item, value: item.value || '' as any }))
               : [{ value: transaction.amount || '' as any, description: '' }];
-
 
           defaultValues = {
               id: transaction.id,
               description: transaction.description || '',
               amounts: amounts,
-              categoryId: transaction.categoryId || '',
+              categoryId: transaction.category_id || '',
               date: isValid(transactionDate) ? transactionDate : new Date(),
-              isRecurring: (transaction as any).isRecurring || false,
+              isRecurring: transaction.is_recurring || false,
           };
       } else {
         defaultValues = {
@@ -145,35 +148,34 @@ export function AddTransactionSheet({
           isRecurring: false,
         };
       }
-      
+
       form.reset(defaultValues as TransactionFormValues);
     }
   }, [open, transaction, form]);
 
   const onSubmit = (data: TransactionFormValues) => {
     const totalAmount = data.amounts.reduce((sum, current) => sum + Number(current.value), 0);
-    
+
     if (!data.date || !isValid(data.date)) {
         form.setError('date', { type: 'manual', message: 'Ungültiges Datum.' });
         return;
     }
-    
-    // Use main description as is, individual item descriptions are saved in items.
+
     const mainDescription = data.description || '';
 
     const newTransaction: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date, items: TransactionItem[] } = {
       id: data.id,
       description: mainDescription,
       amount: totalAmount,
-      categoryId: data.categoryId,
+      category_id: data.categoryId,
       date: data.date,
-      isRecurring: data.isRecurring,
+      is_recurring: data.isRecurring,
       items: data.amounts.map(a => ({ value: Number(a.value), description: a.description })),
     };
     onTransactionAdded(newTransaction);
     setOpen(false);
   };
-  
+
   const amountsValue = form.watch("amounts");
   const totalAmount = amountsValue.reduce((sum, current) => sum + Number(current.value || 0), 0);
 
@@ -193,7 +195,7 @@ export function AddTransactionSheet({
         >
           <div className="flex-1 overflow-y-auto pr-6 pl-1 -mr-6 -ml-1">
             <div className="grid gap-4 py-4">
-              
+
               <div className="space-y-2">
                 <Label htmlFor="description">Beschreibung (Gesamt)</Label>
                 <Textarea

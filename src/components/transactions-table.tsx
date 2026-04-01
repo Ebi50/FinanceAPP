@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { Badge } from "./ui/badge";
-import { format, isValid } from "date-fns";
+import { format, isValid, parseISO } from "date-fns";
 import { de } from 'date-fns/locale';
 import {
   AlertDialog,
@@ -35,8 +35,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AddTransactionSheet } from "./add-transaction-sheet";
 import { useState, useMemo } from "react";
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, doc } from 'firebase/firestore';
+import { useUser, useTable } from '@/lib/supabase';
 import {
   Tooltip,
   TooltipContent,
@@ -54,11 +53,17 @@ interface TransactionsTableProps {
 type SortKey = 'description' | 'category' | 'date' | 'amount';
 type SortDirection = 'asc' | 'desc';
 
+const toDate = (d: string | Date): Date => {
+  if (d instanceof Date) return d;
+  return parseISO(d);
+};
+
 export function TransactionsTable({ transactions, onDelete, onUpdate }: TransactionsTableProps) {
   const { user } = useUser();
-  const firestore = useFirestore();
-  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'expenseCategories') : null, [firestore, user]);
-  const { data: categories } = useCollection<Category>(categoriesQuery);
+  const { data: categories } = useTable<Category>({
+    table: 'expense_categories',
+    enabled: !!user,
+  });
 
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('date');
@@ -72,7 +77,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
   const handleDelete = (transaction: Transaction) => {
     onDelete(transaction.id);
   };
-  
+
   const handleEdit = (transaction: Transaction) => {
     setEditingTransaction(transaction);
   }
@@ -90,34 +95,33 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
       setSortDirection('asc');
     }
   };
-  
+
   const sortedTransactions = useMemo(() => {
     if (!transactions) return [];
-    
+
     return [...transactions].sort((a, b) => {
       let valA: any;
       let valB: any;
 
       switch(sortKey) {
         case 'category':
-          valA = categoryMap.get(a.categoryId)?.name || '';
-          valB = categoryMap.get(b.categoryId)?.name || '';
+          valA = categoryMap.get(a.category_id)?.name || '';
+          valB = categoryMap.get(b.category_id)?.name || '';
           break;
         case 'date':
-           // Convert Firestore Timestamp to JS Date for comparison
-          valA = a.date.toDate();
-          valB = b.date.toDate();
+          valA = toDate(a.date);
+          valB = toDate(b.date);
           break;
         case 'amount':
           valA = a.amount;
           valB = b.amount;
           break;
-        default: // description
+        default:
           valA = a.description?.toLowerCase() || '';
           valB = b.description?.toLowerCase() || '';
           break;
       }
-      
+
       if (valA < valB) {
         return sortDirection === 'asc' ? -1 : 1;
       }
@@ -130,7 +134,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
 
   const renderSortArrow = (key: SortKey) => {
     if (sortKey !== key) return null;
-    return sortDirection === 'asc' ? ' 🔼' : ' 🔽';
+    return sortDirection === 'asc' ? ' \u{1F53C}' : ' \u{1F53D}';
   };
 
   return (
@@ -169,14 +173,13 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
         </TableHeader>
         <TableBody>
           {sortedTransactions.map((transaction) => {
-            const category = categoryMap.get(transaction.categoryId);
+            const category = categoryMap.get(transaction.category_id);
             const incomeCategory = categories?.find(c => c.name.toLowerCase() === 'einnahmen');
             const isIncome = category?.id === incomeCategory?.id;
-            const isVirtual = (transaction as any).isVirtual;
-            const isOriginalRecurring = (transaction as any).isRecurring === true;
-            
-            // This robustly converts Firestore Timestamps into a JS Date for formatting
-            const transactionDate = transaction.date.toDate();
+            const isVirtual = transaction.is_virtual;
+            const isOriginalRecurring = transaction.is_recurring === true;
+
+            const transactionDate = toDate(transaction.date);
 
             return (
               <TableRow key={transaction.id} className={cn(isVirtual && "text-muted-foreground/80")}>

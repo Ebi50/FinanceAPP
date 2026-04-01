@@ -3,8 +3,7 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts"
 import { formatCurrency } from "@/lib/utils"
 import type { Transaction, Category } from "@/lib/types";
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection } from 'firebase/firestore';
+import { useUser, useTable } from '@/lib/supabase';
 import { useMemo } from "react";
 
 interface ExpensesPieChartProps {
@@ -15,9 +14,10 @@ const COLORS = ['#A7D1AB', '#FFDA63', '#FF8042', '#0088FE', '#00C49F', '#FFBB28'
 
 export function ExpensesPieChart({ transactions }: ExpensesPieChartProps) {
   const { user } = useUser();
-  const firestore = useFirestore();
-  const categoriesQuery = useMemoFirebase(() => user ? collection(firestore, 'expenseCategories') : null, [firestore, user]);
-  const { data: categories } = useCollection<Category>(categoriesQuery);
+  const { data: categories } = useTable<Category>({
+    table: 'expense_categories',
+    enabled: !!user,
+  });
 
   const categoryMap = useMemo(() => {
     if (!categories) return new Map();
@@ -26,7 +26,7 @@ export function ExpensesPieChart({ transactions }: ExpensesPieChartProps) {
 
   const expensesByCategory = useMemo(() => {
     const expenses = transactions.reduce((acc, transaction) => {
-      const categoryName = categoryMap.get(transaction.categoryId) || 'Sonstiges';
+      const categoryName = categoryMap.get(transaction.category_id) || 'Sonstiges';
       if (!acc[categoryName]) {
         acc[categoryName] = 0;
       }
@@ -39,7 +39,7 @@ export function ExpensesPieChart({ transactions }: ExpensesPieChartProps) {
       value
     }));
   }, [transactions, categoryMap]);
-  
+
   if (transactions.length === 0) {
     return <div className="flex items-center justify-center h-full text-muted-foreground">Keine Ausgabendaten für dieses Jahr vorhanden.</div>;
   }

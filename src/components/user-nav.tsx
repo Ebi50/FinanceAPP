@@ -12,33 +12,27 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useUser, useAuth, useStorage, useFirebase } from '@/firebase';
-import { signOut, updateProfile } from 'firebase/auth';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { useUser, useSupabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { useState, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Image as ImageIcon } from 'lucide-react';
-import { doc, setDoc } from 'firebase/firestore';
 
 
 export function UserNav() {
   const { user, isUserLoading } = useUser();
-  const auth = useAuth();
-  const storage = useStorage();
-  const { firestore } = useFirebase();
+  const supabase = useSupabase();
   const router = useRouter();
   const { toast } = useToast();
-  
+
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSignOut = () => {
-    signOut(auth).then(() => {
-      router.push('/login');
-    });
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
   };
-  
+
   const handleAvatarUploadClick = () => {
       fileInputRef.current?.click();
   };
@@ -60,20 +54,26 @@ export function UserNav() {
     }
 
     setIsUploading(true);
-    const storageRef = ref(storage, `avatars/${user.uid}/${file.name}`);
+    const filePath = `avatars/${user.id}/${file.name}`;
 
     try {
-        const snapshot = await uploadBytes(storageRef, file);
-        const photoURL = await getDownloadURL(snapshot.ref);
+        const { error: uploadError } = await supabase.storage
+          .from('avatars')
+          .upload(filePath, file, { upsert: true });
 
-        // First, update the auth profile. This does NOT trigger onAuthStateChanged for profile updates.
-        await updateProfile(user, { photoURL });
-        
-        // Then, update the user's document in Firestore.
-        // Our new useUser hook listens to this document, so the UI will update reactively.
-        const userDocRef = doc(firestore, 'users', user.uid);
-        // We use a blocking set here to ensure the spinner stops at the right time.
-        await setDoc(userDocRef, { photoURL }, { merge: true });
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(filePath);
+
+        // Update the user's profile in the database
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ photo_url: publicUrl })
+          .eq('id', user.id);
+
+        if (updateError) throw updateError;
 
         toast({
             title: "Profilbild aktualisiert",
@@ -104,7 +104,7 @@ export function UserNav() {
       </Avatar>
     </Button>
   }
-  
+
   if (!user) {
     return <Button asChild><Link href="/login">Anmelden</Link></Button>
   }
@@ -159,9 +159,9 @@ export function UserNav() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <input 
-          type="file" 
-          ref={fileInputRef} 
+      <input
+          type="file"
+          ref={fileInputRef}
           onChange={handleFileChange}
           className="hidden"
           accept="image/png, image/jpeg, image/gif"
