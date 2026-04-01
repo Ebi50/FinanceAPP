@@ -55,14 +55,12 @@ export function useTable<T = any>(options: UseTableOptions): UseTableResult<T> {
     setIsLoading(true);
     setError(null);
 
-    // Supabase has a default limit of 1000 rows.
-    // We fetch in pages to get ALL data.
-    const PAGE_SIZE = 1000;
+    // Fetch all rows. Supabase default limit is 1000, so we paginate.
+    const PAGE_SIZE = 5000;
     let allRows: any[] = [];
     let from = 0;
-    let hasMore = true;
 
-    while (hasMore) {
+    while (true) {
       let query = supabase.from(table).select(select).range(from, from + PAGE_SIZE - 1);
 
       if (filter) {
@@ -84,11 +82,14 @@ export function useTable<T = any>(options: UseTableOptions): UseTableResult<T> {
         return;
       }
 
+      const fetched = rows?.length ?? 0;
       allRows = allRows.concat(rows || []);
-      hasMore = (rows?.length ?? 0) === PAGE_SIZE;
+
+      if (fetched < PAGE_SIZE) break;
       from += PAGE_SIZE;
     }
 
+    console.log(`[useTable] ${table}: loaded ${allRows.length} rows`);
     setData(allRows as WithId<T>[]);
     setIsLoading(false);
   }, [supabase, table, select, filterKey, orderKey, enabled]);
