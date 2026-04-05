@@ -75,7 +75,6 @@ export default function SettingsPage() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
-  const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [budget, setBudget] = useState(2000);
@@ -164,13 +163,6 @@ export default function SettingsPage() {
     }
 
     try {
-        // Verify old password by signing in
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: user.email!,
-          password: oldPassword,
-        });
-        if (signInError) throw new Error('Das alte Passwort ist nicht korrekt.');
-
         const { error } = await supabase.auth.updateUser({ password: newPassword });
         if (error) throw error;
 
@@ -178,7 +170,6 @@ export default function SettingsPage() {
           title: 'Passwort geändert',
           description: 'Ihr Passwort wurde erfolgreich geändert.',
         });
-        setOldPassword('');
         setNewPassword('');
         setConfirmPassword('');
     } catch (error: any) {
@@ -446,15 +437,11 @@ export default function SettingsPage() {
                 <CardHeader>
                     <CardTitle>Passwort ändern</CardTitle>
                     <CardDescription>
-                        Um Ihr Passwort zu ändern, geben Sie bitte zuerst Ihr altes Passwort ein.
+                        Geben Sie ein neues Passwort ein, um es zu ändern.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form className="space-y-4" onSubmit={handlePasswordSave}>
-                        <div className="space-y-2">
-                            <Label htmlFor="oldPassword">Altes Passwort</Label>
-                            <Input id="oldPassword" type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} required />
-                        </div>
                         <div className="space-y-2">
                             <Label htmlFor="newPassword">Neues Passwort</Label>
                             <Input id="newPassword" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
