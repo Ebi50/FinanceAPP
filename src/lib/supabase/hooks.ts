@@ -1,7 +1,18 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSupabase } from './provider';
+
+function useDebouncedCallback<T extends (...args: any[]) => any>(fn: T, delay: number): T {
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fnRef = useRef(fn);
+  fnRef.current = fn;
+
+  return useMemo(() => ((...args: any[]) => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => fnRef.current(...args), delay);
+  }) as T, [delay]);
+}
 
 export type WithId<T> = T & { id: string };
 
@@ -98,6 +109,9 @@ export function useTable<T = any>(options: UseTableOptions): UseTableResult<T> {
     fetchData();
   }, [fetchData]);
 
+  // Debounce realtime refetches to avoid rapid re-renders during multi-step saves
+  const debouncedFetch = useDebouncedCallback(fetchData, 300);
+
   // Realtime: refetch on any change to the table
   useEffect(() => {
     if (!enabled) return;
@@ -114,8 +128,7 @@ export function useTable<T = any>(options: UseTableOptions): UseTableResult<T> {
       'postgres_changes',
       { event: '*', schema: 'public', table },
       () => {
-        // Simply refetch all data on any change
-        fetchData();
+        debouncedFetch();
       }
     );
 

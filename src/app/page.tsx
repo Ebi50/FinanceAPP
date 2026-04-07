@@ -48,8 +48,9 @@ export default function Dashboard() {
     }
   }, [user, isUserLoading, router]);
 
-  const { data: allTransactions, isLoading: transactionsLoading } = useTable<Transaction>({
+  const { data: allTransactions, isLoading: transactionsLoading, refetch: refetchTransactions } = useTable<Transaction>({
     table: 'transactions',
+    select: '*, items:transaction_items(value, description)',
     enabled: !!user,
   });
 
@@ -96,10 +97,12 @@ export default function Dashboard() {
         await supabase.from('transaction_items').delete().eq('transaction_id', transactionId);
         if (items.length > 0) {
           await supabase.from('transaction_items').insert(
-            items.map(item => ({ transaction_id: transactionId, value: item.value, description: item.description }))
+            items.map(item => ({ transaction_id: transactionId, value: item.value, description: item.description || null }))
           );
         }
       }
+      // Refetch after all operations (items changes don't trigger realtime)
+      refetchTransactions();
     } else {
       const { data: newTx, error } = await supabase
         .from('transactions')
@@ -119,9 +122,11 @@ export default function Dashboard() {
 
       if (newTx && items && items.length > 0) {
         await supabase.from('transaction_items').insert(
-          items.map(item => ({ transaction_id: newTx.id, value: item.value, description: item.description }))
+          items.map(item => ({ transaction_id: newTx.id, value: item.value, description: item.description || null }))
         );
       }
+      // Refetch after all operations (items changes don't trigger realtime)
+      refetchTransactions();
     }
   };
 

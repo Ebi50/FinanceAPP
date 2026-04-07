@@ -127,7 +127,7 @@ export function AddTransactionSheet({
               : new Date();
 
           const amounts = transaction.items && transaction.items.length > 0
-              ? transaction.items.map(item => ({ ...item, value: item.value || '' as any }))
+              ? transaction.items.map(item => ({ value: item.value || '' as any, description: item.description || '' }))
               : [{ value: transaction.amount || '' as any, description: '' }];
 
           defaultValues = {
@@ -154,7 +154,7 @@ export function AddTransactionSheet({
   }, [open, transaction, form]);
 
   const onSubmit = (data: TransactionFormValues) => {
-    const totalAmount = data.amounts.reduce((sum, current) => sum + Number(current.value), 0);
+    const totalAmount = Math.round(data.amounts.reduce((sum, current) => sum + Number(current.value), 0) * 100) / 100;
 
     if (!data.date || !isValid(data.date)) {
         form.setError('date', { type: 'manual', message: 'Ungültiges Datum.' });
