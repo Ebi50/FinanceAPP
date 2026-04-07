@@ -34,7 +34,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { AddTransactionSheet } from "./add-transaction-sheet";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useCategories } from '@/lib/categories-context';
 import {
   Tooltip,
@@ -64,6 +64,8 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const PAGE_SIZE = 50;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const categoryMap = useMemo(() => {
     if (!categories) return new Map();
@@ -128,6 +130,19 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
     });
   }, [transactions, sortKey, sortDirection, categoryMap]);
 
+  // Reset visible count when data or sorting changes
+  const visibleTransactions = useMemo(() => {
+    setVisibleCount(PAGE_SIZE);
+    return sortedTransactions;
+  }, [sortedTransactions]);
+
+  const displayedTransactions = visibleTransactions.slice(0, visibleCount);
+  const hasMore = visibleCount < visibleTransactions.length;
+
+  const handleLoadMore = useCallback(() => {
+    setVisibleCount(prev => prev + PAGE_SIZE);
+  }, []);
+
   const renderSortArrow = (key: SortKey) => {
     if (sortKey !== key) return null;
     return sortDirection === 'asc' ? ' \u{1F53C}' : ' \u{1F53D}';
@@ -168,7 +183,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sortedTransactions.map((transaction) => {
+          {displayedTransactions.map((transaction) => {
             const category = categoryMap.get(transaction.category_id);
             const incomeCategory = categories?.find(c => c.name.toLowerCase() === 'einnahmen');
             const isIncome = category?.id === incomeCategory?.id;
@@ -255,6 +270,13 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
           })}
         </TableBody>
       </Table>
+      {hasMore && (
+        <div className="flex justify-center py-4">
+          <Button variant="outline" onClick={handleLoadMore}>
+            Weitere {Math.min(PAGE_SIZE, visibleTransactions.length - visibleCount)} von {visibleTransactions.length} Transaktionen laden
+          </Button>
+        </div>
+      )}
       {editingTransaction && (
           <AddTransactionSheet
             open={!!editingTransaction}

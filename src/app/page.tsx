@@ -27,7 +27,7 @@ import type { Transaction, TransactionItem } from '@/lib/types';
 import { useUser, useSupabase, useTable } from '@/lib/supabase';
 import { useCategories } from '@/lib/categories-context';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, startTransition } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { isValid, addMonths, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -79,12 +79,14 @@ export default function Dashboard() {
     }
 
     if (transactionId) {
-      // Optimistic update: update local state immediately
-      setAllTransactions(prev => prev ? prev.map(t =>
-        t.id === transactionId
-          ? { ...t, ...restOfData, amount: transactionData.amount, date: isoDate, items: items || t.items }
-          : t
-      ) : prev);
+      // Optimistic update: update local state immediately (non-blocking)
+      startTransition(() => {
+        setAllTransactions(prev => prev ? prev.map(t =>
+          t.id === transactionId
+            ? { ...t, ...restOfData, amount: transactionData.amount, date: isoDate, items: items || t.items }
+            : t
+        ) : prev);
+      });
 
       const { error } = await supabase
         .from('transactions')
@@ -128,7 +130,7 @@ export default function Dashboard() {
         return;
       }
 
-      // Optimistic: add new transaction to local state
+      // Optimistic: add new transaction to local state (non-blocking)
       if (newTx) {
         const newTransaction = {
           ...restOfData,
@@ -138,7 +140,9 @@ export default function Dashboard() {
           user_id: user.id,
           items: items || [],
         } as Transaction;
-        setAllTransactions(prev => prev ? [...prev, newTransaction] : [newTransaction]);
+        startTransition(() => {
+          setAllTransactions(prev => prev ? [...prev, newTransaction] : [newTransaction]);
+        });
 
         if (items && items.length > 0) {
           await supabase.from('transaction_items').insert(
@@ -182,8 +186,10 @@ export default function Dashboard() {
         transactionIdToDelete = id.split('-recurring-')[0];
     }
 
-    // Optimistic: remove from local state immediately
-    setAllTransactions(prev => prev ? prev.filter(t => t.id !== transactionIdToDelete) : prev);
+    // Optimistic: remove from local state immediately (non-blocking)
+    startTransition(() => {
+      setAllTransactions(prev => prev ? prev.filter(t => t.id !== transactionIdToDelete) : prev);
+    });
 
     const { error } = await supabase
       .from('transactions')
