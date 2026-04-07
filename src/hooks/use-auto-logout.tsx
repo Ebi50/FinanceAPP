@@ -65,7 +65,41 @@ const useAutoLogout = () => {
 
 export const AutoLogoutProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   useAutoLogout();
+  usePointerEventsFix();
   return <>{children}</>;
 };
+
+/**
+ * Global safety net for Radix UI's pointer-events management.
+ * Radix sets body { pointer-events: none } when dialogs/sheets are open,
+ * but sometimes fails to restore it (nested overlays, focus conflicts).
+ * This detects the stale lock and force-resets it.
+ */
+function usePointerEventsFix() {
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      if (document.body.style.pointerEvents !== 'none') return;
+
+      // Give Radix time to finish its work, then check if any dialog is actually open
+      setTimeout(() => {
+        if (document.body.style.pointerEvents !== 'none') return;
+
+        const openDialogs = document.querySelectorAll(
+          '[role="dialog"][data-state="open"]'
+        );
+        if (openDialogs.length === 0) {
+          document.body.style.pointerEvents = '';
+        }
+      }, 500);
+    });
+
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['style'],
+    });
+
+    return () => observer.disconnect();
+  }, []);
+}
 
 export default useAutoLogout;
