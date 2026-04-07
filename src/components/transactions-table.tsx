@@ -31,7 +31,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { AddTransactionSheet } from "./add-transaction-sheet";
 import { useState, useMemo, useCallback, useEffect, memo } from "react";
@@ -62,6 +61,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
   const { categories } = useCategories();
 
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const PAGE_SIZE = 50;
@@ -75,6 +75,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
 
   const handleDelete = (transaction: Transaction) => {
     onDelete(transaction.id);
+    setDeletingTransaction(null);
   };
 
   const handleEdit = (transaction: Transaction) => {
@@ -242,28 +243,10 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
                         Bearbeiten
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                       <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                             <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive">
-                               <Trash2 className="mr-2 h-4 w-4" />
-                               Löschen
-                             </DropdownMenuItem>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird die Transaktion dauerhaft gelöscht.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDelete(transaction)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                Löschen
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                      <DropdownMenuItem onSelect={() => setDeletingTransaction(transaction)} className="text-destructive focus:text-destructive">
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Löschen
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
@@ -287,6 +270,22 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
         transaction={editingTransaction}
         onTransactionAdded={handleUpdate}
       />
+      <AlertDialog open={!!deletingTransaction} onOpenChange={(isOpen) => { if (!isOpen) setDeletingTransaction(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird die Transaktion dauerhaft gelöscht.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deletingTransaction && handleDelete(deletingTransaction)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </TooltipProvider>
   );
 }
