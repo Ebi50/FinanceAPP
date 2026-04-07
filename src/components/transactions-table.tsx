@@ -97,36 +97,38 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
   const sortedTransactions = useMemo(() => {
     if (!transactions) return [];
 
+    // Data arrives pre-sorted by date desc from parent — skip re-sort if that's the key
+    if (sortKey === 'date' && sortDirection === 'desc') return transactions;
+
     return [...transactions].sort((a, b) => {
-      let valA: any;
-      let valB: any;
+      let cmp = 0;
 
       switch(sortKey) {
-        case 'category':
-          valA = categoryMap.get(a.category_id)?.name || '';
-          valB = categoryMap.get(b.category_id)?.name || '';
+        case 'category': {
+          const nameA = categoryMap.get(a.category_id)?.name || '';
+          const nameB = categoryMap.get(b.category_id)?.name || '';
+          cmp = nameA.localeCompare(nameB);
           break;
-        case 'date':
-          valA = toDate(a.date);
-          valB = toDate(b.date);
+        }
+        case 'date': {
+          // ISO 8601 strings sort correctly with localeCompare
+          const dateA = typeof a.date === 'string' ? a.date : '';
+          const dateB = typeof b.date === 'string' ? b.date : '';
+          cmp = dateA.localeCompare(dateB);
           break;
+        }
         case 'amount':
-          valA = a.amount;
-          valB = b.amount;
+          cmp = a.amount - b.amount;
           break;
-        default:
-          valA = a.description?.toLowerCase() || '';
-          valB = b.description?.toLowerCase() || '';
+        default: {
+          const descA = a.description?.toLowerCase() || '';
+          const descB = b.description?.toLowerCase() || '';
+          cmp = descA.localeCompare(descB);
           break;
+        }
       }
 
-      if (valA < valB) {
-        return sortDirection === 'asc' ? -1 : 1;
-      }
-      if (valA > valB) {
-        return sortDirection === 'asc' ? 1 : -1;
-      }
-      return 0;
+      return sortDirection === 'asc' ? cmp : -cmp;
     });
   }, [transactions, sortKey, sortDirection, categoryMap]);
 

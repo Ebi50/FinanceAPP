@@ -210,28 +210,32 @@ export default function Dashboard() {
   const transactionsWithRecurrences = useMemo(() => {
     if (!allTransactions) return [];
 
-    const generatedTransactions: Transaction[] = [...allTransactions];
-    const recurringTemplates = allTransactions.filter(t => t.is_recurring === true);
+    const generatedTransactions: Transaction[] = [];
+    const yearStr = String(currentYear);
 
-    recurringTemplates.forEach(template => {
-      const originalDate = parseDate(template.date);
+    for (const t of allTransactions) {
+      generatedTransactions.push(t);
 
-      for (let i = 1; i <= 12; i++) {
-        const futureDate = addMonths(originalDate, i);
+      if (t.is_recurring) {
+        const originalDate = parseDate(t.date);
+        for (let i = 1; i <= 12; i++) {
+          const futureDate = addMonths(originalDate, i);
+          // Only generate instances that fall in the current year
+          if (futureDate.getFullYear() !== currentYear) continue;
 
-        const recurringInstance: Transaction = {
-          ...template,
-          id: `${template.id}-recurring-${i}`,
-          date: futureDate.toISOString(),
-          is_recurring: false,
-          is_virtual: true,
-        };
-        generatedTransactions.push(recurringInstance);
+          generatedTransactions.push({
+            ...t,
+            id: `${t.id}-recurring-${i}`,
+            date: futureDate.toISOString(),
+            is_recurring: false,
+            is_virtual: true,
+          });
+        }
       }
-    });
+    }
 
     return generatedTransactions;
-  }, [allTransactions]);
+  }, [allTransactions, currentYear]);
 
   // Static year range — data is loaded per-year from server
   const availableYears = useMemo(() => {
@@ -246,20 +250,23 @@ export default function Dashboard() {
   const filteredTransactions = useMemo(() => {
     if (!transactionsWithRecurrences) return [];
 
-    // Year is already filtered server-side, only filter by month + year for recurring instances
+    // Build prefix for fast string-based filtering (no Date parsing needed)
+    // ISO dates: "2026-04-07T..." — year is chars 0-3, month is chars 5-6
+    const yearStr = String(currentYear);
+    const monthStr = currentMonth !== null ? String(currentMonth + 1).padStart(2, '0') : null;
+    const prefix = monthStr ? `${yearStr}-${monthStr}` : yearStr;
+
     const filtered = transactionsWithRecurrences.filter(t => {
-        const date = parseDate(t.date);
-        if (!isValid(date)) return false;
-        if (date.getFullYear() !== currentYear) return false;
-        if (currentMonth !== null && date.getMonth() !== currentMonth) return false;
-        return true;
+      const dateStr = typeof t.date === 'string' ? t.date : '';
+      if (!dateStr) return false;
+      return monthStr ? dateStr.startsWith(prefix) : dateStr.startsWith(yearStr);
     });
 
+    // Sort by ISO date string descending (lexicographic sort works for ISO 8601)
     return filtered.sort((a, b) => {
-        const dateA = parseDate(a.date);
-        const dateB = parseDate(b.date);
-        if (!isValid(dateA) || !isValid(dateB)) return 0;
-        return dateB.getTime() - dateA.getTime();
+      const dateA = typeof a.date === 'string' ? a.date : '';
+      const dateB = typeof b.date === 'string' ? b.date : '';
+      return dateB.localeCompare(dateA);
     });
 
   }, [transactionsWithRecurrences, currentMonth, currentYear]);
