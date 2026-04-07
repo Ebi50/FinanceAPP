@@ -53,11 +53,11 @@ export default function Dashboard() {
   const yearStart = `${currentYear}-01-01T00:00:00.000Z`;
   const nextYearStart = `${currentYear + 1}-01-01T00:00:00.000Z`;
 
-  const { data: allTransactions, isLoading: transactionsLoading } = useTable<Transaction>({
+  const { data: allTransactions, isLoading: transactionsLoading, refetch: refetchTransactions } = useTable<Transaction>({
     table: 'transactions',
     select: '*, items:transaction_items(value, description)',
     or: `and(date.gte.${yearStart},date.lt.${nextYearStart}),is_recurring.eq.true`,
-    realtimeTables: ['transaction_items'],
+    realtime: false,
     enabled: !!user,
   });
 
@@ -123,6 +123,9 @@ export default function Dashboard() {
         );
       }
     }
+
+    // Refetch after all DB operations complete
+    refetchTransactions();
   };
 
   const handleImportTransactions = async (importedTransactions: Omit<Transaction, 'id' | 'created_at'>[]) => {
@@ -164,6 +167,7 @@ export default function Dashboard() {
       .eq('id', transactionIdToDelete);
 
     if (error) console.error('Error deleting transaction:', error);
+    else refetchTransactions();
   };
 
   const parseDate = (d: string | Date): Date => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, startTransition } from 'react';
 import { useSupabase } from './provider';
 
 export type WithId<T> = T & { id: string };
@@ -27,6 +27,8 @@ interface UseTableOptions {
   or?: string;
   orderBy?: { column: string; ascending?: boolean };
   enabled?: boolean;
+  /** Set to false to disable realtime subscriptions (default: true) */
+  realtime?: boolean;
   /** Additional tables to watch for realtime changes (triggers a refetch) */
   realtimeTables?: string[];
 }
@@ -38,7 +40,7 @@ interface UseRowOptions {
 }
 
 export function useTable<T = any>(options: UseTableOptions): UseTableResult<T> {
-  const { table, select = '*', filter, or: orFilter, orderBy, enabled = true, realtimeTables } = options;
+  const { table, select = '*', filter, or: orFilter, orderBy, enabled = true, realtime = true, realtimeTables } = options;
   const supabase = useSupabase();
 
   const [data, setData] = useState<WithId<T>[] | null>(null);
@@ -115,7 +117,10 @@ export function useTable<T = any>(options: UseTableOptions): UseTableResult<T> {
       }
 
       console.log(`[useTable] ${table}: loaded ${allRows.length} rows`);
-      setData(allRows as WithId<T>[]);
+      // Use startTransition so heavy re-renders don't block the UI
+      startTransition(() => {
+        setData(allRows as WithId<T>[]);
+      });
     } finally {
       setIsLoading(false);
       fetchingRef.current = false;
@@ -128,7 +133,7 @@ export function useTable<T = any>(options: UseTableOptions): UseTableResult<T> {
 
   // Realtime: debounced refetch on any change to watched tables
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !realtime) return;
 
     // Clean up previous channel
     if (channelRef.current) {
