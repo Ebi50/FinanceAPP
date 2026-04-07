@@ -46,6 +46,17 @@ CREATE TABLE public.transaction_items (
 );
 
 -- ============================================
+-- Indexes (critical for query performance)
+-- ============================================
+
+CREATE INDEX IF NOT EXISTS idx_transaction_items_transaction_id ON public.transaction_items (transaction_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON public.transactions (user_id);
+CREATE INDEX IF NOT EXISTS idx_categories_user_id ON public.expense_categories (user_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_category_id ON public.transactions (category_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_date ON public.transactions (date DESC);
+CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON public.transactions (user_id, date DESC);
+
+-- ============================================
 -- Row Level Security
 -- ============================================
 
@@ -64,44 +75,52 @@ CREATE POLICY "Users can insert own profile" ON public.profiles
 CREATE POLICY "Users can update own profile" ON public.profiles
   FOR UPDATE USING (auth.uid() = id);
 
--- Expense Categories: All authenticated users can CRUD
-CREATE POLICY "Authenticated users can view categories" ON public.expense_categories
-  FOR SELECT TO authenticated USING (true);
+-- Expense Categories: Users can only access their own categories
+CREATE POLICY "Users can view own categories" ON public.expense_categories
+  FOR SELECT USING (auth.uid() = user_id);
 
-CREATE POLICY "Authenticated users can create categories" ON public.expense_categories
-  FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Users can create own categories" ON public.expense_categories
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Authenticated users can update categories" ON public.expense_categories
-  FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "Users can update own categories" ON public.expense_categories
+  FOR UPDATE USING (auth.uid() = user_id);
 
-CREATE POLICY "Authenticated users can delete categories" ON public.expense_categories
-  FOR DELETE TO authenticated USING (true);
+CREATE POLICY "Users can delete own categories" ON public.expense_categories
+  FOR DELETE USING (auth.uid() = user_id);
 
--- Transactions: All authenticated users can CRUD
-CREATE POLICY "Authenticated users can view transactions" ON public.transactions
-  FOR SELECT TO authenticated USING (true);
+-- Transactions: Users can only access their own transactions
+CREATE POLICY "Users can view own transactions" ON public.transactions
+  FOR SELECT USING (auth.uid() = user_id);
 
-CREATE POLICY "Authenticated users can create transactions" ON public.transactions
-  FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Users can create own transactions" ON public.transactions
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Authenticated users can update transactions" ON public.transactions
-  FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "Users can update own transactions" ON public.transactions
+  FOR UPDATE USING (auth.uid() = user_id);
 
-CREATE POLICY "Authenticated users can delete transactions" ON public.transactions
-  FOR DELETE TO authenticated USING (true);
+CREATE POLICY "Users can delete own transactions" ON public.transactions
+  FOR DELETE USING (auth.uid() = user_id);
 
--- Transaction Items: All authenticated users can CRUD
-CREATE POLICY "Authenticated users can view transaction items" ON public.transaction_items
-  FOR SELECT TO authenticated USING (true);
+-- Transaction Items: Users can only access items of their own transactions
+CREATE POLICY "Users can view own transaction items" ON public.transaction_items
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM public.transactions WHERE transactions.id = transaction_items.transaction_id AND transactions.user_id = auth.uid())
+  );
 
-CREATE POLICY "Authenticated users can create transaction items" ON public.transaction_items
-  FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Users can create own transaction items" ON public.transaction_items
+  FOR INSERT WITH CHECK (
+    EXISTS (SELECT 1 FROM public.transactions WHERE transactions.id = transaction_items.transaction_id AND transactions.user_id = auth.uid())
+  );
 
-CREATE POLICY "Authenticated users can update transaction items" ON public.transaction_items
-  FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "Users can update own transaction items" ON public.transaction_items
+  FOR UPDATE USING (
+    EXISTS (SELECT 1 FROM public.transactions WHERE transactions.id = transaction_items.transaction_id AND transactions.user_id = auth.uid())
+  );
 
-CREATE POLICY "Authenticated users can delete transaction items" ON public.transaction_items
-  FOR DELETE TO authenticated USING (true);
+CREATE POLICY "Users can delete own transaction items" ON public.transaction_items
+  FOR DELETE USING (
+    EXISTS (SELECT 1 FROM public.transactions WHERE transactions.id = transaction_items.transaction_id AND transactions.user_id = auth.uid())
+  );
 
 -- ============================================
 -- Realtime (enable for all tables)

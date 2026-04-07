@@ -15,6 +15,7 @@ export function CategoriesProvider({ children }: { children: ReactNode }) {
   const { user } = useUser();
   const { data: categories, isLoading } = useTable<Category>({
     table: 'expense_categories',
+    filter: user ? [{ column: 'user_id', value: user.id }] : undefined,
     enabled: !!user,
   });
 

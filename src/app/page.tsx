@@ -52,6 +52,7 @@ export default function Dashboard() {
   const { data: allTransactions, isLoading: transactionsLoading } = useTable<Transaction>({
     table: 'transactions',
     select: '*, items:transaction_items(value, description)',
+    filter: user ? [{ column: 'user_id', value: user.id }] : undefined,
     realtimeTables: ['transaction_items'],
     enabled: !!user,
   });
