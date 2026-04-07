@@ -53,7 +53,7 @@ export default function Dashboard() {
   const yearStart = `${currentYear}-01-01T00:00:00.000Z`;
   const nextYearStart = `${currentYear + 1}-01-01T00:00:00.000Z`;
 
-  const { data: allTransactions, isLoading: transactionsLoading, refetch: refetchTransactions } = useTable<Transaction>({
+  const { data: allTransactions, isLoading: transactionsLoading, setData: setAllTransactions, refetch: refetchTransactions } = useTable<Transaction>({
     table: 'transactions',
     select: '*, items:transaction_items(value, description)',
     or: `and(date.gte.${yearStart},date.lt.${nextYearStart}),is_recurring.eq.true`,
@@ -79,6 +79,13 @@ export default function Dashboard() {
     }
 
     if (transactionId) {
+      // Optimistic update: update local state immediately
+      setAllTransactions(prev => prev ? prev.map(t =>
+        t.id === transactionId
+          ? { ...t, ...restOfData, amount: transactionData.amount, date: isoDate, items: items || t.items }
+          : t
+      ) : prev);
+
       const { error } = await supabase
         .from('transactions')
         .update({
@@ -89,7 +96,11 @@ export default function Dashboard() {
         })
         .eq('id', transactionId);
 
-      if (error) console.error('Error updating transaction:', error);
+      if (error) {
+        console.error('Error updating transaction:', error);
+        refetchTransactions(); // Revert on error
+        return;
+      }
 
       // Update transaction items
       if (items) {
@@ -117,15 +128,25 @@ export default function Dashboard() {
         return;
       }
 
-      if (newTx && items && items.length > 0) {
-        await supabase.from('transaction_items').insert(
-          items.map(item => ({ transaction_id: newTx.id, value: item.value, description: item.description || null }))
-        );
+      // Optimistic: add new transaction to local state
+      if (newTx) {
+        const newTransaction = {
+          ...restOfData,
+          id: newTx.id,
+          amount: transactionData.amount,
+          date: isoDate,
+          user_id: user.id,
+          items: items || [],
+        } as Transaction;
+        setAllTransactions(prev => prev ? [...prev, newTransaction] : [newTransaction]);
+
+        if (items && items.length > 0) {
+          await supabase.from('transaction_items').insert(
+            items.map(item => ({ transaction_id: newTx.id, value: item.value, description: item.description || null }))
+          );
+        }
       }
     }
-
-    // Refetch after all DB operations complete
-    refetchTransactions();
   };
 
   const handleImportTransactions = async (importedTransactions: Omit<Transaction, 'id' | 'created_at'>[]) => {
@@ -161,13 +182,18 @@ export default function Dashboard() {
         transactionIdToDelete = id.split('-recurring-')[0];
     }
 
+    // Optimistic: remove from local state immediately
+    setAllTransactions(prev => prev ? prev.filter(t => t.id !== transactionIdToDelete) : prev);
+
     const { error } = await supabase
       .from('transactions')
       .delete()
       .eq('id', transactionIdToDelete);
 
-    if (error) console.error('Error deleting transaction:', error);
-    else refetchTransactions();
+    if (error) {
+      console.error('Error deleting transaction:', error);
+      refetchTransactions(); // Revert on error
+    }
   };
 
   const parseDate = (d: string | Date): Date => {
