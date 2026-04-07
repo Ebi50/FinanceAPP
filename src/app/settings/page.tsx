@@ -27,7 +27,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
@@ -73,6 +72,8 @@ export default function SettingsPage() {
 
   const [deleteYear, setDeleteYear] = useState<number | null>(null);
   const [deleteMonth, setDeleteMonth] = useState<string>('all');
+  const [deleteDataDialogOpen, setDeleteDataDialogOpen] = useState(false);
+  const [deleteAccountDialogOpen, setDeleteAccountDialogOpen] = useState(false);
 
   const { toast } = useToast();
 
@@ -535,12 +536,10 @@ export default function SettingsPage() {
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                        <Button variant="destructive" className="w-full sm:w-auto" disabled={!deleteYear || isDeleting}>
-                                            {isDeleting ? 'Löschen...' : 'Daten löschen'}
-                                        </Button>
-                                    </AlertDialogTrigger>
+                                <Button variant="destructive" className="w-full sm:w-auto" disabled={!deleteYear || isDeleting} onClick={() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); setDeleteDataDialogOpen(true); }}>
+                                    {isDeleting ? 'Löschen...' : 'Daten löschen'}
+                                </Button>
+                                <AlertDialog open={deleteDataDialogOpen} onOpenChange={setDeleteDataDialogOpen}>
                                     <AlertDialogContent>
                                         <AlertDialogHeader>
                                             <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
@@ -563,10 +562,8 @@ export default function SettingsPage() {
 
                         <div className="border-t pt-4">
                            <h4 className="font-semibold mb-2">Konto löschen</h4>
-                            <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                    <Button variant="destructive">Konto löschen</Button>
-                                </AlertDialogTrigger>
+                            <Button variant="destructive" onClick={() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); setDeleteAccountDialogOpen(true); }}>Konto löschen</Button>
+                            <AlertDialog open={deleteAccountDialogOpen} onOpenChange={setDeleteAccountDialogOpen}>
                                 <AlertDialogContent>
                                     <AlertDialogHeader>
                                         <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>

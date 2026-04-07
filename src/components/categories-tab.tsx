@@ -56,13 +56,19 @@ export function CategoriesTab() {
   const [categoryName, setCategoryName] = useState("");
   const { toast } = useToast();
 
+  const blurActive = () => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  };
+
   const handleAddClick = () => {
+    blurActive();
     setCurrentCategory(null);
     setCategoryName("");
     setOpen(true);
   };
 
   const handleEditClick = (category: Category) => {
+    blurActive();
     setCurrentCategory(category);
     setCategoryName(category.name);
     setOpen(true);

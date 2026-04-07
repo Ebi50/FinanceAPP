@@ -135,7 +135,7 @@ export default function LoginPage() {
               <div className="grid gap-2">
                 <div className="flex items-center">
                   <Label htmlFor="password">Passwort</Label>
-                    <Button variant="link" className="ml-auto inline-block text-sm underline p-0 h-auto" onClick={() => setResetDialogOpen(true)}>
+                    <Button variant="link" className="ml-auto inline-block text-sm underline p-0 h-auto" onClick={() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); setResetDialogOpen(true); }}>
                       Passwort vergessen?
                     </Button>
                     <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
