@@ -1,18 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSupabase } from './provider';
-
-function useDebouncedCallback<T extends (...args: any[]) => any>(fn: T, delay: number): T {
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fnRef = useRef(fn);
-  fnRef.current = fn;
-
-  return useMemo(() => ((...args: any[]) => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => fnRef.current(...args), delay);
-  }) as T, [delay]);
-}
 
 export type WithId<T> = T & { id: string };
 
@@ -36,6 +25,8 @@ interface UseTableOptions {
   filter?: { column: string; value: any }[];
   orderBy?: { column: string; ascending?: boolean };
   enabled?: boolean;
+  /** Additional tables to watch for realtime changes (triggers a refetch) */
+  realtimeTables?: string[];
 }
 
 interface UseRowOptions {
@@ -45,16 +36,19 @@ interface UseRowOptions {
 }
 
 export function useTable<T = any>(options: UseTableOptions): UseTableResult<T> {
-  const { table, select = '*', filter, orderBy, enabled = true } = options;
+  const { table, select = '*', filter, orderBy, enabled = true, realtimeTables } = options;
   const supabase = useSupabase();
 
   const [data, setData] = useState<WithId<T>[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const fetchingRef = useRef(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const filterKey = filter ? JSON.stringify(filter) : '';
   const orderKey = orderBy ? JSON.stringify(orderBy) : '';
+  const realtimeKey = realtimeTables ? realtimeTables.join(',') : '';
 
   const fetchData = useCallback(async () => {
     if (!enabled) {
@@ -63,56 +57,61 @@ export function useTable<T = any>(options: UseTableOptions): UseTableResult<T> {
       return;
     }
 
+    // Prevent concurrent fetches
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+
     setIsLoading(true);
     setError(null);
 
-    // Fetch all rows. Supabase max_rows is 1000, so we paginate in chunks of 1000.
-    const PAGE_SIZE = 1000;
-    let allRows: any[] = [];
-    let from = 0;
+    try {
+      // Fetch all rows. Supabase max_rows is 1000, so we paginate in chunks of 1000.
+      const PAGE_SIZE = 1000;
+      let allRows: any[] = [];
+      let from = 0;
 
-    while (true) {
-      let query = supabase.from(table).select(select).range(from, from + PAGE_SIZE - 1);
+      while (true) {
+        let query = supabase.from(table).select(select).range(from, from + PAGE_SIZE - 1);
 
-      if (filter) {
-        for (const f of filter) {
-          query = query.eq(f.column, f.value);
+        if (filter) {
+          for (const f of filter) {
+            query = query.eq(f.column, f.value);
+          }
         }
+
+        if (orderBy) {
+          query = query.order(orderBy.column, { ascending: orderBy.ascending ?? true });
+        }
+
+        const { data: rows, error: fetchError } = await query;
+
+        if (fetchError) {
+          setError(new Error(fetchError.message));
+          setData(null);
+          setIsLoading(false);
+          return;
+        }
+
+        const fetched = rows?.length ?? 0;
+        allRows = allRows.concat(rows || []);
+
+        if (fetched < PAGE_SIZE) break;
+        from += PAGE_SIZE;
       }
 
-      if (orderBy) {
-        query = query.order(orderBy.column, { ascending: orderBy.ascending ?? true });
-      }
-
-      const { data: rows, error: fetchError } = await query;
-
-      if (fetchError) {
-        setError(new Error(fetchError.message));
-        setData(null);
-        setIsLoading(false);
-        return;
-      }
-
-      const fetched = rows?.length ?? 0;
-      allRows = allRows.concat(rows || []);
-
-      if (fetched < PAGE_SIZE) break;
-      from += PAGE_SIZE;
+      console.log(`[useTable] ${table}: loaded ${allRows.length} rows`);
+      setData(allRows as WithId<T>[]);
+    } finally {
+      setIsLoading(false);
+      fetchingRef.current = false;
     }
-
-    console.log(`[useTable] ${table}: loaded ${allRows.length} rows`);
-    setData(allRows as WithId<T>[]);
-    setIsLoading(false);
   }, [supabase, table, select, filterKey, orderKey, enabled]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Debounce realtime refetches to avoid rapid re-renders during multi-step saves
-  const debouncedFetch = useDebouncedCallback(fetchData, 300);
-
-  // Realtime: refetch on any change to the table
+  // Realtime: debounced refetch on any change to watched tables
   useEffect(() => {
     if (!enabled) return;
 
@@ -124,24 +123,45 @@ export function useTable<T = any>(options: UseTableOptions): UseTableResult<T> {
 
     const channel = supabase.channel(`table-${table}-${Math.random().toString(36).slice(2)}`);
 
+    const debouncedRefetch = () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        fetchData();
+      }, 500);
+    };
+
+    // Subscribe to main table
     channel.on(
       'postgres_changes',
       { event: '*', schema: 'public', table },
-      () => {
-        debouncedFetch();
-      }
+      debouncedRefetch
     );
+
+    // Subscribe to additional related tables
+    if (realtimeTables) {
+      for (const relatedTable of realtimeTables) {
+        channel.on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: relatedTable },
+          debouncedRefetch
+        );
+      }
+    }
 
     channel.subscribe();
     channelRef.current = channel;
 
     return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
     };
-  }, [supabase, table, enabled, fetchData]);
+  }, [supabase, table, enabled, fetchData, realtimeKey]);
 
   return { data, isLoading, error, setData, refetch: fetchData };
 }

@@ -48,9 +48,10 @@ export default function Dashboard() {
     }
   }, [user, isUserLoading, router]);
 
-  const { data: allTransactions, isLoading: transactionsLoading, refetch: refetchTransactions } = useTable<Transaction>({
+  const { data: allTransactions, isLoading: transactionsLoading } = useTable<Transaction>({
     table: 'transactions',
     select: '*, items:transaction_items(value, description)',
+    realtimeTables: ['transaction_items'],
     enabled: !!user,
   });
 
@@ -101,8 +102,6 @@ export default function Dashboard() {
           );
         }
       }
-      // Refetch after all operations (items changes don't trigger realtime)
-      refetchTransactions();
     } else {
       const { data: newTx, error } = await supabase
         .from('transactions')
@@ -125,8 +124,6 @@ export default function Dashboard() {
           items.map(item => ({ transaction_id: newTx.id, value: item.value, description: item.description || null }))
         );
       }
-      // Refetch after all operations (items changes don't trigger realtime)
-      refetchTransactions();
     }
   };
 
