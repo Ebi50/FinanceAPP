@@ -67,6 +67,7 @@ export default function Dashboard() {
 
   const handleAddOrUpdateTransaction = async (transactionData: Omit<Transaction, 'id' | 'date' | 'amount'> & { id?: string, date: Date, amount: number, items: TransactionItem[] }) => {
     if (!user) return;
+    console.log('[DEBUG] handleAddOrUpdateTransaction called, id:', transactionData.id, 'items:', transactionData.items?.length, 'body.pointerEvents:', document.body.style.pointerEvents);
 
     const { id, date, items, ...restOfData } = transactionData;
     let transactionId = id;
@@ -106,12 +107,15 @@ export default function Dashboard() {
 
       // Update transaction items
       if (items) {
+        console.log('[DEBUG] Deleting old items for transaction:', transactionId);
         await supabase.from('transaction_items').delete().eq('transaction_id', transactionId);
         if (items.length > 0) {
+          console.log('[DEBUG] Inserting', items.length, 'new items');
           await supabase.from('transaction_items').insert(
             items.map(item => ({ transaction_id: transactionId, value: item.value, description: item.description || null }))
           );
         }
+        console.log('[DEBUG] Items update done, body.pointerEvents:', document.body.style.pointerEvents);
       }
     } else {
       const { data: newTx, error } = await supabase

@@ -67,6 +67,35 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
   const PAGE_SIZE = 50;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
+  // === DEBUG: Monitor pointer-events and overlays ===
+  useEffect(() => {
+    const checkBlockers = () => {
+      const pe = document.body.style.pointerEvents;
+      const overlays = document.querySelectorAll('[data-radix-portal]');
+      const fixedOverlays = document.querySelectorAll('.fixed.inset-0');
+      console.log(`[DEBUG] body.pointerEvents="${pe}", radix-portals=${overlays.length}, fixed-overlays=${fixedOverlays.length}`);
+      overlays.forEach((el, i) => {
+        console.log(`[DEBUG]   portal[${i}]:`, el.innerHTML.substring(0, 200));
+      });
+      if (pe === 'none') {
+        console.warn('[DEBUG] ⚠️ body pointer-events is NONE — this blocks all clicks!');
+      }
+    };
+
+    const observer = new MutationObserver(() => {
+      const pe = document.body.style.pointerEvents;
+      if (pe === 'none') {
+        console.warn(`[DEBUG] ⚠️ body.style.pointerEvents changed to "none"!`);
+        console.trace('[DEBUG] Stack trace:');
+      }
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+
+    // Check periodically
+    const interval = setInterval(checkBlockers, 3000);
+    return () => { observer.disconnect(); clearInterval(interval); };
+  }, []);
+
   const categoryMap = useMemo(() => {
     if (!categories) return new Map();
     return new Map(categories.map((c) => [c.id, c]));
@@ -77,12 +106,16 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
   };
 
   const handleEdit = (transaction: Transaction) => {
+    console.log('[DEBUG] handleEdit called, transaction:', transaction.id, 'body.pointerEvents:', document.body.style.pointerEvents);
     setEditingTransaction(transaction);
   }
 
   const handleUpdate = (updatedTransaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date; items: TransactionItem[] }) => {
+    console.log('[DEBUG] handleUpdate called, id:', updatedTransaction.id, 'body.pointerEvents:', document.body.style.pointerEvents);
     onUpdate(updatedTransaction);
+    console.log('[DEBUG] handleUpdate: after onUpdate, body.pointerEvents:', document.body.style.pointerEvents);
     setEditingTransaction(null);
+    console.log('[DEBUG] handleUpdate: after setEditingTransaction(null), body.pointerEvents:', document.body.style.pointerEvents);
   }
 
   const handleSort = (key: SortKey) => {
