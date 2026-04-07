@@ -24,7 +24,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2 } from "lucide-react";
@@ -35,6 +34,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [resetEmail, setResetEmail] = useState('');
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const supabase = useSupabase();
   const { user, isUserLoading } = useUser();
   const router = useRouter();
@@ -135,12 +135,10 @@ export default function LoginPage() {
               <div className="grid gap-2">
                 <div className="flex items-center">
                   <Label htmlFor="password">Passwort</Label>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                         <Button variant="link" className="ml-auto inline-block text-sm underline p-0 h-auto">
-                            Passwort vergessen?
-                          </Button>
-                      </AlertDialogTrigger>
+                    <Button variant="link" className="ml-auto inline-block text-sm underline p-0 h-auto" onClick={() => setResetDialogOpen(true)}>
+                      Passwort vergessen?
+                    </Button>
+                    <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
                       <AlertDialogContent>
                         <AlertDialogHeader>
                           <AlertDialogTitle>Passwort zurücksetzen</AlertDialogTitle>

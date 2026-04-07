@@ -38,7 +38,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useUser, useSupabase } from '@/lib/supabase';
@@ -53,6 +52,7 @@ export function CategoriesTab() {
 
   const [open, setOpen] = useState(false);
   const [currentCategory, setCurrentCategory] = useState<Category | null>(null);
+  const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
   const [categoryName, setCategoryName] = useState("");
   const { toast } = useToast();
 
@@ -68,17 +68,18 @@ export function CategoriesTab() {
     setOpen(true);
   };
 
-  const handleDelete = async (categoryId: string) => {
+  const handleDelete = async (category: Category) => {
     if (!user) return;
     const { error } = await supabase
       .from('expense_categories')
       .delete()
-      .eq('id', categoryId);
+      .eq('id', category.id);
 
     if (error) {
       console.error('Error deleting category:', error);
       return;
     }
+    setDeletingCategory(null);
     toast({
       title: 'Kategorie gelöscht',
       description: 'Die Kategorie wurde erfolgreich entfernt.',
@@ -170,38 +171,15 @@ export function CategoriesTab() {
                       <Edit className="h-4 w-4" />
                       <span className="sr-only">Bearbeiten</span>
                     </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive hover:text-destructive"
-                        >
-                          <Trash className="h-4 w-4" />
-                          <span className="sr-only">Löschen</span>
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>
-                            Sind Sie absolut sicher?
-                          </AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Diese Aktion kann nicht rückgängig gemacht werden.
-                            Dadurch wird die Kategorie dauerhaft gelöscht.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => handleDelete(category.id)}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          >
-                            Löschen
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => setDeletingCategory(category)}
+                    >
+                      <Trash className="h-4 w-4" />
+                      <span className="sr-only">Löschen</span>
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -209,6 +187,26 @@ export function CategoriesTab() {
           </Table>
         </CardContent>
       </Card>
+      <AlertDialog open={!!deletingCategory} onOpenChange={(isOpen) => { if (!isOpen) setDeletingCategory(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Diese Aktion kann nicht rückgängig gemacht werden.
+              Dadurch wird die Kategorie dauerhaft gelöscht.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deletingCategory && handleDelete(deletingCategory)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
