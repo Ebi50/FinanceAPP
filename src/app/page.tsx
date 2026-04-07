@@ -49,10 +49,14 @@ export default function Dashboard() {
     }
   }, [user, isUserLoading, router]);
 
+  // Server-side: only load selected year + all recurring templates
+  const yearStart = `${currentYear}-01-01T00:00:00.000Z`;
+  const nextYearStart = `${currentYear + 1}-01-01T00:00:00.000Z`;
+
   const { data: allTransactions, isLoading: transactionsLoading } = useTable<Transaction>({
     table: 'transactions',
     select: '*, items:transaction_items(value, description)',
-    filter: user ? [{ column: 'user_id', value: user.id }] : undefined,
+    or: `and(date.gte.${yearStart},date.lt.${nextYearStart}),is_recurring.eq.true`,
     realtimeTables: ['transaction_items'],
     enabled: !!user,
   });
@@ -193,38 +197,29 @@ export default function Dashboard() {
     return generatedTransactions;
   }, [allTransactions]);
 
+  // Static year range — data is loaded per-year from server
   const availableYears = useMemo(() => {
-    if (!transactionsWithRecurrences) return [new Date().getFullYear()];
-
-    const years = new Set<number>();
-    transactionsWithRecurrences.forEach(t => {
-      const date = parseDate(t.date);
-      if (isValid(date)) {
-        years.add(date.getFullYear());
-      }
-    });
-
-    years.add(new Date().getFullYear());
-
-    return Array.from(years).sort((a, b) => b - a);
-  }, [transactionsWithRecurrences]);
+    const now = new Date().getFullYear();
+    const years: number[] = [];
+    for (let y = now + 1; y >= now - 10; y--) {
+      years.push(y);
+    }
+    return years;
+  }, []);
 
   const filteredTransactions = useMemo(() => {
     if (!transactionsWithRecurrences) return [];
 
-    const filteredByYear = transactionsWithRecurrences.filter(t => {
+    // Year is already filtered server-side, only filter by month + year for recurring instances
+    const filtered = transactionsWithRecurrences.filter(t => {
         const date = parseDate(t.date);
-        return isValid(date) && date.getFullYear() === currentYear;
+        if (!isValid(date)) return false;
+        if (date.getFullYear() !== currentYear) return false;
+        if (currentMonth !== null && date.getMonth() !== currentMonth) return false;
+        return true;
     });
 
-    const filteredByMonth = currentMonth === null
-        ? filteredByYear
-        : filteredByYear.filter(t => {
-            const date = parseDate(t.date);
-            return isValid(date) && date.getMonth() === currentMonth;
-        });
-
-    return filteredByMonth.sort((a, b) => {
+    return filtered.sort((a, b) => {
         const dateA = parseDate(a.date);
         const dateB = parseDate(b.date);
         if (!isValid(dateA) || !isValid(dateB)) return 0;

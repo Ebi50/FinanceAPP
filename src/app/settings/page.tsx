@@ -58,7 +58,7 @@ export default function SettingsPage() {
 
   const { data: allTransactions } = useTable<Transaction>({
     table: 'transactions',
-    filter: user ? [{ column: 'user_id', value: user.id }] : undefined,
+    select: 'id, date',
     enabled: !!user,
   });
 

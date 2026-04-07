@@ -22,7 +22,9 @@ export interface UseRowResult<T> {
 interface UseTableOptions {
   table: string;
   select?: string;
-  filter?: { column: string; value: any }[];
+  filter?: { column: string; value: any; op?: 'eq' | 'gte' | 'lte' | 'gt' | 'lt' | 'neq' }[];
+  /** PostgREST OR filter string, e.g. "and(date.gte.X,date.lt.Y),is_recurring.eq.true" */
+  or?: string;
   orderBy?: { column: string; ascending?: boolean };
   enabled?: boolean;
   /** Additional tables to watch for realtime changes (triggers a refetch) */
@@ -36,7 +38,7 @@ interface UseRowOptions {
 }
 
 export function useTable<T = any>(options: UseTableOptions): UseTableResult<T> {
-  const { table, select = '*', filter, orderBy, enabled = true, realtimeTables } = options;
+  const { table, select = '*', filter, or: orFilter, orderBy, enabled = true, realtimeTables } = options;
   const supabase = useSupabase();
 
   const [data, setData] = useState<WithId<T>[] | null>(null);
@@ -47,6 +49,7 @@ export function useTable<T = any>(options: UseTableOptions): UseTableResult<T> {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const filterKey = filter ? JSON.stringify(filter) : '';
+  const orKey = orFilter || '';
   const orderKey = orderBy ? JSON.stringify(orderBy) : '';
   const realtimeKey = realtimeTables ? realtimeTables.join(',') : '';
 
@@ -75,8 +78,20 @@ export function useTable<T = any>(options: UseTableOptions): UseTableResult<T> {
 
         if (filter) {
           for (const f of filter) {
-            query = query.eq(f.column, f.value);
+            const op = f.op || 'eq';
+            switch (op) {
+              case 'gte': query = query.gte(f.column, f.value); break;
+              case 'lte': query = query.lte(f.column, f.value); break;
+              case 'gt': query = query.gt(f.column, f.value); break;
+              case 'lt': query = query.lt(f.column, f.value); break;
+              case 'neq': query = query.neq(f.column, f.value); break;
+              default: query = query.eq(f.column, f.value); break;
+            }
           }
+        }
+
+        if (orFilter) {
+          query = query.or(orFilter);
         }
 
         if (orderBy) {
@@ -105,7 +120,7 @@ export function useTable<T = any>(options: UseTableOptions): UseTableResult<T> {
       setIsLoading(false);
       fetchingRef.current = false;
     }
-  }, [supabase, table, select, filterKey, orderKey, enabled]);
+  }, [supabase, table, select, filterKey, orKey, orderKey, enabled]);
 
   useEffect(() => {
     fetchData();

@@ -75,9 +75,9 @@ CREATE POLICY "Users can insert own profile" ON public.profiles
 CREATE POLICY "Users can update own profile" ON public.profiles
   FOR UPDATE USING (auth.uid() = id);
 
--- Expense Categories: Users can only access their own categories
-CREATE POLICY "Users can view own categories" ON public.expense_categories
-  FOR SELECT USING (auth.uid() = user_id);
+-- Expense Categories: All authenticated users can view (shared household)
+CREATE POLICY "Authenticated users can view categories" ON public.expense_categories
+  FOR SELECT TO authenticated USING (true);
 
 CREATE POLICY "Users can create own categories" ON public.expense_categories
   FOR INSERT WITH CHECK (auth.uid() = user_id);
@@ -88,9 +88,9 @@ CREATE POLICY "Users can update own categories" ON public.expense_categories
 CREATE POLICY "Users can delete own categories" ON public.expense_categories
   FOR DELETE USING (auth.uid() = user_id);
 
--- Transactions: Users can only access their own transactions
-CREATE POLICY "Users can view own transactions" ON public.transactions
-  FOR SELECT USING (auth.uid() = user_id);
+-- Transactions: All authenticated users can view (shared household)
+CREATE POLICY "Authenticated users can view transactions" ON public.transactions
+  FOR SELECT TO authenticated USING (true);
 
 CREATE POLICY "Users can create own transactions" ON public.transactions
   FOR INSERT WITH CHECK (auth.uid() = user_id);
@@ -101,11 +101,9 @@ CREATE POLICY "Users can update own transactions" ON public.transactions
 CREATE POLICY "Users can delete own transactions" ON public.transactions
   FOR DELETE USING (auth.uid() = user_id);
 
--- Transaction Items: Users can only access items of their own transactions
-CREATE POLICY "Users can view own transaction items" ON public.transaction_items
-  FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.transactions WHERE transactions.id = transaction_items.transaction_id AND transactions.user_id = auth.uid())
-  );
+-- Transaction Items: All authenticated users can view (shared household)
+CREATE POLICY "Authenticated users can view transaction items" ON public.transaction_items
+  FOR SELECT TO authenticated USING (true);
 
 CREATE POLICY "Users can create own transaction items" ON public.transaction_items
   FOR INSERT WITH CHECK (
