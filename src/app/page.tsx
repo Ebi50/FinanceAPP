@@ -73,8 +73,8 @@ export default function Dashboard() {
 
     const isoDate = date.toISOString();
 
-    // If we are editing a virtual transaction, we must target the original template for the update.
-    if (transactionId && (transactionData as any).is_virtual) {
+    // If we are editing a virtual (recurring) transaction, target the original template.
+    if (transactionId && transactionId.includes('-recurring-')) {
         transactionId = transactionId.split('-recurring-')[0];
     }
 
