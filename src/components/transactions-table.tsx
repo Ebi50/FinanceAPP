@@ -34,7 +34,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { AddTransactionSheet } from "./add-transaction-sheet";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, memo } from "react";
 import { useCategories } from '@/lib/categories-context';
 import {
   Tooltip,
@@ -130,18 +130,20 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
     });
   }, [transactions, sortKey, sortDirection, categoryMap]);
 
-  // Reset visible count when data or sorting changes
-  const visibleTransactions = useMemo(() => {
+  // Reset visible count when transactions change
+  const transactionsLength = transactions?.length ?? 0;
+  useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-    return sortedTransactions;
-  }, [sortedTransactions]);
+  }, [transactionsLength, sortKey, sortDirection]);
 
-  const displayedTransactions = visibleTransactions.slice(0, visibleCount);
-  const hasMore = visibleCount < visibleTransactions.length;
+  const displayedTransactions = sortedTransactions.slice(0, visibleCount);
+  const hasMore = visibleCount < sortedTransactions.length;
 
   const handleLoadMore = useCallback(() => {
     setVisibleCount(prev => prev + PAGE_SIZE);
   }, []);
+
+  const incomeCategory = useMemo(() => categories?.find(c => c.name.toLowerCase() === 'einnahmen'), [categories]);
 
   const renderSortArrow = (key: SortKey) => {
     if (sortKey !== key) return null;
@@ -149,7 +151,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
   };
 
   return (
-    <>
+    <TooltipProvider>
       <Table>
         <TableHeader>
           <TableRow>
@@ -185,7 +187,6 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
         <TableBody>
           {displayedTransactions.map((transaction) => {
             const category = categoryMap.get(transaction.category_id);
-            const incomeCategory = categories?.find(c => c.name.toLowerCase() === 'einnahmen');
             const isIncome = category?.id === incomeCategory?.id;
             const isVirtual = transaction.is_virtual;
             const isOriginalRecurring = transaction.is_recurring === true;
@@ -200,16 +201,14 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
                     <span className="text-xs text-muted-foreground ml-2">({transaction.items.length} Posten)</span>
                   )}
                   {(isVirtual || isOriginalRecurring) && (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                           <Repeat className="h-3 w-3 ml-2 inline-block"/>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>{isOriginalRecurring ? "Vorlage für wiederkehrende Transaktionen" : "Automatisch wiederholte Transaktion"}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                         <Repeat className="h-3 w-3 ml-2 inline-block"/>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{isOriginalRecurring ? "Vorlage für wiederkehrende Transaktionen" : "Automatisch wiederholte Transaktion"}</p>
+                      </TooltipContent>
+                    </Tooltip>
                   )}
                 </TableCell>
                 <TableCell>
@@ -273,7 +272,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
       {hasMore && (
         <div className="flex justify-center py-4">
           <Button variant="outline" onClick={handleLoadMore}>
-            Weitere {Math.min(PAGE_SIZE, visibleTransactions.length - visibleCount)} von {visibleTransactions.length} Transaktionen laden
+            Weitere {Math.min(PAGE_SIZE, sortedTransactions.length - visibleCount)} von {sortedTransactions.length} Transaktionen laden
           </Button>
         </div>
       )}
@@ -287,6 +286,6 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
             onTransactionAdded={handleUpdate}
           />
         )}
-    </>
+    </TooltipProvider>
   );
 }
