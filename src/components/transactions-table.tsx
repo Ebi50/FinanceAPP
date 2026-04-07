@@ -79,6 +79,12 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
   };
 
   const handleEdit = (transaction: Transaction) => {
+    // Blur the DropdownMenu trigger before opening the Sheet.
+    // Otherwise Radix cannot set aria-hidden on the page content
+    // because the focused trigger button is inside the hidden region.
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     setEditingTransaction(transaction);
   }
 
@@ -243,7 +249,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
                         Bearbeiten
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onSelect={() => setDeletingTransaction(transaction)} className="text-destructive focus:text-destructive">
+                      <DropdownMenuItem onSelect={() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); setDeletingTransaction(transaction); }} className="text-destructive focus:text-destructive">
                         <Trash2 className="mr-2 h-4 w-4" />
                         Löschen
                       </DropdownMenuItem>
