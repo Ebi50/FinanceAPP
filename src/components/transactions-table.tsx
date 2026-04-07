@@ -278,16 +278,14 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
           </Button>
         </div>
       )}
-      {editingTransaction && (
-          <AddTransactionSheet
-            open={!!editingTransaction}
-            onOpenChange={(isOpen) => {
-              if (!isOpen) setEditingTransaction(null);
-            }}
-            transaction={editingTransaction}
-            onTransactionAdded={handleUpdate}
-          />
-        )}
+      <AddTransactionSheet
+        open={!!editingTransaction}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setEditingTransaction(null);
+        }}
+        transaction={editingTransaction}
+        onTransactionAdded={handleUpdate}
+      />
     </TooltipProvider>
   );
 }
