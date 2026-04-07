@@ -32,7 +32,7 @@ import { Calendar } from './ui/calendar';
 import { cn, formatCurrency } from '@/lib/utils';
 import { format, isValid, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -87,7 +87,26 @@ export function AddTransactionSheet({
   const { categories, isLoading: categoriesLoading } = useCategories();
 
   const open = controlledOpen ?? internalOpen;
-  const setOpen = setControlledOpen ?? setInternalOpen;
+  const rawSetOpen = setControlledOpen ?? setInternalOpen;
+
+  // Wrap setOpen to force-clean pointer-events when closing.
+  // Radix Dialog sets body { pointer-events: none } when open,
+  // but sometimes fails to restore it on close.
+  const setOpen = useCallback((value: boolean) => {
+    rawSetOpen(value);
+    if (!value) {
+      // Blur focused element so Radix can set aria-hidden cleanly
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+      // Safety net: restore pointer-events after Radix close animation (300ms)
+      setTimeout(() => {
+        if (document.body.style.pointerEvents === 'none') {
+          document.body.style.pointerEvents = '';
+        }
+      }, 350);
+    }
+  }, [rawSetOpen]);
 
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionSchema),
@@ -168,12 +187,6 @@ export function AddTransactionSheet({
       is_recurring: data.isRecurring,
       items: data.amounts.map(a => ({ value: Number(a.value), description: a.description })),
     };
-
-    // Release focus from inputs inside the Sheet before closing,
-    // otherwise Radix cannot set aria-hidden and pointer-events cleanup breaks
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
-    }
 
     onTransactionAdded(newTransaction);
     setOpen(false);
