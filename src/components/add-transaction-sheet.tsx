@@ -150,7 +150,6 @@ export function AddTransactionSheet({
   }, [open, transaction, form]);
 
   const onSubmit = (data: TransactionFormValues) => {
-    console.log('[DEBUG] Sheet onSubmit called, body.pointerEvents:', document.body.style.pointerEvents);
     const totalAmount = Math.round(data.amounts.reduce((sum, current) => sum + Number(current.value), 0) * 100) / 100;
 
     if (!data.date || !isValid(data.date)) {
@@ -169,28 +168,15 @@ export function AddTransactionSheet({
       is_recurring: data.isRecurring,
       items: data.amounts.map(a => ({ value: Number(a.value), description: a.description })),
     };
-    console.log('[DEBUG] Sheet: calling onTransactionAdded, body.pointerEvents:', document.body.style.pointerEvents);
-    onTransactionAdded(newTransaction);
-    console.log('[DEBUG] Sheet: after onTransactionAdded, body.pointerEvents:', document.body.style.pointerEvents);
-    setOpen(false);
-    console.log('[DEBUG] Sheet: after setOpen(false), body.pointerEvents:', document.body.style.pointerEvents);
 
-    // Check state after React renders
-    setTimeout(() => {
-      console.log('[DEBUG] Sheet: 100ms after submit, body.pointerEvents:', document.body.style.pointerEvents);
-      const portals = document.querySelectorAll('[data-radix-portal]');
-      console.log('[DEBUG] Sheet: 100ms after submit, radix-portals:', portals.length);
-      portals.forEach((el, i) => console.log(`[DEBUG]   portal[${i}] children:`, el.childElementCount, el.innerHTML.substring(0, 150)));
-    }, 100);
-    setTimeout(() => {
-      console.log('[DEBUG] Sheet: 500ms after submit, body.pointerEvents:', document.body.style.pointerEvents);
-    }, 500);
-    setTimeout(() => {
-      console.log('[DEBUG] Sheet: 2000ms after submit, body.pointerEvents:', document.body.style.pointerEvents);
-      if (document.body.style.pointerEvents === 'none') {
-        console.error('[DEBUG] ❌ CONFIRMED: body.pointerEvents stuck at "none" after 2 seconds!');
-      }
-    }, 2000);
+    // Release focus from inputs inside the Sheet before closing,
+    // otherwise Radix cannot set aria-hidden and pointer-events cleanup breaks
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+
+    onTransactionAdded(newTransaction);
+    setOpen(false);
   };
 
   const amountsValue = form.watch("amounts");
