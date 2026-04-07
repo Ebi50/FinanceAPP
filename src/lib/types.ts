@@ -16,6 +16,7 @@ export type Transaction = {
   is_recurring?: boolean;
   is_virtual?: boolean;
   original_recurring_id?: string;
+  recurring_end_date?: string;
   created_at?: string;
   updated_at?: string;
 };

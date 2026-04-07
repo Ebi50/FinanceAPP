@@ -12,8 +12,8 @@ import type { Transaction, TransactionItem } from "@/lib/types";
 
 interface TransactionsTabProps {
   transactions: Transaction[];
-  onDelete: (id: string) => void;
-  onUpdate: (transaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date; items: TransactionItem[] }) => void;
+  onDelete: (id: string, mode?: 'all' | 'from_here', instanceDate?: string) => void;
+  onUpdate: (transaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date; items: TransactionItem[]; effectiveFrom?: Date }) => void;
 }
 
 export function TransactionsTab({ transactions, onDelete, onUpdate }: TransactionsTabProps) {

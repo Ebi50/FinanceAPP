@@ -65,10 +65,10 @@ export default function Dashboard() {
   const budget = user?.budget ?? 2000;
 
 
-  const handleAddOrUpdateTransaction = async (transactionData: Omit<Transaction, 'id' | 'date' | 'amount'> & { id?: string, date: Date, amount: number, items: TransactionItem[] }) => {
+  const handleAddOrUpdateTransaction = async (transactionData: Omit<Transaction, 'id' | 'date' | 'amount'> & { id?: string, date: Date, amount: number, items: TransactionItem[], effectiveFrom?: Date }) => {
     if (!user) return;
 
-    const { id, date, items, ...restOfData } = transactionData;
+    const { id, date, items, effectiveFrom, ...restOfData } = transactionData;
     let transactionId = id;
 
     const isoDate = date.toISOString();
@@ -79,38 +79,88 @@ export default function Dashboard() {
     }
 
     if (transactionId) {
-      // Optimistic update: update local state immediately (non-blocking)
-      startTransition(() => {
-        setAllTransactions(prev => prev ? prev.map(t =>
-          t.id === transactionId
-            ? { ...t, ...restOfData, amount: transactionData.amount, date: isoDate, items: items || t.items }
-            : t
-        ) : prev);
-      });
+      // Check if this is a recurring split (edit from a specific date forward)
+      const originalTransaction = allTransactions?.find(t => t.id === transactionId);
+      const isSplitEdit = effectiveFrom && originalTransaction?.is_recurring;
 
-      const { error } = await supabase
-        .from('transactions')
-        .update({
-          ...restOfData,
-          amount: transactionData.amount,
-          date: isoDate,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', transactionId);
+      if (isSplitEdit) {
+        // SPLIT: Set end date on old template, create new template from effectiveFrom
+        const effectiveIso = effectiveFrom.toISOString();
 
-      if (error) {
-        console.error('Error updating transaction:', error);
-        refetchTransactions(); // Revert on error
-        return;
-      }
+        // 1. Update old template: set recurring_end_date
+        const { error: updateError } = await supabase
+          .from('transactions')
+          .update({ recurring_end_date: effectiveIso, updated_at: new Date().toISOString() })
+          .eq('id', transactionId);
 
-      // Update transaction items
-      if (items) {
-        await supabase.from('transaction_items').delete().eq('transaction_id', transactionId);
-        if (items.length > 0) {
+        if (updateError) {
+          console.error('Error updating old template:', updateError);
+          return;
+        }
+
+        // 2. Create new recurring template from effectiveFrom
+        const { data: newTx, error: insertError } = await supabase
+          .from('transactions')
+          .insert({
+            ...restOfData,
+            amount: transactionData.amount,
+            date: effectiveIso,
+            user_id: user.id,
+            is_recurring: true,
+            original_recurring_id: transactionId,
+          })
+          .select('id')
+          .single();
+
+        if (insertError) {
+          console.error('Error creating new template:', insertError);
+          return;
+        }
+
+        // 3. Create transaction items for the new template
+        if (newTx && items && items.length > 0) {
           await supabase.from('transaction_items').insert(
-            items.map(item => ({ transaction_id: transactionId, value: item.value, description: item.description || null }))
+            items.map(item => ({ transaction_id: newTx.id, value: item.value, description: item.description || null }))
           );
+        }
+
+        // Refetch to get clean state with both templates
+        refetchTransactions();
+      } else {
+        // NORMAL UPDATE (non-recurring transaction)
+        // Optimistic update: update local state immediately (non-blocking)
+        startTransition(() => {
+          setAllTransactions(prev => prev ? prev.map(t =>
+            t.id === transactionId
+              ? { ...t, ...restOfData, amount: transactionData.amount, date: isoDate, items: items || t.items }
+              : t
+          ) : prev);
+        });
+
+        const { error } = await supabase
+          .from('transactions')
+          .update({
+            ...restOfData,
+            amount: transactionData.amount,
+            date: isoDate,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', transactionId);
+
+        if (error) {
+          console.error('Error updating transaction:', error);
+          refetchTransactions();
+          return;
+        }
+
+        // Update transaction items
+        if (items) {
+          await supabase.from('transaction_items').delete().eq('transaction_id', transactionId);
+          if (items.length > 0) {
+            await supabase.from('transaction_items').insert(
+              items.map(item => ({ transaction_id: transactionId, value: item.value, description: item.description || null }))
+            );
+          }
         }
       }
     } else {
@@ -178,27 +228,49 @@ export default function Dashboard() {
     }
   };
 
-  const handleDeleteTransaction = async (id: string) => {
+  const handleDeleteTransaction = async (id: string, mode: 'all' | 'from_here' = 'all', instanceDate?: string) => {
     if (!user) return;
 
-    let transactionIdToDelete = id;
+    let templateId = id;
     if (id.includes('-recurring-')) {
-        transactionIdToDelete = id.split('-recurring-')[0];
+        templateId = id.split('-recurring-')[0];
     }
 
-    // Optimistic: remove from local state immediately (non-blocking)
-    startTransition(() => {
-      setAllTransactions(prev => prev ? prev.filter(t => t.id !== transactionIdToDelete) : prev);
-    });
+    if (mode === 'from_here' && instanceDate) {
+      // Set recurring_end_date on the template — stops generating from this month onward
+      const { error } = await supabase
+        .from('transactions')
+        .update({ recurring_end_date: instanceDate, updated_at: new Date().toISOString() })
+        .eq('id', templateId);
 
-    const { error } = await supabase
-      .from('transactions')
-      .delete()
-      .eq('id', transactionIdToDelete);
+      if (error) {
+        console.error('Error setting recurring end date:', error);
+      }
+      refetchTransactions();
+    } else {
+      // Delete the template and all chained templates
+      startTransition(() => {
+        setAllTransactions(prev => prev ? prev.filter(t =>
+          t.id !== templateId && t.original_recurring_id !== templateId
+        ) : prev);
+      });
 
-    if (error) {
-      console.error('Error deleting transaction:', error);
-      refetchTransactions(); // Revert on error
+      // Delete chained templates first
+      await supabase
+        .from('transactions')
+        .delete()
+        .eq('original_recurring_id', templateId);
+
+      // Delete the template itself
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', templateId);
+
+      if (error) {
+        console.error('Error deleting transaction:', error);
+        refetchTransactions();
+      }
     }
   };
 
@@ -211,16 +283,21 @@ export default function Dashboard() {
     if (!allTransactions) return [];
 
     const generatedTransactions: Transaction[] = [];
-    const yearStr = String(currentYear);
 
     for (const t of allTransactions) {
       generatedTransactions.push(t);
 
       if (t.is_recurring) {
         const originalDate = parseDate(t.date);
-        for (let i = 1; i <= 12; i++) {
+        const endDate = t.recurring_end_date ? parseDate(t.recurring_end_date) : null;
+
+        for (let i = 1; i <= 120; i++) {
           const futureDate = addMonths(originalDate, i);
-          // Only generate instances that fall in the current year
+
+          // Stop generating if we've reached the end date
+          if (endDate && futureDate >= endDate) break;
+
+          // Only include instances for the current display year
           if (futureDate.getFullYear() !== currentYear) continue;
 
           generatedTransactions.push({

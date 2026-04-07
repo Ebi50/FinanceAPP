@@ -45,8 +45,8 @@ import {
 
 interface TransactionsTableProps {
   transactions: Transaction[];
-  onDelete: (id: string) => void;
-  onUpdate: (transaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date; items: TransactionItem[] }) => void;
+  onDelete: (id: string, mode?: 'all' | 'from_here', instanceDate?: string) => void;
+  onUpdate: (transaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date; items: TransactionItem[]; effectiveFrom?: Date }) => void;
 }
 
 type SortKey = 'description' | 'category' | 'date' | 'amount';
@@ -279,15 +279,38 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
       <AlertDialog open={!!deletingTransaction} onOpenChange={(isOpen) => { if (!isOpen) setDeletingTransaction(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
+            <AlertDialogTitle>Transaktion löschen</AlertDialogTitle>
             <AlertDialogDescription>
-              Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird die Transaktion dauerhaft gelöscht.
+              {deletingTransaction && (deletingTransaction.is_recurring || deletingTransaction.is_virtual)
+                ? 'Dies ist eine wiederkehrende Transaktion. Wie möchten Sie vorgehen?'
+                : 'Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird die Transaktion dauerhaft gelöscht.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
             <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deletingTransaction && handleDelete(deletingTransaction)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Löschen
+            {deletingTransaction && (deletingTransaction.is_recurring || deletingTransaction.is_virtual) && (
+              <AlertDialogAction
+                onClick={() => {
+                  if (deletingTransaction) {
+                    onDelete(deletingTransaction.id, 'from_here', deletingTransaction.date);
+                    setDeletingTransaction(null);
+                  }
+                }}
+                className="bg-orange-600 text-white hover:bg-orange-700"
+              >
+                Ab hier löschen
+              </AlertDialogAction>
+            )}
+            <AlertDialogAction
+              onClick={() => {
+                if (deletingTransaction) {
+                  onDelete(deletingTransaction.id, 'all');
+                  setDeletingTransaction(null);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Alle löschen
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

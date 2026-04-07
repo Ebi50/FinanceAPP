@@ -49,6 +49,7 @@ const transactionSchema = z.object({
   categoryId: z.string().min(1, 'Kategorie ist erforderlich.'),
   date: z.date({ required_error: 'Datum ist erforderlich.' }),
   isRecurring: z.boolean().default(false),
+  effectiveFrom: z.date().optional(),
 });
 
 type TransactionFormValues = z.infer<typeof transactionSchema>;
@@ -69,7 +70,7 @@ function SubmitButton() {
 
 interface AddTransactionSheetProps {
   children?: React.ReactNode;
-  onTransactionAdded: (transaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date; items: TransactionItem[] }) => void;
+  onTransactionAdded: (transaction: Omit<Transaction, 'id' | 'date'> & { id?: string; date: Date; items: TransactionItem[]; effectiveFrom?: Date }) => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   transaction?: Transaction | null;
@@ -145,6 +146,8 @@ export function AddTransactionSheet({
               ? transaction.items.map(item => ({ value: item.value || '' as any, description: item.description || '' }))
               : [{ value: transaction.amount || '' as any, description: '' }];
 
+          const isRecurringEdit = transaction.is_recurring || transaction.is_virtual;
+
           defaultValues = {
               id: transaction.id,
               description: transaction.description || '',
@@ -152,6 +155,7 @@ export function AddTransactionSheet({
               categoryId: transaction.category_id || '',
               date: isValid(transactionDate) ? transactionDate : new Date(),
               isRecurring: transaction.is_recurring || false,
+              effectiveFrom: isRecurringEdit ? (isValid(transactionDate) ? transactionDate : new Date()) : undefined,
           };
       } else {
         defaultValues = {
@@ -178,7 +182,7 @@ export function AddTransactionSheet({
 
     const mainDescription = data.description || '';
 
-    const newTransaction: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date, items: TransactionItem[] } = {
+    const newTransaction: Omit<Transaction, 'id' | 'date'> & { id?: string, date: Date, items: TransactionItem[], effectiveFrom?: Date } = {
       id: data.id,
       description: mainDescription,
       amount: totalAmount,
@@ -186,6 +190,7 @@ export function AddTransactionSheet({
       date: data.date,
       is_recurring: data.isRecurring,
       items: data.amounts.map(a => ({ value: Number(a.value), description: a.description })),
+      effectiveFrom: data.effectiveFrom,
     };
 
     onTransactionAdded(newTransaction);
@@ -356,6 +361,47 @@ export function AddTransactionSheet({
                 />
                 <Label htmlFor="isRecurring">Wiederkehrende Transaktion</Label>
               </div>
+
+              {/* "Wirksam ab" — only shown when editing a recurring/virtual transaction */}
+              {transaction && (transaction.is_recurring || transaction.is_virtual) && (
+                <div className="space-y-2 border-l-4 border-primary/30 pl-4">
+                  <Label htmlFor="effectiveFrom">Wirksam ab</Label>
+                  <p className="text-xs text-muted-foreground">Änderungen gelten ab diesem Datum. Frühere Monate bleiben unverändert.</p>
+                  <Controller
+                    control={form.control}
+                    name="effectiveFrom"
+                    render={({ field }) => (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant={'outline'}
+                            className={cn(
+                              'w-full justify-start text-left font-normal',
+                              !field.value && 'text-muted-foreground'
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {field.value && isValid(field.value) ? (
+                              format(field.value, 'PPP', { locale: de })
+                            ) : (
+                              <span>Datum auswählen</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            initialFocus
+                            locale={de}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    )}
+                  />
+                </div>
+              )}
             </div>
           </div>
           <SheetFooter className="pt-4 border-t">

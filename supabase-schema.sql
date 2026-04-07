@@ -33,6 +33,7 @@ CREATE TABLE public.transactions (
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   is_recurring BOOLEAN DEFAULT false,
   original_recurring_id UUID,
+  recurring_end_date TIMESTAMPTZ DEFAULT NULL,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
