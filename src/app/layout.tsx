@@ -4,6 +4,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 import { ThemeProvider } from '@/components/theme-provider';
 import { SupabaseProvider } from '@/lib/supabase';
+import { CategoriesProvider } from '@/lib/categories-context';
 import { AutoLogoutProvider } from '@/hooks/use-auto-logout';
 
 export const metadata: Metadata = {
@@ -35,9 +36,11 @@ export default function RootLayout({
             disableTransitionOnChange
         >
           <SupabaseProvider>
-            <AutoLogoutProvider>
-              {children}
-            </AutoLogoutProvider>
+            <CategoriesProvider>
+              <AutoLogoutProvider>
+                {children}
+              </AutoLogoutProvider>
+            </CategoriesProvider>
           </SupabaseProvider>
           <Toaster />
         </ThemeProvider>

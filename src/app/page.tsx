@@ -24,7 +24,8 @@ import { ReportsTab } from "@/components/reports-tab";
 import { ImportTab } from "@/components/import-tab";
 import { AddTransactionSheet } from "@/components/add-transaction-sheet";
 import type { Transaction, TransactionItem } from '@/lib/types';
-import { useUser, useSupabase, useTable, useRow } from '@/lib/supabase';
+import { useUser, useSupabase, useTable } from '@/lib/supabase';
+import { useCategories } from '@/lib/categories-context';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
@@ -55,16 +56,8 @@ export default function Dashboard() {
     enabled: !!user,
   });
 
-  const { data: categories } = useTable<{ id: string; name: string; user_id: string }>({
-    table: 'expense_categories',
-    enabled: !!user,
-  });
-
-  const { data: userProfile } = useRow<{ budget?: number }>({
-    table: 'profiles',
-    id: user?.id,
-  });
-  const budget = userProfile?.budget ?? 2000;
+  const { categories } = useCategories();
+  const budget = user?.budget ?? 2000;
 
 
   const handleAddOrUpdateTransaction = async (transactionData: Omit<Transaction, 'id' | 'date' | 'amount'> & { id?: string, date: Date, amount: number, items: TransactionItem[] }) => {

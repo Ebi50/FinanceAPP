@@ -3,7 +3,7 @@ import { ExpensesChart } from "./expenses-chart";
 import { RecentTransactions } from "./recent-transactions";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import type { Transaction, Category } from "@/lib/types";
-import { useUser, useTable } from '@/lib/supabase';
+import { useCategories } from '@/lib/categories-context';
 import { useMemo } from "react";
 import { parseISO } from 'date-fns';
 
@@ -13,11 +13,7 @@ interface DashboardTabProps {
 }
 
 export function DashboardTab({ transactions, budget }: DashboardTabProps) {
-  const { user } = useUser();
-  const { data: categories } = useTable<Category>({
-    table: 'expense_categories',
-    enabled: !!user,
-  });
+  const { categories } = useCategories();
 
   const incomeCategory = useMemo(() => categories?.find(c => c.name.toLowerCase() === 'einnahmen'), [categories]);
 

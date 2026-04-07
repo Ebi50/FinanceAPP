@@ -2,18 +2,13 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useCallback, useRef } from 'react';
-import { useUser, useSupabase, useRow } from '@/lib/supabase';
+import { useUser, useSupabase } from '@/lib/supabase';
 
 const useAutoLogout = () => {
   const { user } = useUser();
   const supabase = useSupabase();
   const router = useRouter();
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  const { data: userProfile } = useRow<{ auto_logout_timeout?: number }>({
-    table: 'profiles',
-    id: user?.id,
-  });
 
   const logout = useCallback(() => {
     supabase.auth.signOut().then(() => {
@@ -26,12 +21,12 @@ const useAutoLogout = () => {
       clearTimeout(timerRef.current);
     }
 
-    const timeout = (userProfile as any)?.auto_logout_timeout;
+    const timeout = user?.autoLogoutTimeout;
     if (timeout && timeout > 0) {
       const ms = timeout * 60 * 1000;
       timerRef.current = setTimeout(logout, ms);
     }
-  }, [logout, userProfile]);
+  }, [logout, user?.autoLogoutTimeout]);
 
   useEffect(() => {
     const activityEvents = ['mousemove', 'keydown', 'click', 'scroll'];

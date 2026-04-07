@@ -33,7 +33,7 @@ import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/page-header';
-import { useUser, useSupabase, useTable, useRow } from '@/lib/supabase';
+import { useUser, useSupabase, useTable } from '@/lib/supabase';
 import type { Transaction } from '@/lib/types';
 import { de } from 'date-fns/locale';
 import { isValid, getYear, startOfYear, endOfYear, startOfMonth, endOfMonth, parseISO } from 'date-fns';
@@ -55,17 +55,6 @@ export default function SettingsPage() {
   const supabase = useSupabase();
 
   const [activeTab, setActiveTab] = useState('Allgemein');
-
-  const { data: userProfile, isLoading: isProfileLoading } = useRow<{
-    first_name?: string;
-    last_name?: string;
-    email?: string;
-    budget?: number;
-    auto_logout_timeout?: number;
-  }>({
-    table: 'profiles',
-    id: user?.id,
-  });
 
   const { data: allTransactions } = useTable<Transaction>({
     table: 'transactions',
@@ -99,18 +88,14 @@ export default function SettingsPage() {
   }, [availableYearsForDelete, deleteYear]);
 
   useEffect(() => {
-    if (userProfile) {
-      setFirstName((userProfile as any).first_name || '');
-      setLastName((userProfile as any).last_name || '');
-      setEmail((userProfile as any).email || user?.email || '');
-      setBudget((userProfile as any).budget || 2000);
-      setAutoLogoutTimeout((userProfile as any).auto_logout_timeout || 0);
-    } else if (user) {
-        setFirstName('');
-        setLastName('');
-        setEmail(user.email || '');
+    if (user) {
+      setFirstName(user.firstName || '');
+      setLastName(user.lastName || '');
+      setEmail(user.email || '');
+      setBudget(user.budget ?? 2000);
+      setAutoLogoutTimeout(user.autoLogoutTimeout ?? 0);
     }
-  }, [userProfile, user]);
+  }, [user]);
 
   const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -313,7 +298,7 @@ export default function SettingsPage() {
   };
 
   const renderContent = () => {
-    if (isProfileLoading) {
+    if (!user) {
       return <p>Lade...</p>
     }
 

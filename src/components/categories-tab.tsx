@@ -41,17 +41,15 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { useUser, useSupabase, useTable } from '@/lib/supabase';
+import { useUser, useSupabase } from '@/lib/supabase';
+import { useCategories } from '@/lib/categories-context';
 
 
 export function CategoriesTab() {
   const { user } = useUser();
   const supabase = useSupabase();
 
-  const { data: categories, isLoading: categoriesLoading } = useTable<Category>({
-    table: 'expense_categories',
-    enabled: !!user,
-  });
+  const { categories, isLoading: categoriesLoading } = useCategories();
 
   const [open, setOpen] = useState(false);
   const [currentCategory, setCurrentCategory] = useState<Category | null>(null);

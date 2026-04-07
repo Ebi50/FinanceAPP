@@ -3,7 +3,7 @@
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Cell } from "recharts"
 import { formatCurrency } from "@/lib/utils"
 import type { Transaction, Category } from "@/lib/types";
-import { useUser, useTable } from '@/lib/supabase';
+import { useCategories } from '@/lib/categories-context';
 import { useMemo } from "react";
 
 interface ExpensesChartProps {
@@ -14,11 +14,7 @@ const COLORS = ['#A7D1AB', '#FFDA63', '#FF8042', '#0088FE', '#00C49F', '#FFBB28'
 
 
 export function ExpensesChart({ transactions }: ExpensesChartProps) {
-  const { user } = useUser();
-  const { data: categories } = useTable<Category>({
-    table: 'expense_categories',
-    enabled: !!user,
-  });
+  const { categories } = useCategories();
 
   const categoryMap = useMemo(() => {
     if (!categories) return new Map();

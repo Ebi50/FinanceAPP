@@ -24,7 +24,7 @@ import { format, isValid, getYear, getMonth, parseISO } from "date-fns";
 import { de } from "date-fns/locale";
 import type { Transaction, Category } from "@/lib/types";
 import React, { useMemo, useState, useEffect, useRef } from "react";
-import { useUser, useTable } from '@/lib/supabase';
+import { useCategories } from '@/lib/categories-context';
 import { ExpensesChart } from "./expenses-chart";
 import { formatCurrency, cn } from "@/lib/utils";
 import html2canvas from "html2canvas";
@@ -44,16 +44,12 @@ const toDate = (d: string | Date): Date => {
 
 export function ReportsTab({ transactions }: ReportsTabProps) {
   const { toast } = useToast();
-  const { user } = useUser();
   const chartRef = useRef<HTMLDivElement>(null);
 
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number | null>(new Date().getMonth());
 
-  const { data: categories } = useTable<Category>({
-    table: 'expense_categories',
-    enabled: !!user,
-  });
+  const { categories } = useCategories();
 
   const categoryMap = useMemo(() => {
     if(!categories) return new Map();

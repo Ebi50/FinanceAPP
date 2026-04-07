@@ -10,7 +10,7 @@ import {
 import { formatCurrency, cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import type { Transaction, Category } from "@/lib/types";
-import { useUser, useTable } from '@/lib/supabase';
+import { useCategories } from '@/lib/categories-context';
 import { useMemo } from "react";
 
 interface RecentTransactionsProps {
@@ -18,11 +18,7 @@ interface RecentTransactionsProps {
 }
 
 export function RecentTransactions({ transactions }: RecentTransactionsProps) {
-  const { user } = useUser();
-  const { data: categories } = useTable<Category>({
-    table: 'expense_categories',
-    enabled: !!user,
-  });
+  const { categories } = useCategories();
 
   const categoryMap = useMemo(() => {
     if (!categories) return new Map();

@@ -37,7 +37,7 @@ import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import type { Transaction, Category, TransactionItem } from '@/lib/types';
-import { useUser, useSupabase, useTable } from '@/lib/supabase';
+import { useCategories } from '@/lib/categories-context';
 
 const transactionSchema = z.object({
   id: z.string().optional(),
@@ -84,11 +84,7 @@ export function AddTransactionSheet({
 }: AddTransactionSheetProps) {
   const [internalOpen, setInternalOpen] = useState(false);
 
-  const { user } = useUser();
-  const { data: categories, isLoading: categoriesLoading } = useTable<Category>({
-    table: 'expense_categories',
-    enabled: !!user,
-  });
+  const { categories, isLoading: categoriesLoading } = useCategories();
 
   const open = controlledOpen ?? internalOpen;
   const setOpen = setControlledOpen ?? setInternalOpen;

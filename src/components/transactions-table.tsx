@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AddTransactionSheet } from "./add-transaction-sheet";
 import { useState, useMemo } from "react";
-import { useUser, useTable } from '@/lib/supabase';
+import { useCategories } from '@/lib/categories-context';
 import {
   Tooltip,
   TooltipContent,
@@ -59,11 +59,7 @@ const toDate = (d: string | Date): Date => {
 };
 
 export function TransactionsTable({ transactions, onDelete, onUpdate }: TransactionsTableProps) {
-  const { user } = useUser();
-  const { data: categories } = useTable<Category>({
-    table: 'expense_categories',
-    enabled: !!user,
-  });
+  const { categories } = useCategories();
 
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('date');
