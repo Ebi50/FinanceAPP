@@ -324,29 +324,30 @@ export default function Dashboard() {
     return years;
   }, []);
 
-  const filteredTransactions = useMemo(() => {
+  const yearTransactions = useMemo(() => {
     if (!transactionsWithRecurrences) return [];
-
-    // Build prefix for fast string-based filtering (no Date parsing needed)
-    // ISO dates: "2026-04-07T..." — year is chars 0-3, month is chars 5-6
     const yearStr = String(currentYear);
-    const monthStr = currentMonth !== null ? String(currentMonth + 1).padStart(2, '0') : null;
-    const prefix = monthStr ? `${yearStr}-${monthStr}` : yearStr;
+    return transactionsWithRecurrences
+      .filter(t => {
+        const dateStr = typeof t.date === 'string' ? t.date : '';
+        return dateStr.startsWith(yearStr);
+      })
+      .sort((a, b) => {
+        const dateA = typeof a.date === 'string' ? a.date : '';
+        const dateB = typeof b.date === 'string' ? b.date : '';
+        return dateB.localeCompare(dateA);
+      });
+  }, [transactionsWithRecurrences, currentYear]);
 
-    const filtered = transactionsWithRecurrences.filter(t => {
+  const filteredTransactions = useMemo(() => {
+    if (currentMonth === null) return yearTransactions;
+    const monthStr = String(currentMonth + 1).padStart(2, '0');
+    const prefix = `${currentYear}-${monthStr}`;
+    return yearTransactions.filter(t => {
       const dateStr = typeof t.date === 'string' ? t.date : '';
-      if (!dateStr) return false;
-      return monthStr ? dateStr.startsWith(prefix) : dateStr.startsWith(yearStr);
+      return dateStr.startsWith(prefix);
     });
-
-    // Sort by ISO date string descending (lexicographic sort works for ISO 8601)
-    return filtered.sort((a, b) => {
-      const dateA = typeof a.date === 'string' ? a.date : '';
-      const dateB = typeof b.date === 'string' ? b.date : '';
-      return dateB.localeCompare(dateA);
-    });
-
-  }, [transactionsWithRecurrences, currentMonth, currentYear]);
+  }, [yearTransactions, currentMonth, currentYear]);
 
   useEffect(() => {
     if (availableYears.length > 0 && !availableYears.includes(currentYear)) {
@@ -428,7 +429,9 @@ export default function Dashboard() {
             )}
           <TabsContent value="reports" className="space-y-4">
             <ReportsTab
-              transactions={filteredTransactions}
+              transactions={yearTransactions}
+              currentMonth={currentMonth}
+              currentYear={currentYear}
             />
           </TabsContent>
           <TabsContent value="import" className="space-y-4">

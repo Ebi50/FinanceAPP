@@ -7,7 +7,7 @@
  * - users.json
  * 
  * ANLEITUNG:
- * 1. Stelle sicher dass du in C:\Users\eberh\Finanzapp bist
+ * 1. Stelle sicher dass du in C:\Users\eberh\APPS\Finanzapp bist
  * 2. Lege die Firebase Service Account JSON-Datei ab als:
  *    scripts/firebase-service-account.json
  *    (Download: Firebase Console → Projekteinstellungen → Dienstkonten → Neuen privaten Schlüssel generieren)
@@ -34,7 +34,7 @@ if (!fs.existsSync(SERVICE_ACCOUNT_PATH)) {
   console.error('3. Projekteinstellungen (Zahnrad) → Dienstkonten');
   console.error('4. Klicke "Neuen privaten Schlüssel generieren"');
   console.error('5. Speichere die Datei als:');
-  console.error('   C:\\Users\\eberh\\Finanzapp\\scripts\\firebase-service-account.json');
+  console.error('   C:\\Users\\eberh\\APPS\\Finanzapp\\scripts\\firebase-service-account.json');
   console.error('');
   process.exit(1);
 }

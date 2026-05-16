@@ -20,7 +20,7 @@ import { Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
-import { format, isValid, getYear, getMonth, parseISO } from "date-fns";
+import { format, isValid, getMonth, parseISO } from "date-fns";
 import { de } from "date-fns/locale";
 import type { Transaction, Category } from "@/lib/types";
 import React, { useMemo, useState, useEffect, useRef } from "react";
@@ -31,6 +31,8 @@ import html2canvas from "html2canvas";
 
 interface ReportsTabProps {
   transactions: Transaction[];
+  currentMonth: number | null;
+  currentYear: number;
 }
 
 interface AutoTableDoc extends jsPDF {
@@ -42,12 +44,9 @@ const toDate = (d: string | Date): Date => {
   return parseISO(d);
 };
 
-export function ReportsTab({ transactions }: ReportsTabProps) {
+export function ReportsTab({ transactions, currentMonth, currentYear }: ReportsTabProps) {
   const { toast } = useToast();
   const chartRef = useRef<HTMLDivElement>(null);
-
-  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState<number | null>(new Date().getMonth());
 
   const { categories } = useCategories();
 
@@ -59,28 +58,12 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
   const incomeCategory = useMemo(() => categories?.find(c => c.name.toLowerCase() === 'einnahmen'), [categories]);
 
   const [transactionsForChart, setTransactionsForChart] = useState<Transaction[]>([]);
-  const periodTitle = selectedMonth !== null && de.localize ? `${de.localize.month(selectedMonth, { width: 'long' })} ${currentYear}` : `Gesamtjahr ${currentYear}`;
-
-  const availableYears = useMemo(() => {
-    if (!transactions) return [new Date().getFullYear()];
-    const years = new Set<number>();
-    transactions.forEach(t => {
-      const date = toDate(t.date);
-      if (isValid(date)) {
-        years.add(date.getFullYear());
-      }
-    });
-    years.add(new Date().getFullYear());
-    return Array.from(years).sort((a, b) => b - a);
-  }, [transactions]);
+  const periodTitle = currentMonth !== null && de.localize ? `${de.localize.month(currentMonth, { width: 'long' })} ${currentYear}` : `Gesamtjahr ${currentYear}`;
 
   const generatePdf = async (period: "monthly" | "yearly", year: number, month: number | null) => {
     const doc = new jsPDF() as AutoTableDoc;
 
-    let reportTransactions = transactions.filter(t => {
-        const transactionDate = toDate(t.date);
-        return isValid(transactionDate) && getYear(transactionDate) === year;
-    });
+    let reportTransactions = transactions.filter(t => isValid(toDate(t.date)));
 
     let title;
     if (period === "monthly" && month !== null) {
@@ -225,32 +208,17 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
 
   const filteredTableTransactions = useMemo(() => {
     if (!transactions) return [];
-
-    let yearlyData = transactions.filter(t => {
+    if (currentMonth === null) return transactions;
+    return transactions.filter(t => {
       const transactionDate = toDate(t.date);
-      return isValid(transactionDate) && getYear(transactionDate) === currentYear;
+      return isValid(transactionDate) && getMonth(transactionDate) === currentMonth;
     });
-
-    if (selectedMonth === null) {
-      return yearlyData;
-    }
-
-    return yearlyData.filter(t => {
-      const transactionDate = toDate(t.date);
-      return isValid(transactionDate) && getMonth(transactionDate) === selectedMonth;
-    });
-  }, [transactions, currentYear, selectedMonth]);
+  }, [transactions, currentMonth]);
 
   useEffect(() => {
     const expensesForChart = filteredTableTransactions.filter(t => t.category_id !== incomeCategory?.id);
     setTransactionsForChart(expensesForChart);
   }, [filteredTableTransactions, incomeCategory]);
-
-  useEffect(() => {
-    if (availableYears.length > 0 && !availableYears.includes(currentYear)) {
-      setCurrentYear(availableYears[0]);
-    }
-  }, [availableYears, currentYear]);
 
   const expensesByCategoryForTable = useMemo(() => {
     const expenses = filteredTableTransactions
@@ -307,7 +275,7 @@ export function ReportsTab({ transactions }: ReportsTabProps) {
                 </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col sm:flex-row gap-2">
-                <Button variant="secondary" onClick={() => generatePdf("monthly", currentYear, selectedMonth)} disabled={selectedMonth === null}>
+                <Button variant="secondary" onClick={() => generatePdf("monthly", currentYear, currentMonth)} disabled={currentMonth === null}>
                     <Download className="mr-2 h-4 w-4" />
                     Monatlicher Bericht (PDF)
                 </Button>
