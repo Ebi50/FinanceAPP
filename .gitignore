@@ -49,6 +49,7 @@ studio.json
 # local IDE & workspace
 .vscode/
 .agents/
+.claude/
 *.code-workspace
 
 # export data
