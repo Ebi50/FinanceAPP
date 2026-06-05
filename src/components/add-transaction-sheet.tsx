@@ -315,7 +315,7 @@ export function AddTransactionSheet({
                   control={form.control}
                   name="date"
                   render={({ field }) => (
-                    <Popover>
+                    <Popover modal>
                       <PopoverTrigger asChild>
                         <Button
                           variant={'outline'}
@@ -371,7 +371,7 @@ export function AddTransactionSheet({
                     control={form.control}
                     name="effectiveFrom"
                     render={({ field }) => (
-                      <Popover>
+                      <Popover modal>
                         <PopoverTrigger asChild>
                           <Button
                             variant={'outline'}
