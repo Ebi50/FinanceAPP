@@ -34,17 +34,21 @@ Zu tun (in dieser Reihenfolge):
 
 Code-Seite ist fertig (Phasen 1-5), siehe
 [docs/migration-supabase-abloesen.md](docs/migration-supabase-abloesen.md#umsetzungsstand-stand-2026-09-04).
-Stand 2026-09-04, Abend: Datenübernahme, Passwörter und Testdeploy auf Railway sind durch
-(17.558 Transaktionen, Zeilenzahlen geprüft, keine Avatare vorhanden). Offen:
+Stand 2026-09-04, Abend: Cutover abgeschlossen. Datenübernahme (17.558 Transaktionen,
+Zeilenzahlen geprüft), Passwörter, Merge nach `main`, Deploy auf Railway, Security-Review
+und Backup-Cron sind durch.
 
 - [x] ~~`DATABASE_URL`/`SUPABASE_DATABASE_URL` in `.env`, Schema, Datenübernahme~~
 - [x] ~~Passwörter neu setzen~~ (keine Avatare zu übernehmen)
-- [x] ~~Railway: `NEXT_PUBLIC_SUPABASE_*` entfernen, neu bauen~~ (Testdeploy erfolgreich,
-      `/api/health` → 200)
-- [ ] `feat/drop-supabase` nach `main` mergen, damit normale Pushes wieder automatisch deployen
-- [ ] `/security-review` über den Branch laufen lassen (selbstgebaute Auth)
-- [ ] **Backups einrichten und eine Wiederherstellung testen** — die tägliche Sicherung von
-      Supabase Pro fällt ersatzlos weg, und zwar unbemerkt
+- [x] ~~Railway: `NEXT_PUBLIC_SUPABASE_*` entfernen, neu bauen~~ (`/api/health` → 200 auf `main`)
+- [x] ~~`feat/drop-supabase` nach `main` mergen~~
+- [x] ~~`/security-review` über den Branch~~ (keine Findings über der Meldeschwelle)
+- [x] ~~Backups einrichten~~ — Dienst `finanzapp-backup` im FinanzAPP-Projekt: taeglich 03:00 UTC,
+      `node scripts/backup-db.mjs`, eigenes Volume `/data`, privates Netzwerk. Skript-Logik
+      (Backup + Restore) gegen die echte Datenbank in einem isolierten Postgres-Schema
+      verifiziert (Zeilenzahlen und `sum(amount)` stimmen exakt). Den ersten tatsächlichen
+      naechtlichen Lauf (heute Nacht 03:00 UTC / 05:00 MESZ) noch einmal im Railway-Dashboard
+      unter dem Dienst `finanzapp-backup` gegenpruefen.
 - [ ] Vollständige Abnahme-Prüfliste mit beiden Nutzern (Abschnitt 9 im Migrationsplan) —
       Grundfunktionen schon gegengeprüft, wiederkehrende Transaktionen und Excel-Import noch offen
 - [ ] Nach der Bewährungsfrist (ein paar Wochen): Supabase-Abo von Pro auf Free herunterstufen
