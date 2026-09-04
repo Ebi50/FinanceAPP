@@ -32,10 +32,11 @@ import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/page-header';
-import { useUser, useSupabase, useTable } from '@/lib/supabase';
-import type { Transaction } from '@/lib/types';
+import { useAuth } from '@/lib/auth-provider';
+import { useTransactionYears } from '@/lib/api-hooks';
+import { api } from '@/lib/api';
+import { useRouter } from 'next/navigation';
 import { de } from 'date-fns/locale';
-import { isValid, getYear, startOfYear, endOfYear, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { formatCurrency } from '@/lib/utils';
 
 const navItems = [
@@ -50,20 +51,17 @@ const ADMIN_EMAIL = 'eberhard.janzen@freenet.de';
 export default function SettingsPage() {
   const { setTheme } = useTheme();
 
-  const { user } = useUser();
-  const supabase = useSupabase();
+  const { user, refreshUser } = useAuth();
+  const router = useRouter();
 
   const [activeTab, setActiveTab] = useState('Allgemein');
 
-  const { data: allTransactions } = useTable<Transaction>({
-    table: 'transactions',
-    select: 'id, date',
-    enabled: !!user,
-  });
+  const { data: transactionYears, refetch: refetchYears } = useTransactionYears(!!user);
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [budget, setBudget] = useState(2000);
@@ -77,11 +75,7 @@ export default function SettingsPage() {
 
   const { toast } = useToast();
 
-  const availableYearsForDelete = useMemo(() => {
-    if (!allTransactions) return [];
-    const years = new Set(allTransactions.map(t => getYear(parseISO(t.date as string))));
-    return Array.from(years).sort((a, b) => b - a);
-  }, [allTransactions]);
+  const availableYearsForDelete = useMemo(() => transactionYears ?? [], [transactionYears]);
 
   useEffect(() => {
     if (availableYearsForDelete.length > 0 && !deleteYear) {
@@ -103,27 +97,19 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!user) return;
     try {
-        const { error } = await supabase
-          .from('profiles')
-          .upsert({
-            id: user.id,
-            first_name: firstName,
-            last_name: lastName,
-            email: user.email,
-          });
-
-        if (error) throw error;
+        await api.updateProfile({ first_name: firstName, last_name: lastName });
+        await refreshUser();
 
         toast({
             title: 'Profil gespeichert',
             description: 'Ihre Daten wurden erfolgreich aktualisiert.',
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error updating profile: ", error);
         toast({
             variant: "destructive",
             title: "Fehler",
-            description: "Profil konnte nicht aktualisiert werden.",
+            description: error?.message || "Profil konnte nicht aktualisiert werden.",
         });
     }
   };
@@ -140,23 +126,23 @@ export default function SettingsPage() {
       });
       return;
     }
-    if (newPassword.length < 6) {
+    if (newPassword.length < 8) {
         toast({
             variant: 'destructive',
             title: 'Fehler',
-            description: 'Das neue Passwort muss mindestens 6 Zeichen lang sein.',
+            description: 'Das neue Passwort muss mindestens 8 Zeichen lang sein.',
         });
         return;
     }
 
     try {
-        const { error } = await supabase.auth.updateUser({ password: newPassword });
-        if (error) throw error;
+        await api.changePassword(currentPassword, newPassword);
 
         toast({
           title: 'Passwort geändert',
-          description: 'Ihr Passwort wurde erfolgreich geändert.',
+          description: 'Ihr Passwort wurde geändert. Andere Sitzungen wurden abgemeldet.',
         });
+        setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
     } catch (error: any) {
@@ -164,7 +150,7 @@ export default function SettingsPage() {
         toast({
             variant: 'destructive',
             title: 'Fehler beim Ändern des Passworts',
-            description: error.message || 'Ein unbekannter Fehler ist aufgetreten.',
+            description: error?.message || 'Ein unbekannter Fehler ist aufgetreten.',
         })
     }
   };
@@ -173,21 +159,18 @@ export default function SettingsPage() {
         e.preventDefault();
         if (!user) return;
         try {
-            const { error } = await supabase
-              .from('profiles')
-              .upsert({ id: user.id, auto_logout_timeout: autoLogoutTimeout });
-
-            if (error) throw error;
+            await api.updateProfile({ auto_logout_timeout: autoLogoutTimeout });
+            await refreshUser();
             toast({
                 title: 'Sicherheitseinstellungen gespeichert',
                 description: 'Der automatische Logout wurde aktualisiert.',
             });
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error updating security settings: ", error);
             toast({
                 variant: "destructive",
                 title: "Fehler",
-                description: "Die Sicherheitseinstellungen konnten nicht gespeichert werden.",
+                description: error?.message || "Die Sicherheitseinstellungen konnten nicht gespeichert werden.",
             });
         }
     };
@@ -196,21 +179,18 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!user) return;
     try {
-        const { error } = await supabase
-          .from('profiles')
-          .upsert({ id: user.id, budget });
-
-        if (error) throw error;
+        await api.updateProfile({ budget });
+        await refreshUser();
         toast({
             title: 'Budget gespeichert',
             description: `Ihr monatliches Budget wurde auf ${formatCurrency(budget)} festgelegt.`,
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error updating budget: ", error);
         toast({
             variant: "destructive",
             title: "Fehler",
-            description: "Das Budget konnte nicht gespeichert werden.",
+            description: error?.message || "Das Budget konnte nicht gespeichert werden.",
         });
     }
   };
@@ -218,23 +198,19 @@ export default function SettingsPage() {
   const handleDeleteAccount = async () => {
     if (!user) return;
     try {
-      // Delete user profile
-      await supabase.from('profiles').delete().eq('id', user.id);
-
-      // Note: Actual user deletion requires admin privileges or a server-side function.
-      // For now we sign out. To fully delete, set up a Supabase Edge Function.
-      await supabase.auth.signOut();
+      await api.deleteAccount();
 
       toast({
-        title: 'Abgemeldet',
-        description: 'Sie wurden abgemeldet. Kontaktieren Sie den Support, um Ihr Konto vollständig zu löschen.',
+        title: 'Konto gelöscht',
+        description: 'Ihr Zugang wurde entfernt. Die Haushaltsdaten bleiben erhalten.',
       });
+      router.push('/login');
     } catch (error: any) {
       console.error('Error deleting account:', error);
       toast({
         variant: 'destructive',
         title: 'Fehler beim Löschen des Kontos',
-        description: error.message || 'Beim Löschen Ihres Kontos ist ein Fehler aufgetreten.',
+        description: error?.message || 'Beim Löschen Ihres Kontos ist ein Fehler aufgetreten.',
       });
     }
   };
@@ -247,52 +223,29 @@ export default function SettingsPage() {
 
     setIsDeleting(true);
 
-    let startDate: Date;
-    let endDate: Date;
-    let confirmationText = '';
-
-    if (deleteMonth === 'all') {
-        startDate = startOfYear(new Date(deleteYear, 0, 1));
-        endDate = endOfYear(new Date(deleteYear, 11, 31));
-        confirmationText = `alle Daten für das Jahr ${deleteYear}`;
-    } else {
-        const monthIndex = parseInt(deleteMonth, 10);
-        startDate = startOfMonth(new Date(deleteYear, monthIndex));
-        endDate = endOfMonth(new Date(deleteYear, monthIndex));
-        confirmationText = `alle Daten für ${de.localize?.month(monthIndex)} ${deleteYear}`;
-    }
+    const confirmationText = deleteMonth === 'all'
+      ? `alle Daten für das Jahr ${deleteYear}`
+      : `alle Daten für ${de.localize?.month(parseInt(deleteMonth, 10))} ${deleteYear}`;
 
     try {
-        const { data: rows, error: fetchError } = await supabase
-          .from('transactions')
-          .select('id')
-          .gte('date', startDate.toISOString())
-          .lte('date', endDate.toISOString());
+        const { deleted } = await api.deletePeriod(
+          deleteYear,
+          deleteMonth === 'all' ? 'all' : parseInt(deleteMonth, 10)
+        );
 
-        if (fetchError) throw fetchError;
-
-        if (!rows || rows.length === 0) {
+        if (deleted === 0) {
             toast({ title: 'Keine Daten gefunden', description: `Es gibt keine Transaktionen zum Löschen für ${confirmationText}.` });
-            setIsDeleting(false);
             return;
         }
 
-        const ids = rows.map(r => r.id);
-        const { error: deleteError } = await supabase
-          .from('transactions')
-          .delete()
-          .in('id', ids);
-
-        if (deleteError) throw deleteError;
-
-        toast({ title: 'Daten gelöscht', description: `Es wurden ${rows.length} Transaktionen für ${confirmationText} gelöscht.` });
-
-    } catch (error) {
+        toast({ title: 'Daten gelöscht', description: `Es wurden ${deleted} Transaktionen für ${confirmationText} gelöscht.` });
+        refetchYears();
+    } catch (error: any) {
         console.error("Error deleting period data:", error);
         toast({
             variant: 'destructive',
             title: 'Löschen fehlgeschlagen',
-            description: 'Beim Löschen der Daten ist ein Fehler aufgetreten.',
+            description: error?.message || 'Beim Löschen der Daten ist ein Fehler aufgetreten.',
         });
     } finally {
         setIsDeleting(false);
@@ -424,18 +377,22 @@ export default function SettingsPage() {
                 <CardHeader>
                     <CardTitle>Passwort ändern</CardTitle>
                     <CardDescription>
-                        Geben Sie ein neues Passwort ein, um es zu ändern.
+                        Geben Sie Ihr aktuelles und ein neues Passwort ein (mindestens 8 Zeichen).
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form className="space-y-4" onSubmit={handlePasswordSave}>
                         <div className="space-y-2">
+                            <Label htmlFor="currentPassword">Aktuelles Passwort</Label>
+                            <Input id="currentPassword" type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
+                        </div>
+                        <div className="space-y-2">
                             <Label htmlFor="newPassword">Neues Passwort</Label>
-                            <Input id="newPassword" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+                            <Input id="newPassword" type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="confirmPassword">Neues Passwort bestätigen</Label>
-                            <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
+                            <Input id="confirmPassword" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
                         </div>
                         <Button type="submit">Neues Passwort speichern</Button>
                     </form>
@@ -544,7 +501,7 @@ export default function SettingsPage() {
                                         <AlertDialogHeader>
                                             <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
                                             <AlertDialogDescription>
-                                                Diese Aktion kann nicht rückgängig gemacht werden. Es werden alle Transaktionen für
+                                                Diese Aktion kann nicht rückgängig gemacht werden. Es werden alle Ihre Transaktionen für
                                                 {deleteMonth === 'all' ? ` das Jahr ${deleteYear}` : ` ${de.localize?.month(Number(deleteMonth))} ${deleteYear}`}
                                                 {' '}dauerhaft gelöscht.
                                             </AlertDialogDescription>
@@ -568,7 +525,7 @@ export default function SettingsPage() {
                                     <AlertDialogHeader>
                                         <AlertDialogTitle>Sind Sie absolut sicher?</AlertDialogTitle>
                                         <AlertDialogDescription>
-                                            Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird Ihr Konto dauerhaft gelöscht.
+                                            Diese Aktion kann nicht rückgängig gemacht werden. Dadurch wird Ihr Zugang dauerhaft gelöscht.
                                             Ihre Transaktionsdaten bleiben für andere Benutzer erhalten.
                                         </AlertDialogDescription>
                                     </AlertDialogHeader>

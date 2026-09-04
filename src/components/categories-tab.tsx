@@ -40,15 +40,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { useUser, useSupabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-provider';
+import { api } from '@/lib/api';
 import { useCategories } from '@/lib/categories-context';
 
 
 export function CategoriesTab() {
   const { user } = useUser();
-  const supabase = useSupabase();
 
-  const { categories, isLoading: categoriesLoading } = useCategories();
+  const { categories, isLoading: categoriesLoading, refetch: refetchCategories } = useCategories();
 
   const [open, setOpen] = useState(false);
   const [currentCategory, setCurrentCategory] = useState<Category | null>(null);
@@ -76,16 +76,19 @@ export function CategoriesTab() {
 
   const handleDelete = async (category: Category) => {
     if (!user) return;
-    const { error } = await supabase
-      .from('expense_categories')
-      .delete()
-      .eq('id', category.id);
-
-    if (error) {
+    try {
+      await api.deleteCategory(category.id);
+    } catch (error: any) {
       console.error('Error deleting category:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Löschen fehlgeschlagen',
+        description: error?.message || 'Die Kategorie konnte nicht gelöscht werden.',
+      });
       return;
     }
     setDeletingCategory(null);
+    refetchCategories();
     toast({
       title: 'Kategorie gelöscht',
       description: 'Die Kategorie wurde erfolgreich entfernt.',
@@ -103,34 +106,31 @@ export function CategoriesTab() {
         return;
     }
 
-    if (currentCategory) {
-      const { error } = await supabase
-        .from('expense_categories')
-        .update({ name: categoryName })
-        .eq('id', currentCategory.id);
-
-      if (error) {
-        console.error('Error updating category:', error);
-        return;
+    try {
+      if (currentCategory) {
+        await api.updateCategory(currentCategory.id, categoryName.trim());
+        toast({
+          title: 'Kategorie aktualisiert',
+          description: 'Die Änderungen wurden erfolgreich gespeichert.',
+        });
+      } else {
+        await api.createCategory(categoryName.trim());
+        toast({
+          title: 'Kategorie hinzugefügt',
+          description: `${categoryName} wurde erfolgreich erstellt.`,
+        });
       }
+    } catch (error: any) {
+      console.error('Error saving category:', error);
       toast({
-        title: 'Kategorie aktualisiert',
-        description: 'Die Änderungen wurden erfolgreich gespeichert.',
+        variant: 'destructive',
+        title: 'Speichern fehlgeschlagen',
+        description: error?.message || 'Die Kategorie konnte nicht gespeichert werden.',
       });
-    } else {
-      const { error } = await supabase
-        .from('expense_categories')
-        .insert({ name: categoryName, user_id: user.id });
-
-      if (error) {
-        console.error('Error adding category:', error);
-        return;
-      }
-      toast({
-        title: 'Kategorie hinzugefügt',
-        description: `${categoryName} wurde erfolgreich erstellt.`,
-      });
+      return;
     }
+
+    refetchCategories();
     setOpen(false);
     setCategoryName("");
     setCurrentCategory(null);

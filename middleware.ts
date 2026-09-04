@@ -1,12 +1,27 @@
-import { updateSession } from '@/lib/supabase/middleware';
-import { type NextRequest } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 
-export async function middleware(request: NextRequest) {
-  return await updateSession(request);
+const SESSION_COOKIE = 'finanzapp_session';
+
+/**
+ * Edge runtime — no database access here. The middleware only checks whether a
+ * session cookie exists at all; whether it is still valid is decided by the
+ * route handlers under src/app/api.
+ */
+export function middleware(request: NextRequest) {
+  if (request.cookies.get(SESSION_COOKIE)) {
+    return NextResponse.next();
+  }
+
+  const url = request.nextUrl.clone();
+  url.pathname = '/login';
+  url.search = '';
+  return NextResponse.redirect(url);
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Everything except the API (handlers authenticate themselves), the login
+    // page and static assets.
+    '/((?!api|login|_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

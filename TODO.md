@@ -33,3 +33,20 @@ Zu tun (in dieser Reihenfolge):
    sie nicht mehr gebraucht werden.
 5. Git-History: bereits geprüft (`git log --all --diff-filter=A --name-only -- '*studio*' '*adminsdk*'`)
    — die Datei war nie eingecheckt. Ein History-Rewrite ist also nicht nötig.
+
+## Migration weg von Supabase
+
+Code-Seite ist fertig (Phasen 1-5), siehe
+[docs/migration-supabase-abloesen.md](docs/migration-supabase-abloesen.md#umsetzungsstand-stand-2026-09-04).
+Offen und nicht vergessen:
+
+- [ ] Datenbank anlegen, `DATABASE_URL` setzen, Dump aus Supabase importieren (`db/README.md`)
+- [ ] Einmal komplett gegen eine echte Datenbank testen — bisher nur Typcheck und Build
+- [ ] Passwörter neu setzen (`npm run set-password`) und die zwei Avatare übernehmen
+- [ ] `/security-review` über den Branch laufen lassen (selbstgebaute Auth)
+- [ ] **Backups einrichten und eine Wiederherstellung testen** — die tägliche Sicherung von
+      Supabase Pro fällt ersatzlos weg, und zwar unbemerkt
+- [ ] Railway: `NEXT_PUBLIC_SUPABASE_*` entfernen und **neu bauen**, Healthcheck steht bereits
+      auf `/api/health`
+- [ ] Nach der Bewährungsfrist: Supabase-Abo von Pro auf Free herunterstufen (das ist der
+      Schritt, der Geld spart), danach Projekt löschen

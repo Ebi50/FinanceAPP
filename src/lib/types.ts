@@ -33,3 +33,15 @@ export type TransactionItemRow = {
   value: number;
   description?: string;
 };
+
+/** The signed-in user as delivered by GET /api/auth/me. */
+export type AppUser = {
+  id: string;
+  email: string | null;
+  firstName: string;
+  lastName: string;
+  budget: number;
+  autoLogoutTimeout: number;
+  photoURL: string;
+  displayName: string;
+};

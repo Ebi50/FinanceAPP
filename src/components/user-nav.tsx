@@ -12,7 +12,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useUser, useSupabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-provider';
+import { api } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { useState, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
@@ -20,8 +21,7 @@ import { Loader2, Image as ImageIcon } from 'lucide-react';
 
 
 export function UserNav() {
-  const { user, isUserLoading } = useUser();
-  const supabase = useSupabase();
+  const { user, isUserLoading, refreshUser, signOut } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -29,7 +29,7 @@ export function UserNav() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await signOut();
     router.push('/login');
   };
 
@@ -43,49 +43,34 @@ export function UserNav() {
     }
 
     const file = event.target.files[0];
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     if (!allowedTypes.includes(file.type)) {
         toast({
             variant: "destructive",
             title: "Ungültiger Dateityp",
-            description: "Bitte wählen Sie eine JPEG-, PNG- oder GIF-Datei.",
+            description: "Bitte wählen Sie eine JPEG-, PNG-, GIF- oder WebP-Datei.",
         });
         return;
     }
 
     setIsUploading(true);
-    const filePath = `avatars/${user.id}/${file.name}`;
 
     try {
-        const { error: uploadError } = await supabase.storage
-          .from('avatars')
-          .upload(filePath, file, { upsert: true });
-
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('avatars')
-          .getPublicUrl(filePath);
-
-        // Update the user's profile in the database
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({ photo_url: publicUrl })
-          .eq('id', user.id);
-
-        if (updateError) throw updateError;
+        await api.uploadAvatar(file);
+        // The photo URL carries a version stamp, so refreshing the profile is
+        // enough to show the new image.
+        await refreshUser();
 
         toast({
             title: "Profilbild aktualisiert",
             description: "Ihr neues Profilbild wurde erfolgreich gespeichert.",
         });
-
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error uploading avatar:", error);
         toast({
             variant: "destructive",
             title: "Upload fehlgeschlagen",
-            description: "Beim Hochladen Ihres Avatars ist ein Fehler aufgetreten.",
+            description: error?.message || "Beim Hochladen Ihres Avatars ist ein Fehler aufgetreten.",
         });
     } finally {
         setIsUploading(false);
@@ -161,7 +146,7 @@ export function UserNav() {
           ref={fileInputRef}
           onChange={handleFileChange}
           className="hidden"
-          accept="image/png, image/jpeg, image/gif"
+          accept="image/png, image/jpeg, image/gif, image/webp"
       />
     </>
   );
