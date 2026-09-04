@@ -7,51 +7,45 @@ Migrationen — Änderungen werden dort eingepflegt und von Hand eingespielt.
 npm run db:schema     # spielt db/schema.sql gegen DATABASE_URL ein (idempotent)
 ```
 
-## Umzug von Supabase (Phase 0 und 1 des Migrationsplans)
+## Umzug von Supabase
 
-Vorbereitung: `DATABASE_URL` in `.env` auf die neue Datenbank zeigen lassen.
+Kein `pg_dump`, kein `psql`, kein Editieren von SQL-Dateien. Ein Skript erledigt
+Backup, Import und Abgleich in einem Lauf — und ist beliebig oft wiederholbar.
 
-**1. Zeilenzahlen bei Supabase notieren** — Vergleichsgrundlage nach dem Import:
-
-```sql
-select 'profiles', count(*) from profiles
-union all select 'expense_categories', count(*) from expense_categories
-union all select 'transactions', count(*) from transactions
-union all select 'transaction_items', count(*) from transaction_items;
-```
-
-**2. Dumps ziehen** (der erste ist zugleich das Rückfall-Backup):
+**1. `.env` setzen:**
 
 ```bash
-pg_dump --no-owner --no-privileges -Fc "<supabase-connection-string>" -f finanzapp-supabase.dump
-
-pg_dump --no-owner --no-privileges --data-only --column-inserts \
-  -t public.profiles -t public.expense_categories \
-  -t public.transactions -t public.transaction_items \
-  "<supabase-connection-string>" -f finanzapp-daten.sql
+DATABASE_URL=...            # neue Datenbank (Railway: oeffentliche Proxy-URL, lokal)
+SUPABASE_DATABASE_URL=...   # Supabase: Project Settings → Database → Connection string
+                           # moeglichst die direkte Verbindung (Port 5432), nicht den Pooler
 ```
 
-Die IDs aus `auth.users` müssen erhalten bleiben — sie stecken in `profiles.id` und in
-jedem `transactions.user_id`. Deshalb wird ausschließlich `--data-only` importiert,
-nie mit neu erzeugten UUIDs.
-
-**3. Schema anlegen und Daten einspielen:**
+**2. Schema in der neuen Datenbank anlegen:**
 
 ```bash
 npm run db:schema
-psql "$DATABASE_URL" -f finanzapp-daten.sql
 ```
 
-Der Dump enthält die Spalte `photo_url`, die es hier nicht mehr gibt. Falls der Import
-deswegen scheitert, die `photo_url`-Werte aus den `INSERT`-Zeilen der Tabelle `profiles`
-entfernen (die Bilder kommen in Schritt 5 zurück). Reihenfolge beachten: `profiles`,
-dann `expense_categories`, dann `transactions`, dann `transaction_items` — der Dump
-liefert sie bereits in dieser Reihenfolge.
+**3. Daten übernehmen:**
 
-**4. Zeilenzahlen gegenprüfen** — dieselbe Abfrage wie in Schritt 1 gegen die neue
-Datenbank laufen lassen.
+```bash
+npm run migrate:from-supabase
+```
 
-**5. Passwörter und Profilbilder setzen** (Supabase-Passwörter werden nicht übernommen):
+Das Skript
+
+- liest alle vier Tabellen aus Supabase (**nur SELECT**, Supabase bleibt unverändert)
+  und legt sie zusätzlich als JSON unter `backups/<zeitstempel>/` ab (Rückfall-Backup),
+- schreibt sie in `DATABASE_URL` — **Original-IDs bleiben erhalten** (`profiles.id`
+  und `transactions.user_id` müssen zusammenpassen), `photo_url` fällt weg,
+- läuft mit `ON CONFLICT DO NOTHING` → ein zweiter Lauf ergänzt nur neue Zeilen
+  (so wird am Umzugsabend der finale Stand nachgezogen),
+- vergleicht am Ende die Zeilenzahlen und bricht bei jeder Abweichung mit Fehler ab.
+
+Zeigt ein `user_id`/`category_id` ins Leere, wird die Zeile **nicht verworfen**,
+sondern mit `NULL` an dieser Stelle übernommen und am Ende aufgelistet.
+
+**4. Passwörter und Profilbilder setzen** (Supabase-Passwörter werden nicht übernommen):
 
 ```bash
 npm run set-password -- eberhard.janzen@freenet.de

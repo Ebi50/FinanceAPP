@@ -9,6 +9,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "db:schema": "node scripts/apply-schema.mjs",
+    "backup:supabase": "node scripts/backup-supabase.mjs",
+    "migrate:from-supabase": "node scripts/migrate-from-supabase.mjs",
     "set-password": "node scripts/set-password.mjs",
     "set-avatar": "node scripts/set-avatar.mjs"
   },

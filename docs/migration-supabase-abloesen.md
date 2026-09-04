@@ -12,8 +12,8 @@ lässt sich nicht aus dem Repository heraus erledigen:
 
 | Phase | Stand |
 |---|---|
-| 0 Zielanbieter, DB anlegen, Dump ziehen | **offen** - Arbeit im Supabase- bzw. Railway-Dashboard |
-| 1 Schema + Datenimport | Schema fertig (`db/schema.sql`, `npm run db:schema`), Import-Anleitung in `db/README.md`; der eigentliche Import braucht die Dumps aus Phase 0 |
+| 0 Zielanbieter, DB anlegen | Railway-Postgres im Projekt FinanzAPP steht; `DATABASE_URL` noch nicht gesetzt |
+| 1 Schema + Datenimport | Schema fertig (`db/schema.sql`, `npm run db:schema`); Import als ein Skript `npm run migrate:from-supabase` (Backup + Import + Abgleich, wiederholbar) — Anleitung in `db/README.md` |
 | 2 `src/lib/db.ts` + Route Handlers | fertig, 17 Endpunkte unter `src/app/api/` |
 | 3 Auth (Login, Session, Passwort, Middleware, Skript) | fertig, inkl. `npm run set-password` |
 | 4 Client-Hooks und Aufrufstellen | fertig, `src/lib/supabase/` gelöscht, Pakete deinstalliert |
@@ -23,8 +23,9 @@ lässt sich nicht aus dem Repository heraus erledigen:
 Noch nicht erledigt und nicht vergessen:
 
 - **Kein Test gegen eine echte Datenbank.** Getestet ist bisher nur, dass Typcheck und
-  Build sauber durchlaufen. Sobald `DATABASE_URL` steht: `npm run db:schema`, Nutzer per
-  `npm run set-password -- <email> --create` anlegen, dann die Abnahme-Prüflisten aus
+  Build sauber durchlaufen. Sobald `DATABASE_URL` steht: `npm run db:schema`,
+  `npm run migrate:from-supabase` (Backup + Import + Abgleich in einem Lauf, siehe
+  `db/README.md`), Passwörter per `npm run set-password`, dann die Abnahme-Prüflisten aus
   Abschnitt 9 durchgehen.
 - **Backups einrichten** (Abschnitt 8) - der Punkt, der am leichtesten liegen bleibt.
 - **`/security-review` über den Branch laufen lassen**, bevor deployed wird.
@@ -271,16 +272,15 @@ dann finalen Dump ziehen, importieren, umschalten, gemeinsam prüfen.
 
 **Vorher (Phase 0):**
 
-- [ ] Verbindungsdaten holen: Dashboard → Project Settings → Database → Connection string
-- [ ] Vollständigen Dump ziehen und sicher ablegen (das ist zugleich das Rückfall-Backup):
-      `pg_dump --no-owner --no-privileges -Fc "<connection string>" -f finanzapp-supabase.dump`
-- [ ] Zusätzlich einen lesbaren Klartext-Dump nur der vier Tabellen ziehen (erleichtert das
-      Anpassen des Schemas): `pg_dump --no-owner --no-privileges --data-only -t public.profiles
-      -t public.expense_categories -t public.transactions -t public.transaction_items`
-- [ ] Zeilenzahlen notieren (`select count(*)` je Tabelle) — Vergleichsgrundlage nach dem Import
-- [ ] Die zwei Avatar-Bilder aus dem Storage-Bucket `avatars` herunterladen
-- [ ] Aus `auth.users` die beiden `id` und `email` notieren — die IDs müssen erhalten bleiben,
-      sonst brechen alle `user_id`-Verweise in den Transaktionen
+- [ ] Verbindungsdaten holen: Dashboard → Project Settings → Database → Connection string;
+      als `SUPABASE_DATABASE_URL` in `.env`
+- [ ] Die zwei Avatar-Bilder aus dem Storage-Bucket `avatars` herunterladen (für
+      `npm run set-avatar`)
+
+Dump, Zeilenzählen und ID-Abgleich übernimmt `npm run migrate:from-supabase`: es zieht
+selbst ein vollständiges JSON-Backup nach `backups/<zeitstempel>/`, übernimmt die
+Original-IDs unverändert und bricht ab, wenn im Ziel Zeilen fehlen. Wer zusätzlich einen
+klassischen `pg_dump -Fc` als Rückfall-Backup will, kann ihn ziehen — nötig ist er nicht.
 
 **Beim Cutover (Phase 6):**
 

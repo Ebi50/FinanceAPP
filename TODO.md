@@ -40,7 +40,9 @@ Code-Seite ist fertig (Phasen 1-5), siehe
 [docs/migration-supabase-abloesen.md](docs/migration-supabase-abloesen.md#umsetzungsstand-stand-2026-09-04).
 Offen und nicht vergessen:
 
-- [ ] Datenbank anlegen, `DATABASE_URL` setzen, Dump aus Supabase importieren (`db/README.md`)
+- [ ] `DATABASE_URL` (Railway-Postgres steht schon) und `SUPABASE_DATABASE_URL` in `.env`
+- [ ] `npm run db:schema`, dann `npm run migrate:from-supabase` (Backup + Import + Abgleich
+      in einem Lauf, wiederholbar — `db/README.md`)
 - [ ] Einmal komplett gegen eine echte Datenbank testen — bisher nur Typcheck und Build
 - [ ] Passwörter neu setzen (`npm run set-password`) und die zwei Avatare übernehmen
 - [ ] `/security-review` über den Branch laufen lassen (selbstgebaute Auth)

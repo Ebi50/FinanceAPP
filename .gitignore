@@ -54,3 +54,6 @@ studio.json
 
 # export data
 export/
+
+# lokale Datensicherungen (enthalten Haushalts-/Finanzdaten, nie committen)
+/backups/
