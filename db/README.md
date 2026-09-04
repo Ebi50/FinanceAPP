@@ -56,10 +56,30 @@ npm run set-avatar   -- eberhard.janzen@freenet.de ./avatar-1.png
 
 ## Backups
 
-Supabase Pro hat täglich gesichert; diese Sicherung fällt mit dem Umzug weg. Vor dem
-Cutover einen geplanten Dump einrichten (Railway-Cron oder GitHub Action) und **eine
-Wiederherstellung einmal testen**:
+Supabase Pro hat täglich gesichert; diese Sicherung fällt mit dem Umzug weg. Ersatz:
+[scripts/backup-db.mjs](../scripts/backup-db.mjs) (kein `pg_dump` nötig — reines `pg`,
+läuft auch unter Windows) und [scripts/restore-db.mjs](../scripts/restore-db.mjs).
 
 ```bash
-pg_dump --no-owner --no-privileges -Fc "$DATABASE_URL" -f finanzapp-$(date +%F).dump
+npm run backup:db                              # einmaliger Lauf, schreibt backups/<zeitstempel>/
+node scripts/restore-db.mjs backups/<zeitstempel>   # zurückspielen (nur gegen leere DB sinnvoll)
 ```
+
+`sessions` wird bewusst nicht gesichert (flüchtig, sicherheitsrelevant). `BACKUP_DIR`
+und `BACKUP_RETENTION_DAYS` (Standard 30 Tage) sind per Umgebungsvariable einstellbar.
+
+**Automatisiert als Railway-Cron-Dienst** (privates Netzwerk, kein öffentlicher
+DB-Zugriff nötig):
+
+1. Im FinanzAPP-Projekt einen neuen Dienst aus diesem Repo anlegen
+2. Settings → Deploy → **Cron Schedule** setzen (z. B. `0 3 * * *` für 03:00 Uhr)
+3. Start Command: `node scripts/backup-db.mjs`
+4. Variable `DATABASE_URL` als Referenz auf den Postgres-Dienst
+5. Ein Volume mounten (z. B. `/data`) und `BACKUP_DIR=/data/backups` setzen — sonst
+   ist jeder Lauf flüchtig und es gibt am Ende nur den letzten Stand
+
+**Eine Wiederherstellung einmal testen** — nicht gegen die Produktivdaten, sondern
+z. B. in einem eigenen Postgres-Schema (`CREATE SCHEMA restore_test`, `db/schema.sql`
+mit `search_path` darauf einspielen, `restore-db.mjs` mit einer `DATABASE_URL` laufen
+lassen, die `?options=-c%20search_path%3Drestore_test` anhängt, danach Zeilenzahlen
+und z. B. `sum(amount)` gegen die echten Daten vergleichen, Schema wieder löschen).
