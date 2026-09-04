@@ -2,19 +2,18 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useCallback, useRef } from 'react';
-import { useUser, useSupabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-provider';
 
 const useAutoLogout = () => {
-  const { user } = useUser();
-  const supabase = useSupabase();
+  const { user, signOut } = useAuth();
   const router = useRouter();
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const logout = useCallback(() => {
-    supabase.auth.signOut().then(() => {
+    signOut().then(() => {
       router.push('/login');
     });
-  }, [supabase, router]);
+  }, [signOut, router]);
 
   const resetTimer = useCallback(() => {
     if (timerRef.current) {

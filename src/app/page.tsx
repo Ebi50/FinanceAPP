@@ -24,7 +24,9 @@ import { ReportsTab } from "@/components/reports-tab";
 import { ImportTab } from "@/components/import-tab";
 import { AddTransactionSheet } from "@/components/add-transaction-sheet";
 import type { Transaction, TransactionItem } from '@/lib/types';
-import { useUser, useSupabase, useTable } from '@/lib/supabase';
+import { useUser } from '@/lib/auth-provider';
+import { useTransactions } from '@/lib/api-hooks';
+import { api } from '@/lib/api';
 import { useCategories } from '@/lib/categories-context';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, startTransition } from 'react';
@@ -35,7 +37,6 @@ import { de } from 'date-fns/locale';
 
 export default function Dashboard() {
   const { user, isUserLoading } = useUser();
-  const supabase = useSupabase();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -50,16 +51,12 @@ export default function Dashboard() {
   }, [user, isUserLoading, router]);
 
   // Server-side: only load selected year + all recurring templates
-  const yearStart = `${currentYear}-01-01T00:00:00.000Z`;
-  const nextYearStart = `${currentYear + 1}-01-01T00:00:00.000Z`;
-
-  const { data: allTransactions, isLoading: transactionsLoading, setData: setAllTransactions, refetch: refetchTransactions } = useTable<Transaction>({
-    table: 'transactions',
-    select: '*, items:transaction_items(value, description)',
-    or: `and(date.gte.${yearStart},date.lt.${nextYearStart}),is_recurring.eq.true`,
-    realtime: false,
-    enabled: !!user,
-  });
+  const {
+    data: allTransactions,
+    isLoading: transactionsLoading,
+    setData: setAllTransactions,
+    refetch: refetchTransactions,
+  } = useTransactions(currentYear, !!user);
 
   const { categories } = useCategories();
   const budget = user?.budget ?? 2000;
@@ -78,146 +75,78 @@ export default function Dashboard() {
         transactionId = transactionId.split('-recurring-')[0];
     }
 
-    if (transactionId) {
-      // Check if this is a recurring split (edit from a specific date forward)
-      const originalTransaction = allTransactions?.find(t => t.id === transactionId);
-      const isSplitEdit = effectiveFrom && originalTransaction?.is_recurring;
+    const payload = {
+      description: restOfData.description ?? '',
+      amount: transactionData.amount,
+      category_id: restOfData.category_id || null,
+      is_recurring: restOfData.is_recurring ?? false,
+      items: items ?? [],
+    };
 
-      if (isSplitEdit) {
-        // SPLIT: Set end date on old template, create new template from effectiveFrom
-        const effectiveIso = effectiveFrom.toISOString();
+    try {
+      if (transactionId) {
+        // Check if this is a recurring split (edit from a specific date forward)
+        const originalTransaction = allTransactions?.find(t => t.id === transactionId);
+        const isSplitEdit = effectiveFrom && originalTransaction?.is_recurring;
 
-        // 1. Update old template: set recurring_end_date
-        const { error: updateError } = await supabase
-          .from('transactions')
-          .update({ recurring_end_date: effectiveIso, updated_at: new Date().toISOString() })
-          .eq('id', transactionId);
-
-        if (updateError) {
-          console.error('Error updating old template:', updateError);
-          return;
-        }
-
-        // 2. Create new recurring template from effectiveFrom
-        const { data: newTx, error: insertError } = await supabase
-          .from('transactions')
-          .insert({
-            ...restOfData,
-            amount: transactionData.amount,
+        if (isSplitEdit) {
+          // SPLIT: old template gets an end date, a new template takes over —
+          // one request, one DB transaction.
+          const effectiveIso = effectiveFrom.toISOString();
+          await api.splitTransaction(transactionId, {
+            ...payload,
             date: effectiveIso,
-            user_id: user.id,
-            is_recurring: true,
-            original_recurring_id: transactionId,
-          })
-          .select('id')
-          .single();
-
-        if (insertError) {
-          console.error('Error creating new template:', insertError);
-          return;
-        }
-
-        // 3. Create transaction items for the new template
-        if (newTx && items && items.length > 0) {
-          await supabase.from('transaction_items').insert(
-            items.map(item => ({ transaction_id: newTx.id, value: item.value, description: item.description || null }))
-          );
-        }
-
-        // Refetch to get clean state with both templates
-        refetchTransactions();
-      } else {
-        // NORMAL UPDATE (non-recurring transaction)
-        // Optimistic update: update local state immediately (non-blocking)
-        startTransition(() => {
-          setAllTransactions(prev => prev ? prev.map(t =>
-            t.id === transactionId
-              ? { ...t, ...restOfData, amount: transactionData.amount, date: isoDate, items: items || t.items }
-              : t
-          ) : prev);
-        });
-
-        const { error } = await supabase
-          .from('transactions')
-          .update({
-            ...restOfData,
-            amount: transactionData.amount,
-            date: isoDate,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', transactionId);
-
-        if (error) {
-          console.error('Error updating transaction:', error);
+            effective_from: effectiveIso,
+          });
           refetchTransactions();
-          return;
+        } else {
+          // NORMAL UPDATE (non-recurring transaction)
+          // Optimistic update: update local state immediately (non-blocking)
+          startTransition(() => {
+            setAllTransactions(prev => prev ? prev.map(t =>
+              t.id === transactionId
+                ? { ...t, ...restOfData, amount: transactionData.amount, date: isoDate, items: items || t.items }
+                : t
+            ) : prev);
+          });
+
+          await api.updateTransaction(transactionId, { ...payload, date: isoDate });
         }
+      } else {
+        const created = await api.createTransaction({ ...payload, date: isoDate });
 
-        // Update transaction items
-        if (items) {
-          await supabase.from('transaction_items').delete().eq('transaction_id', transactionId);
-          if (items.length > 0) {
-            await supabase.from('transaction_items').insert(
-              items.map(item => ({ transaction_id: transactionId, value: item.value, description: item.description || null }))
-            );
-          }
-        }
-      }
-    } else {
-      const { data: newTx, error } = await supabase
-        .from('transactions')
-        .insert({
-          ...restOfData,
-          amount: transactionData.amount,
-          date: isoDate,
-          user_id: user.id,
-        })
-        .select('id')
-        .single();
-
-      if (error) {
-        console.error('Error creating transaction:', error);
-        return;
-      }
-
-      // Optimistic: add new transaction to local state (non-blocking)
-      if (newTx) {
-        const newTransaction = {
-          ...restOfData,
-          id: newTx.id,
-          amount: transactionData.amount,
-          date: isoDate,
-          user_id: user.id,
-          items: items || [],
-        } as Transaction;
+        // Optimistic: add new transaction to local state (non-blocking)
         startTransition(() => {
-          setAllTransactions(prev => prev ? [...prev, newTransaction] : [newTransaction]);
+          setAllTransactions(prev => prev ? [...prev, created] : [created]);
         });
-
-        if (items && items.length > 0) {
-          await supabase.from('transaction_items').insert(
-            items.map(item => ({ transaction_id: newTx.id, value: item.value, description: item.description || null }))
-          );
-        }
       }
+    } catch (error: any) {
+      console.error('Error saving transaction:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Speichern fehlgeschlagen',
+        description: error?.message || 'Die Transaktion konnte nicht gespeichert werden.',
+      });
+      refetchTransactions();
     }
   };
 
-  const handleImportTransactions = async (importedTransactions: Omit<Transaction, 'id' | 'created_at'>[]) => {
+  const handleImportTransactions = async (importedTransactions: (Omit<Transaction, 'id' | 'date'> & { date: Date })[]) => {
     if (!user) return;
 
-    const rows = importedTransactions.map(t => ({
-      ...t,
-      user_id: user.id,
-    }));
-
     try {
-      const { error } = await supabase.from('transactions').insert(rows);
-      if (error) throw error;
+      await api.importTransactions(importedTransactions.map(t => ({
+        description: t.description ?? '',
+        amount: t.amount,
+        date: t.date.toISOString(),
+        category_id: t.category_id || null,
+      })));
+
       toast({
         title: "Import erfolgreich",
         description: `${importedTransactions.length} Transaktionen wurden erfolgreich importiert.`,
       });
+      refetchTransactions();
     } catch (error) {
       console.error("Error importing transactions: ", error);
       toast({
@@ -236,41 +165,29 @@ export default function Dashboard() {
         templateId = id.split('-recurring-')[0];
     }
 
-    if (mode === 'from_here' && instanceDate) {
-      // Set recurring_end_date on the template — stops generating from this month onward
-      const { error } = await supabase
-        .from('transactions')
-        .update({ recurring_end_date: instanceDate, updated_at: new Date().toISOString() })
-        .eq('id', templateId);
-
-      if (error) {
-        console.error('Error setting recurring end date:', error);
-      }
-      refetchTransactions();
-    } else {
-      // Delete the template and all chained templates
-      startTransition(() => {
-        setAllTransactions(prev => prev ? prev.filter(t =>
-          t.id !== templateId && t.original_recurring_id !== templateId
-        ) : prev);
-      });
-
-      // Delete chained templates first
-      await supabase
-        .from('transactions')
-        .delete()
-        .eq('original_recurring_id', templateId);
-
-      // Delete the template itself
-      const { error } = await supabase
-        .from('transactions')
-        .delete()
-        .eq('id', templateId);
-
-      if (error) {
-        console.error('Error deleting transaction:', error);
+    try {
+      if (mode === 'from_here' && instanceDate) {
+        // Sets recurring_end_date — stops generating from this month onward
+        await api.deleteTransaction(templateId, 'from_here', instanceDate);
         refetchTransactions();
+      } else {
+        // Deletes the template and all chained templates
+        startTransition(() => {
+          setAllTransactions(prev => prev ? prev.filter(t =>
+            t.id !== templateId && t.original_recurring_id !== templateId
+          ) : prev);
+        });
+
+        await api.deleteTransaction(templateId, 'all');
       }
+    } catch (error: any) {
+      console.error('Error deleting transaction:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Löschen fehlgeschlagen',
+        description: error?.message || 'Die Transaktion konnte nicht gelöscht werden.',
+      });
+      refetchTransactions();
     }
   };
 

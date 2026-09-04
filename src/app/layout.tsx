@@ -3,7 +3,7 @@ import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 import { ThemeProvider } from '@/components/theme-provider';
-import { SupabaseProvider } from '@/lib/supabase';
+import { AuthProvider } from '@/lib/auth-provider';
 import { CategoriesProvider } from '@/lib/categories-context';
 import { AutoLogoutProvider } from '@/hooks/use-auto-logout';
 
@@ -35,13 +35,13 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
         >
-          <SupabaseProvider>
+          <AuthProvider>
             <CategoriesProvider>
               <AutoLogoutProvider>
                 {children}
               </AutoLogoutProvider>
             </CategoriesProvider>
-          </SupabaseProvider>
+          </AuthProvider>
           <Toaster />
         </ThemeProvider>
       </body>

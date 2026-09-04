@@ -3,4 +3,5 @@ builder = "nixpacks"
 
 [deploy]
 startCommand = "npm run start"
-healthcheckPath = "/"
+# Prüft die Datenbankverbindung mit; "/" leitet nach dem Login auf /login um.
+healthcheckPath = "/api/health"

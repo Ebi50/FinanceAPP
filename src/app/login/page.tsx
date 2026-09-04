@@ -11,20 +11,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import Image from "next/image"
-import { useUser, useSupabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth-provider";
+import { api } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { PlaceHolderImages } from '@/lib/placeholder-images';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2 } from "lucide-react";
 
@@ -32,11 +23,8 @@ import { Loader2 } from "lucide-react";
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [resetEmail, setResetEmail] = useState('');
   const [isSigningIn, setIsSigningIn] = useState(false);
-  const [resetDialogOpen, setResetDialogOpen] = useState(false);
-  const supabase = useSupabase();
-  const { user, isUserLoading } = useUser();
+  const { user, isUserLoading, refreshUser } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const loginImage = PlaceHolderImages.find(p => p.id === 'login-image-1');
@@ -50,56 +38,19 @@ export default function LoginPage() {
   const handleAuthAction = async () => {
     setIsSigningIn(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (error) throw error;
+      await api.login(email, password);
+      // Pull the freshly created session into the provider, then let the
+      // effect above redirect to the dashboard.
+      await refreshUser();
     } catch (error: any) {
       console.error("Sign-in failed:", error);
-      let description = "Ein unbekannter Fehler ist aufgetreten.";
-      if (error.message?.includes('Invalid login credentials')) {
-        description = "Die Anmeldedaten sind nicht korrekt.";
-      } else if (error.message?.includes('Email not confirmed')) {
-        description = "Bitte bestätigen Sie zuerst Ihre E-Mail-Adresse.";
-      }
       toast({
         variant: "destructive",
         title: "Anmeldung fehlgeschlagen",
-        description: description,
+        description: error?.message || "Ein unbekannter Fehler ist aufgetreten.",
       });
     } finally {
       setIsSigningIn(false);
-    }
-  };
-
-  const handlePasswordReset = async () => {
-    if (!resetEmail) {
-        toast({
-            variant: "destructive",
-            title: "E-Mail erforderlich",
-            description: "Bitte geben Sie Ihre E-Mail-Adresse ein.",
-        });
-        return;
-    }
-
-    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-      redirectTo: `${window.location.origin}/settings`,
-    });
-
-    if (error) {
-      console.error("Error sending password reset email:", error);
-      toast({
-        variant: "destructive",
-        title: "Fehler beim E-Mail-Versand",
-        description: error.message || 'E-Mail konnte nicht gesendet werden.',
-        duration: 9000,
-      });
-    } else {
-      toast({
-        title: "E-Mail zum Zurücksetzen gesendet",
-        description: "Wenn ein Konto mit dieser E-Mail existiert, wurde eine Anleitung zum Zurücksetzen des Passworts gesendet.",
-      });
     }
   };
 
@@ -135,33 +86,6 @@ export default function LoginPage() {
               <div className="grid gap-2">
                 <div className="flex items-center">
                   <Label htmlFor="password">Passwort</Label>
-                    <Button variant="link" className="ml-auto inline-block text-sm underline p-0 h-auto" onClick={() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); setResetDialogOpen(true); }}>
-                      Passwort vergessen?
-                    </Button>
-                    <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Passwort zurücksetzen</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Geben Sie Ihre E-Mail-Adresse ein, um einen Link zum Zurücksetzen Ihres Passworts zu erhalten.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <div className="grid gap-2">
-                          <Label htmlFor="reset-email">E-Mail</Label>
-                          <Input
-                            id="reset-email"
-                            type="email"
-                            placeholder="m@beispiel.com"
-                            value={resetEmail}
-                            onChange={(e) => setResetEmail(e.target.value)}
-                          />
-                        </div>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                          <AlertDialogAction onClick={handlePasswordReset}>Link senden</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
                 </div>
                 <Input
                   id="password"
@@ -169,8 +93,9 @@ export default function LoginPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !isSigningIn) handleAuthAction(); }}
                   disabled={isSigningIn}
-                  autoComplete="new-password"
+                  autoComplete="current-password"
                 />
               </div>
               <Button onClick={handleAuthAction} className="w-full" disabled={isSigningIn}>
@@ -178,8 +103,8 @@ export default function LoginPage() {
                 {isSigningIn ? 'Anmelden...' : 'Anmelden'}
               </Button>
             </div>
-            <div className="mt-4 text-center text-sm">
-              Neue Benutzer können in den Supabase-Einstellungen angelegt werden.
+            <div className="mt-4 text-center text-sm text-muted-foreground">
+              Passwort vergessen? Es wird lokal mit <code>npm run set-password</code> neu gesetzt.
             </div>
           </CardContent>
         </Card>
