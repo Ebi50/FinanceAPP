@@ -51,5 +51,7 @@ und Backup-Cron sind durch.
       unter dem Dienst `finanzapp-backup` gegenpruefen.
 - [ ] Vollständige Abnahme-Prüfliste mit beiden Nutzern (Abschnitt 9 im Migrationsplan) —
       Grundfunktionen schon gegengeprüft, wiederkehrende Transaktionen und Excel-Import noch offen
-- [ ] Nach der Bewährungsfrist (ein paar Wochen): Supabase-Abo von Pro auf Free herunterstufen
-      (das ist der Schritt, der Geld spart), danach Projekt löschen
+- [x] ~~Supabase-Abo von Pro auf Free herunterstufen~~ (2026-09-05 erledigt — das ist der Schritt,
+      der tatsächlich Geld spart; jederzeit reversibel)
+- [ ] Nach 2-4 Wochen Bewährungsfrist ohne Auffälligkeiten: Supabase-Projekt endgültig löschen
+      (**irreversibel**, deshalb erst nach der Frist)
