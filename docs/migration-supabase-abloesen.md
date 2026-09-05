@@ -3,6 +3,11 @@
 Stand: 2026-09-04. Ziel: Finanzapp ohne Supabase betreiben, bei deutlich geringeren
 laufenden Kosten und ohne Funktionsverlust für die zwei Nutzer.
 
+Dieses Dokument ist der konkrete, projektspezifische Ablauf für die Finanzapp (mittlerweile
+abgeschlossen, siehe Umsetzungsstand unten). Für ein anderes Projekt mit demselben
+Ausgangspunkt (Supabase → eigene Server-Schicht + Railway-Postgres) die generalisierte Fassung
+mit den praktischen Railway-/CLI-Kniffen benutzen: [blaupause-supabase-migration.md](blaupause-supabase-migration.md).
+
 ---
 
 ## Umsetzungsstand (Stand 2026-09-04)
