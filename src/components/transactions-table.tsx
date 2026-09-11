@@ -35,6 +35,7 @@ import {
 import { AddTransactionSheet } from "./add-transaction-sheet";
 import { useState, useMemo, useCallback, useEffect, memo } from "react";
 import { useCategories } from '@/lib/categories-context';
+import { getCategoryIconSrc } from '@/lib/category-icons';
 import {
   Tooltip,
   TooltipContent,
@@ -198,6 +199,7 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
           {displayedTransactions.map((transaction) => {
             const category = categoryMap.get(transaction.category_id);
             const isIncome = category?.id === incomeCategory?.id;
+            const categoryIconSrc = getCategoryIconSrc(category?.name);
             const isVirtual = transaction.is_virtual;
             const isOriginalRecurring = transaction.is_recurring === true;
 
@@ -224,6 +226,10 @@ export function TransactionsTable({ transactions, onDelete, onUpdate }: Transact
                 <TableCell>
                   {category && (
                     <Badge variant="outline" className="flex items-center gap-2 w-fit">
+                      {categoryIconSrc && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={categoryIconSrc} alt="" className="h-4 w-4 rounded-full object-cover" />
+                      )}
                       {category.name}
                     </Badge>
                   )}

@@ -38,6 +38,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import type { Transaction, Category, TransactionItem } from '@/lib/types';
 import { useCategories } from '@/lib/categories-context';
+import { getCategoryIconSrc } from '@/lib/category-icons';
 
 const transactionSchema = z.object({
   id: z.string().optional(),
@@ -291,11 +292,20 @@ export function AddTransactionSheet({
                           {categoriesLoading ? (
                              <SelectItem value="loading" disabled>Lade...</SelectItem>
                           ) : (
-                            sortedCategories?.map((cat) => (
-                              <SelectItem key={cat.id} value={cat.id}>
-                                {cat.name}
-                              </SelectItem>
-                            ))
+                            sortedCategories?.map((cat) => {
+                              const iconSrc = getCategoryIconSrc(cat.name);
+                              return (
+                                <SelectItem key={cat.id} value={cat.id}>
+                                  <span className="flex items-center gap-2">
+                                    {iconSrc && (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img src={iconSrc} alt="" className="h-4 w-4 rounded-full object-cover" />
+                                    )}
+                                    {cat.name}
+                                  </span>
+                                </SelectItem>
+                              );
+                            })
                           )}
                         </SelectContent>
                       </Select>

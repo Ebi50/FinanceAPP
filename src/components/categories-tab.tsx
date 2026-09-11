@@ -43,6 +43,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useUser } from '@/lib/auth-provider';
 import { api } from '@/lib/api';
 import { useCategories } from '@/lib/categories-context';
+import { getCategoryIconSrc } from '@/lib/category-icons';
 
 
 export function CategoriesTab() {
@@ -163,10 +164,18 @@ export function CategoriesTab() {
             </TableHeader>
             <TableBody>
               {categoriesLoading && <TableRow><TableCell colSpan={2}>Lade Kategorien...</TableCell></TableRow>}
-              {!categoriesLoading && categories?.map((category) => (
+              {!categoriesLoading && categories?.map((category) => {
+                const iconSrc = getCategoryIconSrc(category.name);
+                return (
                 <TableRow key={category.id}>
                   <TableCell className="font-medium">
-                    {category.name}
+                    <span className="flex items-center gap-2">
+                      {iconSrc && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={iconSrc} alt="" className="h-6 w-6 rounded-full object-cover" />
+                      )}
+                      {category.name}
+                    </span>
                   </TableCell>
                   <TableCell className="text-right">
                     <Button
@@ -188,7 +197,8 @@ export function CategoriesTab() {
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>

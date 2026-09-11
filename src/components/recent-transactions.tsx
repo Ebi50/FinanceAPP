@@ -8,9 +8,10 @@ import {
   CardTitle,
 } from "./ui/card";
 import { formatCurrency, cn } from "@/lib/utils";
-import { Avatar, AvatarFallback } from "./ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import type { Transaction, Category } from "@/lib/types";
 import { useCategories } from '@/lib/categories-context';
+import { getCategoryIconSrc } from '@/lib/category-icons';
 import { useMemo } from "react";
 
 interface RecentTransactionsProps {
@@ -45,9 +46,11 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
           {recent.map((transaction) => {
             const category = categoryMap.get(transaction.category_id);
             const isIncome = category?.id === incomeCategory?.id;
+            const iconSrc = getCategoryIconSrc(category?.name);
             return (
               <div key={transaction.id} className="flex items-center">
                 <Avatar className="h-9 w-9">
+                  {iconSrc && <AvatarImage src={iconSrc} alt={category?.name} className="object-cover" />}
                   <AvatarFallback className="bg-secondary">
                   </AvatarFallback>
                 </Avatar>
