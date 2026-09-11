@@ -57,3 +57,6 @@ export/
 
 # lokale Datensicherungen (enthalten Haushalts-/Finanzdaten, nie committen)
 /backups/
+
+# Smoke-Test-Screenshots (generiert, siehe scripts/smoke-test.mjs)
+/scripts/smoke-screenshots/
