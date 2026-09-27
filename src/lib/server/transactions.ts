@@ -3,6 +3,9 @@ import { query } from '@/lib/db';
 import { HttpError } from './http';
 import { roundAmount, type TransactionInput } from './validation';
 
+/** Time zone of the household — calendar days and months are meant in this zone. */
+export const HOUSEHOLD_TIME_ZONE = 'Europe/Berlin';
+
 /** Column list plus the aggregated items, shaped exactly like the client expects. */
 const SELECT_TRANSACTION = `
   SELECT t.id, t.description, t.amount, t.date, t.category_id, t.user_id,
@@ -17,14 +20,19 @@ const SELECT_TRANSACTION = `
 `;
 
 export async function fetchTransactionsForYear(year: number) {
-  const yearStart = `${year}-01-01T00:00:00.000Z`;
-  const nextYearStart = `${year + 1}-01-01T00:00:00.000Z`;
+  // Year boundaries in household time: older rows sit on local midnight
+  // (1 Jan 00:00 CET = 31 Dec 23:00 UTC) and would otherwise land in the
+  // previous year.
+  const yearStart = `${year}-01-01 00:00:00`;
+  const nextYearStart = `${year + 1}-01-01 00:00:00`;
 
   // Same rule as the old PostgREST `or` filter: the selected year plus every
   // recurring template, because instances are generated in the client.
   return query(
     `${SELECT_TRANSACTION}
-      WHERE (t.date >= $1 AND t.date < $2) OR t.is_recurring = true
+      WHERE (t.date >= ($1::timestamp AT TIME ZONE '${HOUSEHOLD_TIME_ZONE}')
+             AND t.date < ($2::timestamp AT TIME ZONE '${HOUSEHOLD_TIME_ZONE}'))
+         OR t.is_recurring = true
       ORDER BY t.date DESC`,
     [yearStart, nextYearStart]
   );

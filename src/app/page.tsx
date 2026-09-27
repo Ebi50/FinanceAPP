@@ -33,6 +33,7 @@ import { useEffect, useMemo, startTransition } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { isValid, addMonths, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { toStorageDate } from '@/lib/utils';
 
 
 export default function Dashboard() {
@@ -68,7 +69,7 @@ export default function Dashboard() {
     const { id, date, items, effectiveFrom, ...restOfData } = transactionData;
     let transactionId = id;
 
-    const isoDate = date.toISOString();
+    const isoDate = toStorageDate(date);
 
     // If we are editing a virtual (recurring) transaction, target the original template.
     if (transactionId && transactionId.includes('-recurring-')) {
@@ -92,7 +93,7 @@ export default function Dashboard() {
         if (isSplitEdit) {
           // SPLIT: old template gets an end date, a new template takes over —
           // one request, one DB transaction.
-          const effectiveIso = effectiveFrom.toISOString();
+          const effectiveIso = toStorageDate(effectiveFrom);
           await api.splitTransaction(transactionId, {
             ...payload,
             date: effectiveIso,
@@ -138,7 +139,7 @@ export default function Dashboard() {
       await api.importTransactions(importedTransactions.map(t => ({
         description: t.description ?? '',
         amount: t.amount,
-        date: t.date.toISOString(),
+        date: toStorageDate(t.date),
         category_id: t.category_id || null,
       })));
 
@@ -220,7 +221,7 @@ export default function Dashboard() {
           generatedTransactions.push({
             ...t,
             id: `${t.id}-recurring-${i}`,
-            date: futureDate.toISOString(),
+            date: toStorageDate(futureDate),
             is_recurring: false,
             is_virtual: true,
           });

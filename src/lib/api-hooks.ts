@@ -2,6 +2,7 @@
 
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
+import { normalizeStoredDate } from '@/lib/utils';
 import type { Category, Transaction } from '@/lib/types';
 
 export interface UseCollectionResult<T> {
@@ -91,7 +92,14 @@ export function useCollection<T>(
 export function useTransactions(year: number, enabled: boolean) {
   return useCollection<Transaction>(
     enabled ? `transactions:${year}` : null,
-    () => api.transactions(year),
+    // Altdaten liegen teils auf lokaler Mitternacht (= Vortag in UTC); die
+    // Monatsfilter in page.tsx arbeiten per String-Präfix und brauchen den
+    // lokalen Kalendertag.
+    () => api.transactions(year).then((rows) => rows.map((t) => ({
+      ...t,
+      date: normalizeStoredDate(t.date),
+      recurring_end_date: t.recurring_end_date ? normalizeStoredDate(t.recurring_end_date) : t.recurring_end_date,
+    }))),
     { refetchOnFocus: true }
   );
 }

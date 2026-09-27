@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { query } from '@/lib/db';
 import { authed, parsed } from '@/lib/server/http';
+import { HOUSEHOLD_TIME_ZONE } from '@/lib/server/transactions';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,12 +28,16 @@ export async function DELETE(request: Request) {
     const end = month === null
       ? new Date(Date.UTC(year + 1, 0, 1))
       : new Date(Date.UTC(year, month + 1, 1));
+    // Period boundaries are local midnight in household time, not UTC.
+    const local = (d: Date) => d.toISOString().slice(0, 19).replace('T', ' ');
 
     const rows = await query(
       `DELETE FROM transactions
-        WHERE user_id = $1 AND date >= $2 AND date < $3
+        WHERE user_id = $1
+          AND date >= ($2::timestamp AT TIME ZONE '${HOUSEHOLD_TIME_ZONE}')
+          AND date < ($3::timestamp AT TIME ZONE '${HOUSEHOLD_TIME_ZONE}')
       RETURNING id`,
-      [user.id, start.toISOString(), end.toISOString()]
+      [user.id, local(start), local(end)]
     );
 
     return NextResponse.json({ deleted: rows.length });
